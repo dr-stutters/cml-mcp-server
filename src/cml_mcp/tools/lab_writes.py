@@ -10,6 +10,7 @@ from stutters_mcp_core import (
     Confirm,
     Plan,
     ToolRegistrar,
+    UpstreamError,
     get_client,
     get_settings,
     poll_until,
@@ -18,6 +19,7 @@ from stutters_mcp_core import (
 
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
+from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed
 from cml_mcp.tools.common import LabRef, parse_topology_yaml, state_counts
 from cml_mcp.tools.smart import Timeout
 
@@ -172,16 +174,30 @@ def register(reg: ToolRegistrar) -> None:
             )
             for n in stopped
         )
+        blockers = [] if nodes else ["The lab has no nodes"]
+        needed = sum(1 for n in stopped if licensed(n))
+        usage = await licence_usage(app) if needed else None
+        if usage and (problem := licence_blocker(usage, needed)):
+            blockers.append(problem)
         plan = Plan(
             f"Start lab {info.get('lab_title')!r}: {len(stopped)} of {len(nodes)} nodes to start",
-            details={"node_states": state_counts(nodes), "ram_needed_mb": ram, "wait": wait},
+            details={
+                "node_states": state_counts(nodes),
+                "ram_needed_mb": ram,
+                "licensed_nodes_to_start": needed,
+                **({"licences": usage} if usage else {}),
+                "wait": wait,
+            },
             fingerprint=lab_fingerprint(info),
-            blockers=[] if nodes else ["The lab has no nodes"],
+            blockers=blockers,
         )
         limit = timeout or get_settings(ctx).wait_timeout
 
         async def apply() -> Any:
-            await app.api.put(f"/labs/{lid}/start")
+            try:
+                await app.api.put(f"/labs/{lid}/start")
+            except UpstreamError as e:
+                raise await explain_licence_error(app, e, f"Could not start {info.get('lab_title')!r}") from e
             if not wait:
                 return {"started": True, "next": "cml_wait_for_converged"}
             return await wait_converged(app, lid, timeout=limit, ctx=ctx)

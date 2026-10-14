@@ -2,9 +2,8 @@
 
 # No `from __future__ import annotations` in tool modules: FastMCP inspects signatures at runtime.
 
-import asyncio
 import contextlib
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
@@ -20,10 +19,10 @@ from stutters_mcp_core import (
 )
 
 from cml_mcp.client import CmlApp
-from cml_mcp.console import ConsoleSession, Credentials, mask_secrets, read_only_problem, testbed_credentials
+from cml_mcp.console import Credentials, mask_secrets, read_only_problem
+from cml_mcp.netops import console_batch, lab_credentials, prepare
 from cml_mcp.tools.common import LabRef, NodeRef, shaped
 
-PARALLEL_NODES = 4
 IOS_ERROR_MARKERS = (
     "% Invalid",
     "% Incomplete",
@@ -35,22 +34,9 @@ IOS_ERROR_MARKERS = (
     "% Error",
     "Invalid input detected",
     "Invalid command",
+    "Syntax error",  # FTD CLISH
+    "ERROR:",
 )
-
-
-async def lab_credentials(app: CmlApp, lab_id: str) -> dict[str, Credentials]:
-    try:
-        text = await app.api.get(f"/labs/{lab_id}/pyats_testbed", expect="text")
-    except UpstreamError:
-        return {}
-    return testbed_credentials(text)
-
-
-async def prepare(session: ConsoleSession) -> None:
-    """Disable paging on Cisco-style CLIs (best effort)."""
-    if session.prompt.endswith(("#", ">")):
-        with contextlib.suppress(UpstreamError):
-            await session.run("terminal length 0", timeout=10)
 
 
 def register(reg: ToolRegistrar) -> None:
@@ -87,29 +73,7 @@ def register(reg: ToolRegistrar) -> None:
         info = await app.resolve_lab(lab)
         lid = info["id"]
         targets = [await app.resolve_node(lid, n) for n in nodes]
-        creds = await lab_credentials(app, lid)
-        sem = asyncio.Semaphore(PARALLEL_NODES)
-
-        async def one(node: dict[str, Any]) -> dict[str, Any]:
-            label = str(node.get("label"))
-            out: dict[str, Any] = {"node": label}
-            if node.get("state") != "BOOTED":
-                out["error"] = f"node is {node.get('state')}, not BOOTED (cml_wait_for_converged)"
-                return out
-            async with sem, app.console.lock(node["id"]):
-                try:
-                    async with app.console.open(lid, node["id"], creds.get(label, Credentials())) as session:
-                        await prepare(session)
-                        out["prompt"] = session.prompt
-                        out["outputs"] = []
-                        for cmd in commands:
-                            text = await session.run(cmd, timeout=command_timeout)
-                            out["outputs"].append({"command": cmd, "output": mask_secrets(text)})
-                except Exception as e:  # report per node; never lose the other nodes' results
-                    out["error"] = str(e)[:500] or type(e).__name__
-            return out
-
-        results = await asyncio.gather(*(one(n) for n in targets))
+        results = await console_batch(app, lid, targets, lambda _n, _c: commands, timeout=command_timeout)
         return shaped({"lab": info.get("lab_title"), "results": list(results)})
 
     @reg.write(title="Configure node via CLI")
@@ -125,26 +89,49 @@ def register(reg: ToolRegistrar) -> None:
                 description="Configuration lines, as typed in 'configure terminal'",
             ),
         ],
-        save: Annotated[bool, Field(description="Run 'write memory' afterwards")] = False,
+        save: Annotated[bool, Field(description="Run 'write memory' afterwards (config mode only)")] = False,
+        mode: Annotated[
+            Literal["config", "exec"],
+            Field(
+                description="'config' (default): wrap the lines in 'configure terminal' ... 'end' "
+                "(IOS/IOS-XE/NX-OS). 'exec': send each line as-is at the top-level prompt, e.g. FTD "
+                "'configure manager add 198.18.134.76 ***REDACTED***' or IOS 'clear ip ospf process'"
+            ),
+        ] = "config",
+        answer_questions: Annotated[
+            bool,
+            Field(
+                description="Answer prompts such as '[confirm]', '[yes/no]:' or 'Do you want to "
+                "continue?' affirmatively; when false such a prompt aborts with an error"
+            ),
+        ] = False,
+        line_timeout: Annotated[
+            float, Field(ge=5, le=600, description="Seconds to wait for each line to finish")
+        ] = 30,
         confirm: Confirm = None,
     ) -> dict[str, Any]:
-        """Apply configuration lines to a running Cisco-style device (IOS/IOS-XE/NX-OS) through its
-        console: 'configure terminal', the lines, 'end', optionally 'write memory'. Lines the device
-        rejects (% Invalid input...) are reported. The change is live immediately; it survives a
-        restart only if saved, and survives a wipe only after cml_extract_node_configs."""
+        """Apply configuration to a running device through its serial console. mode='config' (IOS/
+        IOS-XE/NX-OS): 'configure terminal', the lines, 'end', optionally 'write memory'. mode='exec':
+        each line is run at the top-level prompt, for CLIs without a config mode (FTD CLISH:
+        'configure manager add ...', 'configure network ipv4 manual ...') or exec actions. Lines the
+        device rejects ('% Invalid input', FTD 'Syntax error'/'ERROR:') are reported. The change is
+        live immediately; on IOS it survives a restart only if saved, and a wipe only after
+        cml_extract_node_configs."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
         n = await app.resolve_node(lid, node, exact=True)
         blockers = []
+        if save and mode == "exec":
+            blockers.append("save only applies to mode='config' (FTD saves its configuration itself)")
         if n.get("state") != "BOOTED":
             blockers.append(f"Node is {n.get('state')}; it must be BOOTED")
         if any("\n" in line for line in lines):
             blockers.append("One configuration line per list entry (no embedded newlines)")
         plan = Plan(
-            f"Configure {n.get('label')!r} via its console ({len(lines)} lines)"
-            + (" and save" if save else ""),
-            details={"lines": lines, "save": save},
+            f"Configure {n.get('label')!r} via its console ({len(lines)} {mode} lines)"
+            + (" and save" if save and mode == "config" else ""),
+            details={"lines": lines, "save": save, "mode": mode, "answer_questions": answer_questions},
             fingerprint=n.get("state"),
             blockers=blockers,
         )
@@ -152,37 +139,60 @@ def register(reg: ToolRegistrar) -> None:
         async def apply() -> Any:
             creds = (await lab_credentials(app, lid)).get(str(n.get("label")), Credentials())
             async with app.console.lock(n["id"]), app.console.open(lid, n["id"], creds) as session:
-                if not session.prompt.endswith("#"):
-                    raise InvalidRequest(
-                        f"Expected a privileged Cisco prompt ending in '#', got {session.prompt!r}"
-                    )
                 await prepare(session)
-                await session.run("configure terminal")
-                if "(config" not in session.last_prompt:
-                    raise InvalidRequest(
-                        f"The device did not enter configuration mode (prompt {session.last_prompt!r}); "
-                        "cml_configure_node supports Cisco IOS/IOS-XE/NX-OS style CLIs"
-                    )
-                rejected = []
-                try:
+                rejected: list[dict[str, str]] = []
+                outputs: list[dict[str, str]] = []
+
+                async def send(line: str) -> None:
+                    output = await session.run(line, timeout=line_timeout, answer_questions=answer_questions)
+                    if any(marker in output for marker in IOS_ERROR_MARKERS):
+                        rejected.append({"line": line, "error": mask_secrets(output.strip())[:300]})
+                    elif mode == "exec" and output.strip():
+                        outputs.append({"line": line, "output": mask_secrets(output.strip())[-1500:]})
+
+                if mode == "exec":
                     for line in lines:
-                        output = await session.run(line)
-                        if any(marker in output for marker in IOS_ERROR_MARKERS):
-                            rejected.append({"line": line, "error": output.strip()[:300]})
-                finally:
-                    await session.run("end")
+                        await send(line)
+                else:
+                    if not session.prompt.endswith("#"):
+                        raise InvalidRequest(
+                            f"Expected a privileged Cisco prompt ending in '#', got {session.prompt!r}. "
+                            "For CLIs without 'configure terminal' (FTD) use mode='exec'."
+                        )
+                    await session.run("configure terminal")
+                    if "(config" not in session.last_prompt:
+                        raise InvalidRequest(
+                            f"The device did not enter configuration mode (prompt {session.last_prompt!r}); "
+                            "use mode='exec' for CLIs without 'configure terminal'"
+                        )
+                    try:
+                        for line in lines:
+                            await send(line)
+                    finally:
+                        with contextlib.suppress(UpstreamError):
+                            await session.run("end")
                 result: dict[str, Any] = {"applied": len(lines) - len(rejected)}
                 if rejected:
                     result["rejected"] = rejected
-                if save:
-                    out = await session.run("write memory", timeout=60)
+                if outputs:
+                    result["outputs"] = outputs
+                if save and mode == "config":
+                    out = await session.run("write memory", timeout=120, answer_questions=True)
                     result["saved"] = "[OK]" in out or "Copy complete" in out
             return result
 
         return await preview_or_apply(
             ctx,
             tool="cml_configure_node",
-            args={"lab": lab, "node": node, "lines": lines, "save": save},
+            args={
+                "lab": lab,
+                "node": node,
+                "lines": lines,
+                "save": save,
+                "mode": mode,
+                "answer_questions": answer_questions,
+                "line_timeout": line_timeout,
+            },
             confirm=confirm,
             plan=plan,
             apply=apply,

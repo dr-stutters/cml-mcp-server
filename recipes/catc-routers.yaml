@@ -1,0 +1,132 @@
+# Two IOS-XE routers (cat8000v) on the dCloud network, discoverable by Catalyst Center (198.18.128.11)
+# over SSH + SNMP v2c (+ NETCONF). Build with scripts/recipes.py, or pass `build:` to cml_build_lab.
+name: catc-routers
+summary: 2x cat8000v with SSH, SNMP v2c and NETCONF on 198.18.128.152/.153, discoverable by Catalyst Center
+address_plan:
+  r1 GigabitEthernet1: 198.18.128.152/18 (management, gateway 198.18.128.1)
+  r2 GigabitEthernet1: 198.18.128.153/18 (management, gateway 198.18.128.1)
+  r1-r2 GigabitEthernet2: 10.255.12.0/30 (.1 r1, .2 r2), OSPF area 0
+  Loopback0: r1 10.255.255.1/32, r2 10.255.255.2/32
+credentials:
+  cli: netadmin / ***REDACTED*** (enable secret ***REDACTED***)
+  snmp_v2c: read mcp-ro, write mcp-rw
+  netconf: port 830, same CLI user
+catalyst_center_discovery: IP range 198.18.128.152-198.18.128.153, CLI netadmin/***REDACTED***/***REDACTED***, SNMPv2c read mcp-ro write mcp-rw, NETCONF 830
+boot_minutes: 5-8
+verify:
+  nodes: [r1, r2]
+  targets: [198.18.128.1, 198.18.128.11]
+build:
+  title: mcp-cml-catc
+  description: 2x cat8000v discoverable by Catalyst Center (cml-mcp-server recipe catc-routers)
+  nodes:
+    - label: ext
+      definition: external_connector
+      config: System Bridge
+      x: 0
+      y: 0
+    - label: mgmt-sw
+      definition: unmanaged_switch
+      x: 0
+      y: 160
+    - label: r1
+      definition: cat8000v
+      x: -200
+      y: 320
+      credentials: {username: netadmin, password: ***REDACTED***, enable_password: ***REDACTED***}
+      config: |
+        hostname r1
+        ip domain name mcp.lab
+        username netadmin privilege 15 secret ***REDACTED***
+        enable secret ***REDACTED***
+        aaa new-model
+        aaa authentication login default local
+        aaa authorization exec default local
+        no ip domain lookup
+        interface Loopback0
+         ip address 10.255.255.1 255.255.255.255
+        interface GigabitEthernet1
+         description mgmt to dCloud 198.18.128.0/18
+         ip address 198.18.128.152 255.255.192.0
+         no shutdown
+        interface GigabitEthernet2
+         description to r2
+         ip address 10.255.12.1 255.255.255.252
+         ip ospf network point-to-point
+         no shutdown
+        router ospf 1
+         router-id 10.255.255.1
+         network 10.255.12.0 0.0.0.3 area 0
+         network 10.255.255.1 0.0.0.0 area 0
+        ip route 0.0.0.0 0.0.0.0 198.18.128.1
+        crypto key generate rsa modulus 2048
+        ip ssh version 2
+        ip ssh source-interface GigabitEthernet1
+        snmp-server community mcp-ro RO
+        snmp-server community mcp-rw RW
+        snmp-server location dCloud CML
+        snmp-server contact cml-mcp-server
+        snmp-server trap-source GigabitEthernet1
+        snmp-server host 198.18.128.11 version 2c mcp-ro
+        netconf-yang
+        ip http secure-server
+        line con 0
+         exec-timeout 0 0
+         logging synchronous
+        line vty 0 15
+         login local
+         transport input ssh
+        end
+    - label: r2
+      definition: cat8000v
+      x: 200
+      y: 320
+      credentials: {username: netadmin, password: ***REDACTED***, enable_password: ***REDACTED***}
+      config: |
+        hostname r2
+        ip domain name mcp.lab
+        username netadmin privilege 15 secret ***REDACTED***
+        enable secret ***REDACTED***
+        aaa new-model
+        aaa authentication login default local
+        aaa authorization exec default local
+        no ip domain lookup
+        interface Loopback0
+         ip address 10.255.255.2 255.255.255.255
+        interface GigabitEthernet1
+         description mgmt to dCloud 198.18.128.0/18
+         ip address 198.18.128.153 255.255.192.0
+         no shutdown
+        interface GigabitEthernet2
+         description to r1
+         ip address 10.255.12.2 255.255.255.252
+         ip ospf network point-to-point
+         no shutdown
+        router ospf 1
+         router-id 10.255.255.2
+         network 10.255.12.0 0.0.0.3 area 0
+         network 10.255.255.2 0.0.0.0 area 0
+        ip route 0.0.0.0 0.0.0.0 198.18.128.1
+        crypto key generate rsa modulus 2048
+        ip ssh version 2
+        ip ssh source-interface GigabitEthernet1
+        snmp-server community mcp-ro RO
+        snmp-server community mcp-rw RW
+        snmp-server location dCloud CML
+        snmp-server contact cml-mcp-server
+        snmp-server trap-source GigabitEthernet1
+        snmp-server host 198.18.128.11 version 2c mcp-ro
+        netconf-yang
+        ip http secure-server
+        line con 0
+         exec-timeout 0 0
+         logging synchronous
+        line vty 0 15
+         login local
+         transport input ssh
+        end
+  links:
+    - ext mgmt-sw
+    - r1:GigabitEthernet1 mgmt-sw
+    - r2:GigabitEthernet1 mgmt-sw
+    - r1:GigabitEthernet2 r2:GigabitEthernet2

@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 import asyncssh
 import yaml
-from stutters_mcp_core import AuthError, InvalidRequest, Unreachable, UpstreamTimeout
+from stutters_mcp_core import AuthError, InvalidRequest, Unreachable, UpstreamError, UpstreamTimeout
 
 log = logging.getLogger(__name__)
 
@@ -28,8 +28,31 @@ PROMPT = re.compile(r"(?:^|\n)([^\n]{0,80}?[#>$%])[ \t]?$")
 MORE = re.compile(r" *(?:--\s?More\s?--|<--- More --->) *", re.IGNORECASE)
 LOGIN = re.compile(r"(?:username|login)\s*:\s*$", re.IGNORECASE)
 PASSWORD = re.compile(r"password\s*:\s*$", re.IGNORECASE)
+NEW_PASSWORD = re.compile(r"(?:enter|confirm) new password\s*:\s*$", re.IGNORECASE)
 PRESS_RETURN = re.compile(r"press return to get started", re.IGNORECASE)
 CONFIG_DIALOG = re.compile(r"configuration dialog\?\s*\[yes/no\]:\s*$", re.IGNORECASE)
+# NX-OS first boot without a day-0 config: skip Power On Auto Provisioning.
+POAP = re.compile(r"Abort (?:Power On )?Auto Provisioning.*:\s*$", re.IGNORECASE | re.DOTALL)
+# Questions a command asks before it acts ('[confirm]', '[yes/no]:', '(y/n)', 'Do you want to continue?').
+QUESTION = re.compile(
+    r"(?:\[confirm\]|\[(?:yes/no|y/n)\]\s*[:?]?|\((?:yes/no|y/n)\)\s*[:?]?|continue\s*\?\s*:?"
+    r"|\[[^\]\n]{1,60}\]\?)[ \t]*$",
+    re.IGNORECASE,
+)
+
+
+def auto_answer(question: str) -> str:
+    """The affirmative/default answer to a CLI question: 'yes', 'y' or just RETURN."""
+    q = question.lower()
+    if "y/n" in q and "yes/no" not in q:
+        return "y"
+    if "yes/no" in q or "continue" in q:
+        return "yes"
+    return ""  # '[confirm]', 'Destination filename [startup-config]?': RETURN takes the default
+
+
+# Firepower Threat Defense (CLISH): the '>' prompt is the top level; there is no 'enable'.
+NO_ENABLE_OS = frozenset({"fxos", "ftd"})
 
 
 def clean(text: str) -> str:
@@ -137,6 +160,7 @@ class Credentials:
     username: str | None = None
     password: str | None = None
     enable: str | None = None
+    os: str | None = None  # pyATS os from the testbed: ios, iosxe, nxos, fxos (FTD), asa, linux...
 
 
 def testbed_credentials(testbed_yaml: str) -> dict[str, Credentials]:
@@ -147,7 +171,13 @@ def testbed_credentials(testbed_yaml: str) -> dict[str, Credentials]:
         creds = (dev or {}).get("credentials") or {}
         default = creds.get("default") or {}
         enable = creds.get("enable") or {}
-        out[str(name)] = Credentials(default.get("username"), default.get("password"), enable.get("password"))
+        os_name = (dev or {}).get("os")
+        out[str(name)] = Credentials(
+            default.get("username"),
+            default.get("password"),
+            enable.get("password"),
+            str(os_name) if os_name else None,
+        )
     return out
 
 
@@ -167,6 +197,21 @@ class ConsoleSession:
             if secret:
                 text = text.replace(secret, "********")
         return text
+
+    def safe(self, text: str) -> str:
+        """Text for error messages: known passwords and config secrets masked."""
+        return mask_secrets(self.redact(text))
+
+    async def _more_output(self, quiet: float) -> bool:
+        """True (and the buffer extended) if the device sends more within `quiet` seconds."""
+        try:
+            chunk = await asyncio.wait_for(self.proc.stdout.read(4096), quiet)
+        except TimeoutError:
+            return False
+        if not chunk:
+            raise Unreachable("The console connection closed unexpectedly")
+        self.buffer += chunk
+        return True
 
     def send(self, text: str) -> None:
         self.buffer = ""
@@ -205,13 +250,19 @@ class ConsoleSession:
                 or PASSWORD.search(t)
                 or PRESS_RETURN.search(t)
                 or CONFIG_DIALOG.search(t)
+                or POAP.search(t[-300:])
             )
 
+        # A bare RETURN would confirm a question left pending on the console; run() therefore
+        # never leaves one behind (unanswered questions and timeouts are cancelled with Ctrl-C).
+        # Sending Ctrl-C here instead breaks IOS's 'Username:' prompt on a fresh console.
         self.send("\r")
         for _ in range(15):
             text = await self.read_until(ready, self.timeout)
             if CONFIG_DIALOG.search(text):
                 self.send("no\r")
+            elif POAP.search(text[-300:]):
+                self.send("skip\r")
             elif PRESS_RETURN.search(text):
                 self.send("\r")
             elif LOGIN.search(text):
@@ -222,6 +273,13 @@ class ConsoleSession:
                         "node's pyATS username/password in CML (they feed the lab's pyATS testbed)."
                     )
                 self.send(self.creds.username + "\r")
+            elif NEW_PASSWORD.search(text):
+                raise AuthError(
+                    "The device logged in but demands a new password (FTD does this when the day-0 "
+                    "AdminPassword is weak or a dictionary word). Rebuild with a strong, non-dictionary "
+                    "password, or complete the change on the console and update the node's pyATS "
+                    "password in CML."
+                )
             elif PASSWORD.search(text):
                 passwords += 1
                 if passwords > 2 or not self.creds.password:
@@ -233,7 +291,7 @@ class ConsoleSession:
             else:
                 m = PROMPT.search(text)
                 prompt = m.group(1).strip() if m else ""
-                if prompt.endswith(">"):
+                if prompt.endswith(">") and (self.creds.os or "").lower() not in NO_ENABLE_OS:
                     prompt = await self._enable(prompt)
                 self.prompt = prompt
                 return prompt
@@ -270,8 +328,22 @@ class ConsoleSession:
                 break
         self.buffer = ""
 
-    async def run(self, command: str, timeout: float | None = None) -> str:  # noqa: ASYNC109
-        """Send one command and return its output (without the echo and the trailing prompt)."""
+    async def run(
+        self,
+        command: str,
+        timeout: float | None = None,  # noqa: ASYNC109
+        *,
+        answer_questions: bool = False,
+        interrupt_after: float | None = None,
+    ) -> str:
+        """Send one command and return its output (without the echo and the trailing prompt).
+
+        If the command asks a question ('[confirm]', '[yes/no]:', 'Do you want to continue?',
+        'Destination filename [x]?') and `answer_questions` is set, the affirmative/default answer is
+        sent (auto_answer) and reading goes on; otherwise the question raises InvalidRequest instead
+        of hanging until the timeout. `interrupt_after` sends Ctrl-C after that many seconds and
+        returns what was printed (for commands that never end by themselves, like FTD 'ping system').
+        A command that times out is interrupted with Ctrl-C so it doesn't keep running."""
         prompt = self._prompt_re()
         await self.drain()
         echo = command.strip()[:40]
@@ -284,11 +356,58 @@ class ConsoleSession:
             return None if nl < 0 else t[nl:]
 
         self.send(command + "\r")
-        text = await self.read_until(
-            lambda t: (rest := after_echo(t)) is not None and bool(prompt.search(rest)),
-            timeout or self.timeout,
-        )
-        rest = after_echo(text) or ""
+        answered = 0
+        need_echo = True
+        before = ""  # output up to each answered question
+
+        def view(t: str) -> str | None:
+            return after_echo(t) if need_echo else t
+
+        def finished(t: str) -> bool:
+            r = view(t)
+            return r is not None and bool(prompt.search(r) or QUESTION.search(r[-120:]))
+
+        while True:
+            try:
+                if interrupt_after is not None:
+                    try:
+                        text = await self.read_until(finished, interrupt_after)
+                    except UpstreamTimeout:
+                        self.proc.stdin.write("\x03")
+                        interrupt_after = None
+                        text = await self.read_until(finished, timeout or self.timeout)
+                else:
+                    text = await self.read_until(finished, timeout or self.timeout)
+            except UpstreamTimeout:
+                with contextlib.suppress(Exception):
+                    self.proc.stdin.write("\x03")  # don't leave a runaway command on the console
+                raise
+            rest = view(text) or ""
+            if prompt.search(rest):
+                break
+            # a question-like tail may just be a chunk boundary in ordinary output: only treat it as
+            # a question if the device then stays quiet
+            if await self._more_output(0.6):
+                continue
+            question = rest.strip().splitlines()[-1][-160:] if rest.strip() else "?"
+            if not answer_questions:
+                # cancel it, so nothing (e.g. the next session's RETURN) confirms it later
+                self.proc.stdin.write("\x03")
+                with contextlib.suppress(UpstreamError):
+                    await self.read_until(lambda t: bool(prompt.search(t)), 10)
+                raise InvalidRequest(
+                    f"{self.safe(command)!r} asked {self.safe(question)!r}; it was cancelled. Pass "
+                    "answer_questions=true to cml_configure_node to answer it."
+                )
+            answered += 1
+            if answered > 5:
+                raise InvalidRequest(
+                    f"{self.safe(command)!r} kept asking questions (last: {self.safe(question)!r})"
+                )
+            before += rest
+            need_echo = False
+            self.send(auto_answer(question) + "\r")
+        rest = before + rest
         lines = rest.split("\n")
         if lines and prompt.search("\n" + lines[-1]):
             self.last_prompt = lines[-1].strip()

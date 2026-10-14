@@ -7,13 +7,21 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > Not affiliated with or endorsed by Cisco Systems, Inc. "Cisco" and "Cisco Modeling Labs" are
 > trademarks of Cisco Systems, Inc.
 
-- **48 tools** in three tiers: 26 read, 16 write, 6 dangerous. Write and dangerous tools are off by default.
+- **52 tools** in three tiers: 30 read, 17 write, 5 dangerous (plus `cml_api_call` for non-GET). Write and
+  dangerous tools are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
 - **Preview-first writes.** A write call without `confirm` changes nothing. It returns a preview
   (diffs, chosen interfaces, blockers CML would reject) and a single-use confirm token.
-- **Task tools.** `cml_build_lab` builds a whole lab from a compact spec, `cml_wait_for_converged`
-  reports boot progress, and `cml_diff_lab` compares a lab with another lab or a saved export.
+- **Task tools.** `cml_build_lab` builds a whole lab from a compact spec (day-0 configs, extra
+  config files, console logins, external connectors), `cml_wait_for_converged` reports boot progress
+  (and can wait for a console message), `cml_check_reachability` proves what a lab can ping, and
+  `cml_diff_lab` compares a lab with another lab or a saved export.
+- **Real platforms on the console.** IOS/IOS-XE, NX-OS (POAP skipped), FTD CLISH (no `enable`,
+  `mode='exec'` for `configure manager add ...`), Linux. Questions (`[confirm]`, `[yes/no]`) are
+  answered on request, runaway commands get Ctrl-C.
+- **Lab recipes.** `recipes/*.yaml` are ready-made `cml_build_lab` specs (FTDv for FMC, IOS-XE routers
+  for Catalyst Center, a Cat9kv 802.1X switch for ISE); see [recipes/README.md](recipes/README.md).
 - **Spec escape hatch.** `cml_search_spec` and `cml_get_definition` read the controller's own
   OpenAPI document. `cml_api_call` reaches any endpoint: GET in the read tier, other methods in the
   dangerous tier.
@@ -72,15 +80,18 @@ or in `.mcp.json`:
 | `cml_list_lab_events` | Change and state history, newest first, with the fields that changed |
 | `cml_get_pyats_testbed` | The pyATS testbed CML generates (passwords masked) |
 | `cml_list_nodes` / `cml_get_node` | Nodes with state, image and resources (optionally live CPU/RAM); one node with interfaces, peers and config |
-| `cml_get_node_console_log` | Recent serial console output |
+| `cml_get_node_console_log` | Recent serial console output, escape codes stripped, optional `grep` |
 | `cml_run_commands` | Run show, ping and traceroute (or `ip addr` etc. on Linux nodes) on one or more booted nodes through the CML console server, in parallel. Only read-only commands are allowed |
 | `cml_list_interfaces` | Interfaces with MAC, state and peer; filter free or connected |
-| `cml_get_layer3_addresses` | IPs CML has snooped per interface |
+| `cml_get_layer3_addresses` | IPs per interface: snooped by CML on external segments, or read from every node's CLI (`source='cli'`) |
+| `cml_check_reachability` | Ping targets from nodes (per-OS syntax, VRF, FTD management) and return a pass/fail matrix |
+| `cml_list_external_connectors` | Networks an `external_connector` node can join (NAT, System Bridge...) |
+| `cml_list_sample_labs` | Sample labs on the controller (filter by text or node type) |
 | `cml_list_links` / `cml_get_link` | Links as `node:interface` pairs; one link with conditioning and capture status |
 | `cml_list_capture_packets` | Decoded packets from a link capture (filter by protocol or text) |
 | `cml_list_node_definitions` / `cml_get_node_definition` | What can be built: interfaces, resources, boot markers, default configs |
 | `cml_list_image_definitions` | Installed images |
-| `cml_wait_for_converged` | Wait until a lab or node has booted, with progress notifications |
+| `cml_wait_for_converged` | Wait until a lab or node has booted, with progress notifications; `console_pattern` waits for a later console message |
 | `cml_diff_lab` | Diff a lab with another lab or a saved YAML: nodes, interfaces, links, config diff |
 | `cml_search_spec` / `cml_get_definition` / `cml_api_call` | OpenAPI search, operation and schema details, raw GET |
 
@@ -88,14 +99,15 @@ or in `.mcp.json`:
 
 | Tool | What it does |
 |---|---|
-| `cml_build_lab` | Build a lab from `nodes=[{label, definition, config?}]` and `links=["r1 r2", "r1:Ethernet0/1 sw1"]`. Interfaces are picked automatically. Optionally start it and wait |
+| `cml_build_lab` | Build a lab from `nodes=[{label, definition, config?, files?, credentials?, ...}]` and `links=["r1 r2", "r1:Ethernet0/1 sw1"]`. Interfaces are picked automatically, external connectors and node licences are checked. Optionally start it (and wait) |
+| `cml_load_sample_lab` | Create a lab from a sample lab |
 | `cml_create_lab` / `cml_import_lab` | Create an empty lab, or create one from topology YAML (node definitions are checked) |
 | `cml_start_lab` / `cml_stop_lab` | Start (waits for convergence) or stop a lab |
-| `cml_add_node` / `cml_update_node` | Add a node; change its label, tags, position or resources |
+| `cml_add_node` / `cml_update_node` | Add a node; change its label, tags, position, resources or console login |
 | `cml_set_node_config` | Replace a node's day-0 config; the preview shows a unified diff |
 | `cml_set_node_state` | Start or stop one node |
 | `cml_extract_node_configs` | Save running configs into the stored node configs |
-| `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`). Rejected lines are reported |
+| `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`), or exec-mode lines (`mode='exec'`, e.g. FTD `configure manager add`). Rejected lines are reported |
 | `cml_connect_nodes` | Link two nodes (first free interfaces, or the ones you name) |
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
@@ -129,6 +141,7 @@ tool that fixes it.
 | `CML_TIMEOUT` / `CML_RETRIES` | `30` / `2` | Per-request timeout (s) and retries for idempotent calls |
 | `CML_RATE_LIMIT` / `CML_MAX_CONCURRENCY` | none / `8` | Client-side throttling |
 | `CML_WAIT_TIMEOUT` | `600` | Default wait for start/stop/convergence (s) |
+| `CML_NODE_LICENSE_LIMIT` | | Node-licence cap (the API doesn't report it; EVAL Personal = 5). Start/build previews then refuse to exceed it |
 | `CML_CONSOLE_PORT` | `22` | SSH port of the CML console server (used for device CLI) |
 | `CML_CONSOLE_KNOWN_HOSTS` | | known_hosts file for the console server's host key. When unset, the key is checked against `~/.ssh/known_hosts` if `CML_VERIFY_SSL=true`, and not checked otherwise |
 | `MCP_TRANSPORT` | `stdio` | `http` for a network server |

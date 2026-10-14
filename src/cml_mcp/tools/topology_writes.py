@@ -12,6 +12,7 @@ from stutters_mcp_core import (
     Confirm,
     Plan,
     ToolRegistrar,
+    UpstreamError,
     field_changes,
     get_client,
     get_settings,
@@ -21,6 +22,7 @@ from stutters_mcp_core import (
 
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
+from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed
 from cml_mcp.tools.common import LabRef, LinkRef, NodeRef, config_text, load_topo
 from cml_mcp.tools.lab_writes import Wait, known_definitions
 from cml_mcp.tools.smart import Timeout
@@ -142,11 +144,21 @@ def register(reg: ToolRegistrar) -> None:
         y: Annotated[int | None, Field(description="New canvas Y position")] = None,
         ram: Annotated[int | None, Field(ge=64, description="RAM in MB (node must be wiped)")] = None,
         cpus: Annotated[int | None, Field(ge=1, le=64, description="vCPUs (node must be wiped)")] = None,
+        login_username: Annotated[
+            str | None, Field(description="Console login user (CML pyATS username) the CLI tools use")
+        ] = None,
+        login_password: Annotated[
+            str | None, Field(description="Console login password (CML pyATS password)")
+        ] = None,
+        enable_password: Annotated[str | None, Field(description="Enable secret (CML pyATS)")] = None,
         confirm: Confirm = None,
     ) -> dict[str, Any]:
-        """Change a node's label, tags, position or resources. Label, tags and position can change at
-        any time; RAM and vCPUs only while the node is wiped (DEFINED_ON_CORE). The preview shows
-        each field's old and new value. For the configuration use cml_set_node_config."""
+        """Change a node's label, tags, position, resources or console login. Label, tags, position
+        and login can change at any time; RAM and vCPUs only while the node is wiped
+        (DEFINED_ON_CORE). The login (CML's pyATS credentials) is what cml_run_commands and
+        cml_configure_node use: update it after changing a device's password. The preview shows each
+        field's old and new value (passwords only as 'changed'). For the configuration use
+        cml_set_node_config."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
@@ -157,6 +169,22 @@ def register(reg: ToolRegistrar) -> None:
             if v is not None
         }
         changes = field_changes(n, desired)
+        current_login = {k: v for k, v in (n.get("pyats") or {}).items() if v is not None}
+        login = {
+            k: v
+            for k, v in {
+                "username": login_username,
+                "password": login_password,
+                "enable_password": enable_password,
+            }.items()
+            if v is not None and current_login.get(k) != v
+        }
+        for k in login:
+            changes[f"login_{k}"] = (
+                {"from": current_login.get(k), "to": login[k]}
+                if k == "username"
+                else {"from": "(hidden)", "to": "(changed)"}
+            )
         blockers = []
         if not changes:
             blockers.append(
@@ -180,7 +208,10 @@ def register(reg: ToolRegistrar) -> None:
         )
 
         async def apply() -> Any:
-            await app.api.patch(f"/labs/{lid}/nodes/{n['id']}", {k: desired[k] for k in changes})
+            body: dict[str, Any] = {k: desired[k] for k in changes if k in desired}
+            if login:
+                body["pyats"] = {**current_login, **login}
+            await app.api.patch(f"/labs/{lid}/nodes/{n['id']}", body)
             return {"id": n["id"], "changed": sorted(changes)}
 
         return await preview_or_apply(
@@ -195,6 +226,9 @@ def register(reg: ToolRegistrar) -> None:
                 "y": y,
                 "ram": ram,
                 "cpus": cpus,
+                "login_username": login_username,
+                "login_password": login_password,
+                "enable_password": enable_password,
             },
             confirm=confirm,
             plan=plan,
@@ -263,16 +297,28 @@ def register(reg: ToolRegistrar) -> None:
         n = await app.resolve_node(lid, node, exact=True)
         current = n.get("state")
         noop = (state == "start" and current in RUNNING) or (state == "stop" and current not in RUNNING)
+        blockers = []
+        if (
+            state == "start"
+            and not noop
+            and licensed(n)
+            and (problem := licence_blocker(await licence_usage(app), 1))
+        ):
+            blockers.append(problem)
         plan = Plan(
             f"{state.capitalize()} node {n.get('label')!r} (currently {current})"
             + (" - already done" if noop else ""),
             details={"node": n.get("label"), "from": current, "wait": wait},
             fingerprint=node_fingerprint(n),
+            blockers=blockers,
         )
         limit = timeout or get_settings(ctx).wait_timeout
 
         async def apply() -> Any:
-            await app.api.put(f"/labs/{lid}/nodes/{n['id']}/state/{state}")
+            try:
+                await app.api.put(f"/labs/{lid}/nodes/{n['id']}/state/{state}")
+            except UpstreamError as e:
+                raise await explain_licence_error(app, e, f"Could not start {n.get('label')!r}") from e
             if not wait:
                 return {"requested": state}
             if state == "start":
