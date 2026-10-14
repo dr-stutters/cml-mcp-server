@@ -1,0 +1,216 @@
+import json
+from typing import Any
+
+import httpx
+import respx
+from fastmcp import Client
+
+from cml_mcp.server import create_server
+
+from .conftest import LID, LINK, NODES, R1, R2, fixture, make_settings
+
+RW = {"mcp_enable_writes": True}
+RWD = {"mcp_enable_writes": True, "mcp_enable_dangerous": True}
+
+
+def data(res: Any) -> Any:
+    if res.structured_content is not None:
+        return res.structured_content
+    return json.loads(res.content[0].text)
+
+
+async def preview_apply(name: str, args: dict[str, Any], **settings: Any) -> tuple[dict[str, Any], Any]:
+    async with Client(create_server(make_settings(**(settings or RW)))) as c:
+        preview = data(await c.call_tool(name, args))
+        if preview.get("status") != "preview":
+            return preview, None
+        applied = data(await c.call_tool(name, {**args, "confirm": preview["confirm"]}))
+        return preview, applied
+
+
+async def test_tiers_control_registration(lab_api: respx.MockRouter) -> None:
+    async def names(**kw: Any) -> set[str]:
+        async with Client(create_server(make_settings(**kw))) as c:
+            return {t.name for t in await c.list_tools()}
+
+    ro, rw, rwd = await names(), await names(**RW), await names(**RWD)
+    assert "cml_start_lab" not in ro and "cml_start_lab" in rw
+    assert "cml_delete_lab" not in rw and "cml_api_call" in rwd
+    assert len(ro) >= 25
+
+
+async def test_create_lab_preview_then_apply(lab_api: respx.MockRouter) -> None:
+    route = lab_api.post("/labs").mock(
+        return_value=httpx.Response(
+            200, json={"id": "abc", "lab_title": "mcp-test-x", "state": "DEFINED_ON_CORE"}
+        )
+    )
+    preview, applied = await preview_apply("cml_create_lab", {"title": "mcp-test-x", "description": "d"})
+    assert preview["status"] == "preview" and preview["preview"] == {
+        "title": "mcp-test-x",
+        "description": "d",
+    }
+    assert applied["status"] == "applied" and applied["result"]["id"] == "abc"
+    assert json.loads(route.calls.last.request.content) == {"title": "mcp-test-x", "description": "d"}
+
+
+async def test_create_lab_blocks_duplicate_title(lab_api: respx.MockRouter) -> None:
+    preview, _ = await preview_apply("cml_create_lab", {"title": "mcp-test-probe"})
+    assert preview["status"] == "blocked" and "already exists" in preview["blockers"][0]
+
+
+async def test_import_lab_checks_definitions_and_posts_yaml(lab_api: respx.MockRouter) -> None:
+    route = lab_api.post("/import").mock(return_value=httpx.Response(200, json={"id": "new", "warnings": []}))
+    yaml_text = "lab: {title: x}\nnodes:\n  - {id: n0, label: a, node_definition: iol-xe}\nlinks: []\n"
+    preview, applied = await preview_apply(
+        "cml_import_lab", {"topology_yaml": yaml_text, "title": "mcp-test-imp"}
+    )
+    assert preview["preview"]["node_definitions"] == {"iol-xe": 1}
+    assert applied["result"]["id"] == "new"
+    req = route.calls.last.request
+    assert req.url.params["title"] == "mcp-test-imp" and req.content.decode() == yaml_text
+    bad = yaml_text.replace("iol-xe", "made-up")
+    preview, _ = await preview_apply("cml_import_lab", {"topology_yaml": bad, "title": "mcp-test-imp"})
+    assert preview["status"] == "blocked" and "made-up" in preview["blockers"][0]
+
+
+async def test_build_lab_preview_shows_wiring(lab_api: respx.MockRouter) -> None:
+    route = lab_api.post("/import").mock(
+        return_value=httpx.Response(200, json={"id": "built", "warnings": []})
+    )
+    args = {
+        "title": "mcp-test-built",
+        "nodes": [{"label": "r1", "definition": "iol-xe"}, {"label": "r2", "definition": "iol-xe"}],
+        "links": ["r1 r2"],
+    }
+    preview, applied = await preview_apply("cml_build_lab", args)
+    assert preview["preview"]["links"] == ["r1:Ethernet0/0<->r2:Ethernet0/0"]
+    assert applied["result"]["id"] == "built"
+    assert "node_definition: iol-xe" in route.calls.last.request.content.decode()
+
+
+async def test_build_lab_blocked_on_bad_spec(lab_api: respx.MockRouter) -> None:
+    args = {"title": "mcp-test-b", "nodes": [{"label": "r1", "definition": "nope"}], "links": []}
+    preview, _ = await preview_apply("cml_build_lab", args)
+    assert preview["status"] == "blocked" and "unknown node definition" in preview["blockers"][0]
+
+
+async def test_start_lab_waits_for_convergence(lab_api: respx.MockRouter) -> None:
+    start = lab_api.put(f"/labs/{LID}/start").mock(return_value=httpx.Response(204))
+    preview, applied = await preview_apply("cml_start_lab", {"lab": LID})
+    assert "0 of 2 nodes to start" in preview["action"]
+    assert start.called and applied["result"]["converged"] is True
+
+
+async def test_start_lab_requires_exact_title(lab_api: respx.MockRouter) -> None:
+    async with Client(create_server(make_settings(**RW))) as c:
+        res = await c.call_tool("cml_start_lab", {"lab": "probe"}, raise_on_error=False)
+    assert res.is_error and "No lab named 'probe'" in res.content[0].text
+
+
+async def test_stop_lab_polls_state(lab_api: respx.MockRouter) -> None:
+    lab_api.put(f"/labs/{LID}/stop").mock(return_value=httpx.Response(204))
+    lab_api.get(f"/labs/{LID}/state").mock(return_value=httpx.Response(200, json="STOPPED"))
+    _, applied = await preview_apply("cml_stop_lab", {"lab": LID})
+    assert applied["result"] == {"state": "STOPPED"}
+
+
+async def test_set_node_config_blocked_while_booted(lab_api: respx.MockRouter) -> None:
+    preview, _ = await preview_apply(
+        "cml_set_node_config", {"lab": LID, "node": "r1", "configuration": "hostname x"}
+    )
+    assert preview["status"] == "blocked" and "DEFINED_ON_CORE" in preview["blockers"][0]
+    assert "-hostname r1" in preview["preview"]["diff"] and "+hostname x" in preview["preview"]["diff"]
+
+
+async def test_set_node_config_applies_main_file(lab_api: respx.MockRouter) -> None:
+    wiped = [dict(n, state="DEFINED_ON_CORE") for n in NODES]
+    lab_api.get(f"/labs/{LID}/nodes").mock(return_value=httpx.Response(200, json=wiped))
+    patch = lab_api.patch(f"/labs/{LID}/nodes/{R1}").mock(return_value=httpx.Response(200, json=R1))
+    _, applied = await preview_apply(
+        "cml_set_node_config", {"lab": LID, "node": "r1", "configuration": "hostname x"}
+    )
+    assert applied["status"] == "applied"
+    assert json.loads(patch.calls.last.request.content) == {
+        "configuration": [{"name": "Main", "content": "hostname x"}]
+    }
+
+
+async def test_update_node_changes_only_what_differs(lab_api: respx.MockRouter) -> None:
+    patch = lab_api.patch(f"/labs/{LID}/nodes/{R2}").mock(return_value=httpx.Response(200, json=R2))
+    preview, _ = await preview_apply(
+        "cml_update_node", {"lab": LID, "node": "r2", "tags": ["core"], "x": 200}
+    )
+    assert preview["preview"]["changes"] == {"tags": {"from": [], "to": ["core"]}}
+    assert json.loads(patch.calls.last.request.content) == {"tags": ["core"]}
+    blocked, _ = await preview_apply("cml_update_node", {"lab": LID, "node": "r2", "ram": 2048})
+    assert blocked["status"] == "blocked"
+
+
+async def test_connect_nodes_picks_first_free_interfaces(lab_api: respx.MockRouter) -> None:
+    route = lab_api.post(f"/labs/{LID}/links").mock(return_value=httpx.Response(200, json={"id": "newlink"}))
+    preview, applied = await preview_apply("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"})
+    assert preview["action"] == "Connect r1:Ethernet0/1 <-> r2:Ethernet0/1"
+    body = json.loads(route.calls.last.request.content)
+    ifaces = {i["id"]: i for i in fixture("interfaces.json")}
+    assert ifaces[body["src_int"]]["label"] == "Ethernet0/1" and ifaces[body["src_int"]]["node"] == R1
+    assert applied["result"]["id"] == "newlink"
+
+
+async def test_connect_nodes_rejects_used_interface(lab_api: respx.MockRouter) -> None:
+    args = {"lab": LID, "node_a": "r1", "node_b": "r2", "interface_a": "Ethernet0/0"}
+    preview, _ = await preview_apply("cml_connect_nodes", args)
+    assert preview["status"] == "blocked" and "already connected to r2:Ethernet0/0" in preview["blockers"][0]
+
+
+async def test_connect_nodes_creates_interface_on_wiped_node(lab_api: respx.MockRouter) -> None:
+    ifaces = [i for i in fixture("interfaces.json") if i["node"] != R2 or i["label"] == "Ethernet0/0"]
+    lab_api.get(f"/labs/{LID}/interfaces").mock(return_value=httpx.Response(200, json=ifaces))
+    wiped = [dict(n, state="DEFINED_ON_CORE") for n in NODES]
+    lab_api.get(f"/labs/{LID}/nodes").mock(return_value=httpx.Response(200, json=wiped))
+    new_iface = lab_api.post(f"/labs/{LID}/interfaces").mock(
+        return_value=httpx.Response(200, json={"id": "11111111-1111-4111-8111-111111111111"})
+    )
+    links = lab_api.post(f"/labs/{LID}/links").mock(return_value=httpx.Response(200, json={"id": "l2"}))
+    preview, _ = await preview_apply("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"})
+    assert preview["preview"]["b"] == "r2:(new interface)"
+    assert json.loads(new_iface.calls.last.request.content) == {"node": R2}
+    assert json.loads(links.calls.last.request.content)["dst_int"] == "11111111-1111-4111-8111-111111111111"
+
+
+async def test_link_condition_set_and_clear(lab_api: respx.MockRouter) -> None:
+    patch = lab_api.patch(f"/labs/{LID}/links/{LINK}/condition").mock(
+        return_value=httpx.Response(200, json={"latency": 50, "enabled": True})
+    )
+    delete = lab_api.delete(f"/labs/{LID}/links/{LINK}/condition").mock(return_value=httpx.Response(204))
+    _, applied = await preview_apply(
+        "cml_set_link_condition", {"lab": LID, "link": "r1<->r2", "latency_ms": 50}
+    )
+    sent = json.loads(patch.calls.last.request.content)
+    assert sent["latency"] == 50 and sent["enabled"] is True and sent["loss"] is None  # others reset
+    assert applied["result"] == {"latency": 50, "enabled": True}
+    await preview_apply("cml_set_link_condition", {"lab": LID, "link": "r1<->r2", "clear": True})
+    assert delete.called
+    blocked, _ = await preview_apply("cml_set_link_condition", {"lab": LID, "link": "r1<->r2"})
+    assert blocked["status"] == "blocked"
+
+
+async def test_capture_start_blocked_when_running(lab_api: respx.MockRouter) -> None:
+    preview, _ = await preview_apply("cml_start_capture", {"lab": LID, "link": LINK})
+    assert preview["status"] == "blocked" and "already running" in preview["blockers"][0]
+    stop = lab_api.put(f"/labs/{LID}/links/{LINK}/capture/stop").mock(return_value=httpx.Response(204))
+    await preview_apply("cml_stop_capture", {"lab": LID, "link": LINK})
+    assert stop.called
+
+
+async def test_confirm_token_refused_when_node_changed(lab_api: respx.MockRouter) -> None:
+    lab_api.put(f"/labs/{LID}/nodes/{R1}/state/stop").mock(return_value=httpx.Response(204))
+    args = {"lab": LID, "node": "r1", "state": "stop", "wait": False}
+    async with Client(create_server(make_settings(**RW))) as c:
+        preview = data(await c.call_tool("cml_set_node_state", args))
+        stopped = [dict(n, state="STOPPED") if n["id"] == R1 else n for n in NODES]
+        lab_api.get(f"/labs/{LID}/nodes").mock(return_value=httpx.Response(200, json=stopped))
+        res = await c.call_tool(
+            "cml_set_node_state", {**args, "confirm": preview["confirm"]}, raise_on_error=False
+        )
+    assert res.is_error and "changed since the preview" in res.content[0].text

@@ -10,7 +10,17 @@ from stutters_mcp_core.spec import SpecSource
 
 from cml_mcp.client import CmlApp
 from cml_mcp.config import Settings
-from cml_mcp.tools import definitions, labs, links, nodes, smart, system
+from cml_mcp.tools import (
+    build_tool,
+    definitions,
+    lab_writes,
+    labs,
+    links,
+    nodes,
+    smart,
+    system,
+    topology_writes,
+)
 
 INSTRUCTIONS = """
 Tools for Cisco Modeling Labs (CML 2.x), a network simulation platform.
@@ -70,6 +80,9 @@ def create_server(
             links.register,
             definitions.register,
             smart.register,
+            lab_writes.register,
+            topology_writes.register,
+            build_tool.register,
         ],
         status=CmlApp.status,
         spec_sources=spec_sources,
