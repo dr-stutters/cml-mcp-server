@@ -172,6 +172,14 @@ uv run pytest tests/live -m live           # against the lab in .env; creates an
 uv run python scripts/capture_fixtures.py mcp-test-probe   # refresh redacted fixtures
 ```
 
+`scripts/seed_lab.py [--start] [--recreate]` creates a reusable lab, `mcp-test-seed`. It has two
+IOL-XE routers running OSPF, an IOL-L2 switch and two Alpine hosts (h1 10.0.10.10 and h2
+10.0.20.10, which can ping each other). Device logins are cisco/cisco.
+
+Note: the CML Personal/EVAL licence on the test controller allows **5 running nodes** in total, across
+all labs. Unmanaged switches and external connectors don't count. A start beyond that fails with
+"5 of 5 node licenses are in use".
+
 Live tests build throwaway labs named `mcp-test-*` from fast-booting IOL nodes, run every tool,
 and always delete what they created.
 
