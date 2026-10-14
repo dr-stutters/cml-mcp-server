@@ -3,7 +3,7 @@
 MCP server for **Cisco Modeling Labs (CML 2.x)**, built on
 [stutters-mcp-core](https://github.com/dr-stutters/stutters-mcp-core).
 
-> Status: in development (milestone M1: scaffold, login and `cml_status`).
+> Status: in development (M2: read tools).
 
 ```bash
 cp .env.example .env    # set CML_URL, CML_USERNAME, CML_PASSWORD

@@ -41,7 +41,7 @@
    "vnc_key": null,
    "serial_consoles": [
     {
-     "console_key": "2ffbfa41-1142-4114-8741-30902f5fea07",
+     "console_key": "11111111-2222-4333-8444-555555555555",
      "device_number": 0,
      "label": "Line #0"
     }
@@ -92,7 +92,7 @@
    "vnc_key": null,
    "serial_consoles": [
     {
-     "console_key": "f53bcf89-6719-4de3-803a-c5a4f52d5f66",
+     "console_key": "11111111-2222-4333-8444-555555555555",
      "device_number": 0,
      "label": "Line #0"
     }
