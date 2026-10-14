@@ -98,7 +98,7 @@ async def test_pyats_testbed_masks_passwords(lab_api: respx.MockRouter) -> None:
     text = await call("cml_get_pyats_testbed", {"lab": LID})
     assert "cisco\n" not in text.replace("username: cisco\n", "")
     assert "change_me" in text  # usernames stay
-    assert text.count("********") == 2
+    assert text.count("********") == 3
 
 
 async def test_lab_events_newest_first_with_names(lab_api: respx.MockRouter) -> None:
