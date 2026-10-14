@@ -1,0 +1,31 @@
+{
+ "state": "STARTED",
+ "created": "2026-10-14T12:16:02+00:00",
+ "modified": "2026-10-14T12:16:02+00:00",
+ "lab_title": "mcp-test-probe",
+ "lab_description": "probe lab for fixture capture",
+ "lab_notes": "",
+ "owner": "00000000-0000-4000-a000-000000000000",
+ "owner_username": "admin",
+ "owner_fullname": "Default Admin",
+ "node_count": 2,
+ "link_count": 1,
+ "id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+ "groups": [],
+ "autostart": {
+  "enabled": false,
+  "priority": null,
+  "delay": null
+ },
+ "node_staging": {
+  "enabled": false,
+  "start_remaining": true,
+  "abort_on_failure": false
+ },
+ "effective_permissions": [
+  "lab_admin",
+  "lab_exec",
+  "lab_edit",
+  "lab_view"
+ ]
+}

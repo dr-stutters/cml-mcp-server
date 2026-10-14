@@ -1,0 +1,613 @@
+[
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Lab",
+  "element_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "data": {
+   "description": "probe lab for fixture capture",
+   "notes": "",
+   "owner": "00000000-0000-4000-a000-000000000000",
+   "title": "mcp-test-probe",
+   "node_staging": {
+    "enabled": false,
+    "start_remaining": true,
+    "abort_on_failure": false
+   },
+   "version": "0.3.1"
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Node",
+  "element_id": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+  "data": {
+   "boot_disk_size": null,
+   "configuration": [
+    {
+     "config.json": "<default length 213>"
+    },
+    {
+     "ios_config.txt": "<altered length 143>"
+    }
+   ],
+   "cpu_limit": null,
+   "cpus": null,
+   "data_volume": null,
+   "hide_links": false,
+   "id": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+   "image_definition": null,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "r1",
+   "node_definition": "iol-xe",
+   "parameters": {},
+   "pinned_compute_id": null,
+   "priority": null,
+   "pyats": {
+    "username": null,
+    "password": null,
+    "enable_password": null
+   },
+   "ram": null,
+   "tags": [],
+   "x": 0,
+   "y": 0,
+   "state": "DEFINED_ON_CORE",
+   "boot_progress": "Not running",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "b1880217-c39a-46a4-9a0c-ee6118cf4f7d",
+  "data": {
+   "id": "b1880217-c39a-46a4-9a0c-ee6118cf4f7d",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Loopback0",
+   "mac_address": null,
+   "node": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+   "slot": null,
+   "type": "loopback",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "a5719a70-f658-4dd3-98c7-2f4c5355b6e7",
+  "data": {
+   "id": "a5719a70-f658-4dd3-98c7-2f4c5355b6e7",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Ethernet0/0",
+   "mac_address": null,
+   "node": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+   "slot": 0,
+   "type": "physical",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "eab0a18c-1398-4aa6-a2f2-fc3f6ddfd9d9",
+  "data": {
+   "id": "eab0a18c-1398-4aa6-a2f2-fc3f6ddfd9d9",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Ethernet0/1",
+   "mac_address": null,
+   "node": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+   "slot": 1,
+   "type": "physical",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "01c35bfd-a8a3-40d7-86af-a651d2615bbf",
+  "data": {
+   "id": "01c35bfd-a8a3-40d7-86af-a651d2615bbf",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Ethernet0/2",
+   "mac_address": null,
+   "node": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+   "slot": 2,
+   "type": "physical",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "85bc968c-e47b-496a-9cb3-781618372150",
+  "data": {
+   "id": "85bc968c-e47b-496a-9cb3-781618372150",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Ethernet0/3",
+   "mac_address": null,
+   "node": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+   "slot": 3,
+   "type": "physical",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Node",
+  "element_id": "567271f1-e97a-4103-8f89-825c115d7a7e",
+  "data": {
+   "boot_disk_size": null,
+   "configuration": [
+    {
+     "config.json": "<default length 213>"
+    },
+    {
+     "ios_config.txt": "<altered length 87>"
+    }
+   ],
+   "cpu_limit": null,
+   "cpus": null,
+   "data_volume": null,
+   "hide_links": false,
+   "id": "567271f1-e97a-4103-8f89-825c115d7a7e",
+   "image_definition": null,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "r2",
+   "node_definition": "iol-xe",
+   "parameters": {},
+   "pinned_compute_id": null,
+   "priority": null,
+   "pyats": {
+    "username": null,
+    "password": null,
+    "enable_password": null
+   },
+   "ram": null,
+   "tags": [],
+   "x": 200,
+   "y": 0,
+   "state": "DEFINED_ON_CORE",
+   "boot_progress": "Not running",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "b4eb219d-c018-407e-97b7-2085758b3f61",
+  "data": {
+   "id": "b4eb219d-c018-407e-97b7-2085758b3f61",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Loopback0",
+   "mac_address": null,
+   "node": "567271f1-e97a-4103-8f89-825c115d7a7e",
+   "slot": null,
+   "type": "loopback",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "105f0610-8257-4445-ab8e-fcea5332be63",
+  "data": {
+   "id": "105f0610-8257-4445-ab8e-fcea5332be63",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Ethernet0/0",
+   "mac_address": null,
+   "node": "567271f1-e97a-4103-8f89-825c115d7a7e",
+   "slot": 0,
+   "type": "physical",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "17bd6a6f-0f45-425a-b522-1f6305a9df7c",
+  "data": {
+   "id": "17bd6a6f-0f45-425a-b522-1f6305a9df7c",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Ethernet0/1",
+   "mac_address": null,
+   "node": "567271f1-e97a-4103-8f89-825c115d7a7e",
+   "slot": 1,
+   "type": "physical",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "bf55dbbe-0b4f-4f65-9823-a7fd07ea71bb",
+  "data": {
+   "id": "bf55dbbe-0b4f-4f65-9823-a7fd07ea71bb",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Ethernet0/2",
+   "mac_address": null,
+   "node": "567271f1-e97a-4103-8f89-825c115d7a7e",
+   "slot": 2,
+   "type": "physical",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Interface",
+  "element_id": "f279dba1-a980-4af5-89da-6bbdb3bd7f63",
+  "data": {
+   "id": "f279dba1-a980-4af5-89da-6bbdb3bd7f63",
+   "is_connected": false,
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "Ethernet0/3",
+   "mac_address": null,
+   "node": "567271f1-e97a-4103-8f89-825c115d7a7e",
+   "slot": 3,
+   "type": "physical",
+   "state": "DEFINED_ON_CORE",
+   "operational": null
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "CREATED",
+  "element_type": "Link",
+  "element_id": "dbc9439c-9da2-4074-9199-556edbed1757",
+  "data": {
+   "id": "dbc9439c-9da2-4074-9199-556edbed1757",
+   "interface_a": "a5719a70-f658-4dd3-98c7-2f4c5355b6e7",
+   "interface_b": "105f0610-8257-4445-ab8e-fcea5332be63",
+   "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+   "label": "r1-Ethernet0/0<->r2-Ethernet0/0",
+   "link_capture_key": "dbc9439c-9da2-4074-9199-556edbed1757",
+   "node_a": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+   "node_b": "567271f1-e97a-4103-8f89-825c115d7a7e",
+   "state": "DEFINED_ON_CORE"
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:02"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Node",
+  "element_id": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+  "data": {},
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:03"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Lab",
+  "element_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "data": {
+   "state": "STARTED"
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:03"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Node",
+  "element_id": "567271f1-e97a-4103-8f89-825c115d7a7e",
+  "data": {},
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:03"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "MODIFIED",
+  "element_type": "Node",
+  "element_id": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+  "data": {
+   "compute_id": "bca30792-c8be-487a-ac26-8e0852c65404"
+  },
+  "previous": {
+   "compute_id": null
+  },
+  "timestamp": "2026-10-14T12:16:03"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Node",
+  "element_id": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+  "data": {
+   "operational": {
+    "compute_id": "bca30792-c8be-487a-ac26-8e0852c65404",
+    "boot_disk_size": 1,
+    "cpu_limit": 100,
+    "cpus": 1,
+    "data_volume": 0,
+    "ram": 1024,
+    "image_definition": "iol-xe-17-18-02",
+    "vnc_key": null,
+    "serial_consoles": [
+     {
+      "console_key": "2ffbfa41-1142-4114-8741-30902f5fea07",
+      "device_number": 0,
+      "label": "Line #0"
+     }
+    ],
+    "resource_pool": null,
+    "iol_app_id": 2
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:04"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "b1880217-c39a-46a4-9a0c-ee6118cf4f7d",
+  "data": {},
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:04"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "a5719a70-f658-4dd3-98c7-2f4c5355b6e7",
+  "data": {
+   "operational": {
+    "device_name": null,
+    "mac_address": "aa:bb:cc:00:02:00",
+    "dst_udp_port": null,
+    "src_udp_port": null
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:04"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "eab0a18c-1398-4aa6-a2f2-fc3f6ddfd9d9",
+  "data": {
+   "operational": {
+    "device_name": null,
+    "mac_address": "aa:bb:cc:00:02:10",
+    "dst_udp_port": null,
+    "src_udp_port": null
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:04"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "01c35bfd-a8a3-40d7-86af-a651d2615bbf",
+  "data": {
+   "operational": {
+    "device_name": null,
+    "mac_address": "aa:bb:cc:00:02:20",
+    "dst_udp_port": null,
+    "src_udp_port": null
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:04"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "85bc968c-e47b-496a-9cb3-781618372150",
+  "data": {
+   "operational": {
+    "device_name": null,
+    "mac_address": "aa:bb:cc:00:02:30",
+    "dst_udp_port": null,
+    "src_udp_port": null
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:04"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "MODIFIED",
+  "element_type": "Node",
+  "element_id": "567271f1-e97a-4103-8f89-825c115d7a7e",
+  "data": {
+   "compute_id": "bca30792-c8be-487a-ac26-8e0852c65404"
+  },
+  "previous": {
+   "compute_id": null
+  },
+  "timestamp": "2026-10-14T12:16:07"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Node",
+  "element_id": "567271f1-e97a-4103-8f89-825c115d7a7e",
+  "data": {
+   "operational": {
+    "compute_id": "bca30792-c8be-487a-ac26-8e0852c65404",
+    "boot_disk_size": 1,
+    "cpu_limit": 100,
+    "cpus": 1,
+    "data_volume": 0,
+    "ram": 1024,
+    "image_definition": "iol-xe-17-18-02",
+    "vnc_key": null,
+    "serial_consoles": [
+     {
+      "console_key": "f53bcf89-6719-4de3-803a-c5a4f52d5f66",
+      "device_number": 0,
+      "label": "Line #0"
+     }
+    ],
+    "resource_pool": null,
+    "iol_app_id": 3
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:07"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "b4eb219d-c018-407e-97b7-2085758b3f61",
+  "data": {},
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:07"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "105f0610-8257-4445-ab8e-fcea5332be63",
+  "data": {
+   "operational": {
+    "device_name": null,
+    "mac_address": "aa:bb:cc:00:03:00",
+    "dst_udp_port": null,
+    "src_udp_port": null
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:07"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "17bd6a6f-0f45-425a-b522-1f6305a9df7c",
+  "data": {
+   "operational": {
+    "device_name": null,
+    "mac_address": "aa:bb:cc:00:03:10",
+    "dst_udp_port": null,
+    "src_udp_port": null
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:07"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "bf55dbbe-0b4f-4f65-9823-a7fd07ea71bb",
+  "data": {
+   "operational": {
+    "device_name": null,
+    "mac_address": "aa:bb:cc:00:03:20",
+    "dst_udp_port": null,
+    "src_udp_port": null
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:07"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Interface",
+  "element_id": "f279dba1-a980-4af5-89da-6bbdb3bd7f63",
+  "data": {
+   "operational": {
+    "device_name": null,
+    "mac_address": "aa:bb:cc:00:03:30",
+    "dst_udp_port": null,
+    "src_udp_port": null
+   }
+  },
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:07"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Link",
+  "element_id": "dbc9439c-9da2-4074-9199-556edbed1757",
+  "data": {},
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:07"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Node",
+  "element_id": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+  "data": {},
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:29"
+ },
+ {
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "event": "state",
+  "element_type": "Node",
+  "element_id": "567271f1-e97a-4103-8f89-825c115d7a7e",
+  "data": {},
+  "previous": {},
+  "timestamp": "2026-10-14T12:16:32"
+ }
+]

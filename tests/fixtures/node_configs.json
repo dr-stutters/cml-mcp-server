@@ -1,0 +1,104 @@
+[
+ {
+  "boot_disk_size": null,
+  "configuration": [
+   {
+    "name": "ios_config.txt",
+    "content": "hostname r1\ninterface Loopback0\n ip address 1.1.1.1 255.255.255.255\ninterface Ethernet0/0\n ip address 10.0.12.1 255.255.255.0\n no shutdown\nend\n"
+   }
+  ],
+  "cpu_limit": null,
+  "cpus": null,
+  "data_volume": null,
+  "hide_links": false,
+  "id": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+  "image_definition": null,
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "label": "r1",
+  "node_definition": "iol-xe",
+  "parameters": {},
+  "pinned_compute_id": null,
+  "priority": null,
+  "pyats": {
+   "username": null,
+   "password": null,
+   "enable_password": null
+  },
+  "ram": null,
+  "tags": [],
+  "x": 0,
+  "y": 0,
+  "state": "BOOTED",
+  "boot_progress": "Booted",
+  "operational": {
+   "compute_id": "bca30792-c8be-487a-ac26-8e0852c65404",
+   "boot_disk_size": 1,
+   "cpu_limit": 100,
+   "cpus": 1,
+   "data_volume": 0,
+   "ram": 1024,
+   "image_definition": "iol-xe-17-18-02",
+   "vnc_key": null,
+   "serial_consoles": [
+    {
+     "console_key": "2ffbfa41-1142-4114-8741-30902f5fea07",
+     "device_number": 0,
+     "label": "Line #0"
+    }
+   ],
+   "resource_pool": null,
+   "iol_app_id": 2
+  }
+ },
+ {
+  "boot_disk_size": null,
+  "configuration": [
+   {
+    "name": "ios_config.txt",
+    "content": "hostname r2\ninterface Ethernet0/0\n ip address 10.0.12.2 255.255.255.0\n no shutdown\nend\n"
+   }
+  ],
+  "cpu_limit": null,
+  "cpus": null,
+  "data_volume": null,
+  "hide_links": false,
+  "id": "567271f1-e97a-4103-8f89-825c115d7a7e",
+  "image_definition": null,
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "label": "r2",
+  "node_definition": "iol-xe",
+  "parameters": {},
+  "pinned_compute_id": null,
+  "priority": null,
+  "pyats": {
+   "username": null,
+   "password": null,
+   "enable_password": null
+  },
+  "ram": null,
+  "tags": [],
+  "x": 200,
+  "y": 0,
+  "state": "BOOTED",
+  "boot_progress": "Booted",
+  "operational": {
+   "compute_id": "bca30792-c8be-487a-ac26-8e0852c65404",
+   "boot_disk_size": 1,
+   "cpu_limit": 100,
+   "cpus": 1,
+   "data_volume": 0,
+   "ram": 1024,
+   "image_definition": "iol-xe-17-18-02",
+   "vnc_key": null,
+   "serial_consoles": [
+    {
+     "console_key": "f53bcf89-6719-4de3-803a-c5a4f52d5f66",
+     "device_number": 0,
+     "label": "Line #0"
+    }
+   ],
+   "resource_pool": null,
+   "iol_app_id": 3
+  }
+ }
+]

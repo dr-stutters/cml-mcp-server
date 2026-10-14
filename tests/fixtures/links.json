@@ -1,0 +1,13 @@
+[
+ {
+  "id": "dbc9439c-9da2-4074-9199-556edbed1757",
+  "interface_a": "a5719a70-f658-4dd3-98c7-2f4c5355b6e7",
+  "interface_b": "105f0610-8257-4445-ab8e-fcea5332be63",
+  "lab_id": "1224fe80-0aec-4d7f-a4db-03a74fb42223",
+  "label": "r1-Ethernet0/0<->r2-Ethernet0/0",
+  "link_capture_key": "dbc9439c-9da2-4074-9199-556edbed1757",
+  "node_a": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+  "node_b": "567271f1-e97a-4103-8f89-825c115d7a7e",
+  "state": "STARTED"
+ }
+]

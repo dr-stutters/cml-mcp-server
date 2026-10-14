@@ -1,0 +1,63 @@
+{
+ "computes": {
+  "bca30792-c8be-487a-ac26-8e0852c65404": {
+   "hostname": "cml-controller",
+   "is_controller": true,
+   "stats": {
+    "cpu": {
+     "load": [
+      0.0185546875,
+      0.04736328125,
+      0.0126953125
+     ],
+     "count": 32,
+     "percent": 1.0625,
+     "model": "Intel(R) Xeon(R) CPU E7- 2830  @ 2.13GHz",
+     "hyperthreading": false,
+     "predicted": 9
+    },
+    "memory": {
+     "total": 270455734272,
+     "free": 266868785152,
+     "used": 3586949120
+    },
+    "disk": {
+     "total": 305854775296,
+     "free": 252265795584,
+     "used": 53588979712
+    },
+    "dominfo": {
+     "allocated_cpus": 0,
+     "allocated_memory": 2097152.0,
+     "total_nodes": 2,
+     "total_orphans": 0,
+     "running_nodes": 2,
+     "running_orphans": 0
+    }
+   }
+  }
+ },
+ "all": {
+  "cpu": {
+   "count": 32,
+   "percent": 1.0625
+  },
+  "memory": {
+   "total": 270455734272,
+   "free": 266868785152,
+   "used": 3586949120
+  },
+  "disk": {
+   "total": 305854775296,
+   "free": 252265795584,
+   "used": 53588979712
+  }
+ },
+ "controller": {
+  "disk": {
+   "total": 305854775296,
+   "free": 252265807872,
+   "used": 38030073856
+  }
+ }
+}
