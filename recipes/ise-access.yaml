@@ -1,0 +1,117 @@
+# A Catalyst 9000v access switch doing 802.1X + MAB against ISE (198.18.134.35), with a client on an
+# access port. Build with scripts/recipes.py, or pass `build:` to cml_build_lab.
+name: ise-access
+summary: cat9000v-uadp access switch (RADIUS/802.1X/MAB/CoA to ISE 198.18.134.35) + Alpine client on Gi1/0/2
+address_plan:
+  sw1 GigabitEthernet1/0/1: 198.18.128.154/18 routed uplink to the lab (RADIUS source, gateway 198.18.128.1)
+  sw1 Vlan10: 10.10.10.1/24 (client VLAN, DHCP pool 10.10.10.100-199)
+  client eth0 (sw1 Gi1/0/2, access VLAN 10): DHCP, normally 10.10.10.100
+credentials:
+  cli: netadmin / ***REDACTED*** (enable secret ***REDACTED***), SSH + SNMP v2c mcp-ro / mcp-rw like catc-routers
+  radius_shared_secret: ***REDACTED*** (ISE network device 198.18.128.154, CoA port 1700)
+  client: Alpine, login cisco / cisco
+ise_side: add a network device 'mcp-sw1' 198.18.128.154 with RADIUS secret ***REDACTED***; the client's MAC (cml_list_interfaces) authenticates via MAB, or 802.1X with a supplicant
+boot_minutes: 10-15 (BOOTED after ~6 min; the routed uplink forwards 2-3 min later - re-run verify)
+verified: 2026-10-14 - sw1 pinged 198.18.128.1 and ISE; MAB from the client's MAC reached ISE (temporary NAD,
+  'Rejected per authorization profile' with ISE's default policy). Note a wipe gives the client a new MAC.
+verify:
+  nodes: [sw1]
+  targets: [198.18.128.1, 198.18.134.35]
+build:
+  title: mcp-cml-ise
+  description: cat9000v access switch with 802.1X/MAB against ISE + client (cml-mcp-server recipe ise-access)
+  nodes:
+    - label: ext
+      definition: external_connector
+      config: System Bridge
+      x: 0
+      y: 0
+    - label: sw1
+      definition: cat9000v-uadp
+      x: 0
+      y: 160
+      credentials: {username: netadmin, password: ***REDACTED***, enable_password: ***REDACTED***}
+      config: |
+        hostname mcp-sw1
+        ip domain name mcp.lab
+        no ip domain lookup
+        username netadmin privilege 15 secret ***REDACTED***
+        enable secret ***REDACTED***
+        aaa new-model
+        aaa authentication login default local
+        aaa authentication login CONSOLE local
+        aaa authorization exec default local
+        aaa authentication dot1x default group radius
+        aaa authorization network default group radius
+        aaa accounting dot1x default start-stop group radius
+        aaa accounting update newinfo periodic 2880
+        aaa server radius dynamic-author
+         client 198.18.134.35 server-key ***REDACTED***
+        radius server ISE
+         address ipv4 198.18.134.35 auth-port 1812 acct-port 1813
+         key ***REDACTED***
+        radius-server attribute 6 on-for-login-auth
+        radius-server attribute 8 include-in-access-req
+        radius-server attribute 25 access-request include
+        radius-server dead-criteria time 5 tries 3
+        ip radius source-interface GigabitEthernet1/0/1
+        dot1x system-auth-control
+        vlan 10
+         name CLIENTS
+        ip dhcp excluded-address 10.10.10.1 10.10.10.99
+        ip dhcp pool CLIENTS
+         network 10.10.10.0 255.255.255.0
+         default-router 10.10.10.1
+        interface GigabitEthernet1/0/1
+         description uplink to the lab 198.18.128.0/18
+         no switchport
+         ip address 198.18.128.154 255.255.192.0
+         no shutdown
+        interface Vlan10
+         ip address 10.10.10.1 255.255.255.0
+         no shutdown
+        interface GigabitEthernet1/0/2
+         description client (802.1X / MAB)
+         switchport mode access
+         switchport access vlan 10
+         authentication host-mode multi-auth
+         authentication order dot1x mab
+         authentication priority dot1x mab
+         authentication port-control auto
+         authentication periodic
+         authentication timer reauthenticate server
+         authentication violation restrict
+         mab
+         dot1x pae authenticator
+         dot1x timeout tx-period 5
+         spanning-tree portfast
+         no shutdown
+        ip route 0.0.0.0 0.0.0.0 198.18.128.1
+        crypto key generate rsa modulus 2048
+        ip ssh version 2
+        snmp-server community mcp-ro RO
+        snmp-server community mcp-rw RW
+        line con 0
+         exec-timeout 0 0
+         logging synchronous
+         login authentication CONSOLE
+        line vty 0 15
+         transport input ssh
+        end
+    - label: client
+      definition: alpine
+      x: 0
+      y: 320
+      credentials: {username: cisco, password: cisco}
+      config: |
+        # this is a shell script which will be sourced at boot
+        hostname client
+        USERNAME=cisco
+        PASSWORD=cisco
+        ip link set eth0 up
+        # DHCP from sw1 (VLAN 10) once the port is authorized; retries in the background (never block
+        # this boot script: the console only gets a login prompt after it finishes)
+        (udhcpc -i eth0 -f -t 0 -T 10 >/dev/null 2>&1 &)
+  links:
+    - sw1:GigabitEthernet1/0/1 ext
+    - sw1:GigabitEthernet1/0/2 client:eth0

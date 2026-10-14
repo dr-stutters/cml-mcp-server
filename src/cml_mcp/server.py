@@ -18,7 +18,9 @@ from cml_mcp.tools import (
     lab_writes,
     labs,
     links,
+    network,
     nodes,
+    samples,
     smart,
     system,
     topology_writes,
@@ -34,7 +36,12 @@ Nodes: cml_list_nodes / cml_get_node / cml_get_node_console_log; wiring: cml_lis
 cml_list_links / cml_get_link (conditioning, capture status), cml_list_capture_packets.
 What can be built: cml_list_node_definitions (iol-xe / ioll2-xe boot in under a minute).
 Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the CML console server
-(no IP reachability needed); config changes go through cml_configure_node (write tier).
+(no IP reachability needed; IOS/IOS-XE, NX-OS, FTD, Linux); config changes go through
+cml_configure_node (write tier; mode='exec' for FTD 'configure manager add ...').
+Outside networks: cml_list_external_connectors, then an external_connector node in cml_build_lab.
+Proving connectivity: cml_check_reachability; addresses: cml_get_layer3_addresses(source='cli').
+Slow images (FTDv 15-30 min, cat9000v ~10): build/start with wait=false, then cml_wait_for_converged.
+Running nodes are capped by the licence; external connectors and unmanaged switches don't count.
 CML returns whole collections; list tools page client-side with limit/offset.
 Call cml_status first if anything fails. cml_search_spec / cml_get_definition describe the REST API
 (paths are relative to /api/v0) and cml_api_call reaches endpoints no other tool covers.
@@ -88,6 +95,8 @@ def create_server(
             topology_writes.register,
             build_tool.register,
             cli.register,
+            network.register,
+            samples.register,
             dangerous.register,
         ],
         status=CmlApp.status,

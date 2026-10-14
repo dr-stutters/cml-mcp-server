@@ -1,0 +1,66 @@
+# An FTDv on the lab network, pre-configured (day 0) to register with FMC 198.18.134.76.
+# Build with scripts/recipes.py, or pass `build:` to cml_build_lab. Boot takes 15-30 minutes.
+name: ftd-fmc
+summary: FTDv 10.0 managed by FMC 198.18.134.76 (reg key ***REDACTED***), management 198.18.128.151
+address_plan:
+  ftd1 Management0/0: 198.18.128.151/18 (gateway 198.18.128.1, DNS 198.18.133.1) via external connector ext-mgmt
+  ftd1 GigabitEthernet0/0: unaddressed, on the lab network via ext-outside (spare address 198.18.128.155 for an 'outside' interface)
+  ftd1 GigabitEthernet0/1: unaddressed, to unmanaged switch inside-sw (attach inside hosts there)
+credentials:
+  cli: admin / ***REDACTED*** (FTD rejects weak or dictionary day-0 passwords by forcing a change at first login)
+  fmc_registration: host 198.18.134.76, registration key ***REDACTED***, no NAT id
+fmc_side: fmc_register_device with host 198.18.128.151, reg key ***REDACTED*** (the FTD already shows 'show managers' -> 198.18.134.76 Pending)
+boot_minutes: 15-30
+verify:
+  nodes: [ftd1]
+  targets: [198.18.134.76, 198.18.128.1]
+  vrf: management
+build:
+  title: mcp-cml-ftd
+  description: FTDv on the lab network for FMC registration (cml-mcp-server recipe ftd-fmc)
+  nodes:
+    - label: ext-mgmt
+      definition: external_connector
+      config: System Bridge
+      x: -200
+      y: 0
+    - label: ext-outside
+      definition: external_connector
+      config: System Bridge
+      x: 200
+      y: 0
+    - label: inside-sw
+      definition: unmanaged_switch
+      x: 0
+      y: 320
+    - label: ftd1
+      definition: ftdv
+      x: 0
+      y: 160
+      credentials: {username: admin, password: ***REDACTED***}
+      config: |
+        {
+          "EULA": "accept",
+          "Hostname": "mcp-ftd1",
+          "AdminPassword": "***REDACTED***",
+          "FirewallMode": "routed",
+          "DNS1": "198.18.133.1",
+          "DNS2": "",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "198.18.128.151",
+          "IPv4Mask": "255.255.192.0",
+          "IPv4Gw": "198.18.128.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "198.18.134.76",
+          "FmcRegKey": "***REDACTED***",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+        }
+  links:
+    - ftd1:Management0/0 ext-mgmt
+    - ftd1:GigabitEthernet0/0 ext-outside
+    - ftd1:GigabitEthernet0/1 inside-sw

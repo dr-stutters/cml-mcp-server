@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.0 - 2026-10-14
+
+Phase 2: gap analysis against the CML 2.10 OpenAPI (docs/GAP-ANALYSIS.md) and hardening for the
+FMC / Catalyst Center / ISE builders, live-tested with FTDv 10.0, cat8000v, cat9000v-uadp, IOL and Alpine.
+
+### Added
+- `cml_check_reachability`: ping matrix from nodes to targets with per-OS syntax (IOS/IOS-XE, NX-OS,
+  Linux, FTD incl. `ping system` on the management interface).
+- `cml_list_external_connectors`, `cml_list_sample_labs`, `cml_load_sample_lab`.
+- `cml_build_lab`: `files` (other config files), `credentials` (console login / pyATS), `parameters`,
+  `x`/`y`, `wait`; external-connector names validated; node-licence use in the preview.
+- `cml_configure_node`: `mode='exec'` (FTD CLISH `configure manager add ...`), `answer_questions`,
+  `line_timeout`.
+- `cml_get_layer3_addresses(source='cli'|'both')`: addresses read from each node's CLI.
+- `cml_wait_for_converged(console_pattern=...)`: wait for a later console message after BOOTED.
+- `cml_get_node_console_log(grep=...)`; `cml_update_node` login fields (`login_username`,
+  `login_password`, `enable_password`).
+- `CML_NODE_LICENSE_LIMIT`: start/build/node-start previews refuse to exceed the licence; CML's
+  "N of N node licenses are in use" becomes an error naming the labs that hold them.
+- `recipes/` (ftd-fmc, catc-routers, ise-access) and `scripts/recipes.py`.
+
+### Changed
+- Console: os-aware login from the pyATS testbed (no `enable` on FTD), NX-OS POAP skipped, terminal
+  escape codes stripped from console logs, timed-out commands are interrupted with Ctrl-C.
+- Auto interface allocation skips FTDv/ASAv `donotuse` slots.
+
+### Fixed
+- FTD: login looped on the forced password-change prompt; now a clear error.
+- Commands that ask a question (`[confirm]`, `[yes/no]`) no longer hang until the timeout.
+- `cml_get_layer3_addresses` description wrongly said labs need traffic only; link-local addresses
+  are no longer reported by CLI discovery.
+
 ## 0.2.1 - 2026-10-15
 
 - Core pinned to stutters-mcp-core v0.1.1. It brings nested secret masking in the audit log and

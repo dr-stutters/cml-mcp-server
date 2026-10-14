@@ -8,6 +8,15 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
+# Nodes that never take a node licence (and boot instantly).
+UNLICENSED_DEFINITIONS = frozenset({"external_connector", "unmanaged_switch"})
+
+
+class NodeCredentials(BaseModel):
+    username: str | None = Field(default=None, description="Login user (pyATS username)")
+    password: str | None = Field(default=None, description="Login password (pyATS password)")
+    enable_password: str | None = Field(default=None, description="Enable secret, if different")
+
 
 class NodeSpec(BaseModel):
     label: str = Field(
@@ -17,11 +26,31 @@ class NodeSpec(BaseModel):
         description="Node label, e.g. r1 (no spaces or ':')",
     )
     definition: str = Field(description="Node definition id, e.g. iol-xe, ioll2-xe, alpine, unmanaged_switch")
-    config: str | None = Field(default=None, description="Day-0 configuration text")
+    config: str | None = Field(
+        default=None,
+        description="Day-0 configuration for the definition's main config file (IOS-XE/NX-OS CLI, FTDv "
+        "day0-config JSON, Alpine node.cfg...). For an external_connector: the connector label or bridge "
+        "(see cml_list_external_connectors), e.g. 'System Bridge' or 'NAT'",
+    )
+    files: dict[str, str] = Field(
+        default_factory=dict,
+        description="Other config files by name, e.g. {'conf/vswitch.xml': ...} on cat9000v or "
+        "{'network-config': ...} on ubuntu",
+    )
+    credentials: NodeCredentials | None = Field(
+        default=None,
+        description="Login the console tools use (CML pyATS credentials); set it when the day-0 config "
+        "changes the definition's default login",
+    )
     image: str | None = Field(default=None, description="Image definition id (default: newest)")
     tags: list[str] = Field(default_factory=list, description="Tags")
     ram: int | None = Field(default=None, ge=64, description="RAM in MB")
     cpus: int | None = Field(default=None, ge=1, le=64, description="vCPUs")
+    parameters: dict[str, str] = Field(
+        default_factory=dict, description="Node parameters (definition-specific)"
+    )
+    x: int | None = Field(default=None, description="Canvas x position (default: grid layout)")
+    y: int | None = Field(default=None, description="Canvas y position (default: grid layout)")
 
 
 class BuildError(ValueError):
@@ -45,15 +74,37 @@ def _layout(i: int, n: int) -> tuple[int, int]:
     return (i % cols) * 200, (i // cols) * 160
 
 
+def connector_keys(connectors: list[dict[str, Any]]) -> set[str]:
+    """Values an external_connector node's config may name: connector labels, bridge names, tags."""
+    keys: set[str] = set()
+    for c in connectors:
+        for k in ("label", "device_name"):
+            if c.get(k):
+                keys.add(str(c[k]))
+        keys.update(str(t) for t in c.get("tags") or [])
+    return keys
+
+
+def auto_interfaces(names: list[str]) -> list[str]:
+    """Interfaces auto-allocation may pick: not FTDv/ASAv's placeholder 'donotuse' slots."""
+    return [x for x in names if not x.lower().startswith("donotuse")]
+
+
 def build_topology(
     title: str,
     nodes: list[NodeSpec],
     links: list[str],
     definitions: dict[str, dict[str, Any]],
     description: str | None = None,
+    *,
+    connectors: list[dict[str, Any]] | None = None,
+    notes: list[str] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
-    """(topology dict, human-readable link list). Raises BuildError for anything CML would reject."""
+    """(topology dict, human-readable link list). Raises BuildError for anything CML would reject.
+    `connectors` (GET /system/external_connectors) lets external_connector configs be checked;
+    `notes` collects non-fatal remarks for the preview."""
     problems: list[str] = []
+    notes = notes if notes is not None else []
     labels = [n.label for n in nodes]
     dupes = sorted({x for x in labels if labels.count(x) > 1})
     if dupes:
@@ -64,6 +115,15 @@ def build_topology(
             problems.append(f"{n.label}: unknown node definition {n.definition!r}")
         elif n.image and n.image not in (d.get("image_definitions") or []):
             problems.append(f"{n.label}: image {n.image!r} does not belong to {n.definition!r}")
+        if n.definition == "external_connector" and connectors is not None:
+            keys = connector_keys(connectors)
+            if n.config is None:
+                notes.append(f"{n.label}: no config given, so CML's default ('NAT') is used")
+            elif n.config.strip() not in keys:
+                problems.append(
+                    f"{n.label}: external connector {n.config.strip()!r} does not exist (known: "
+                    f"{', '.join(sorted(keys))}; see cml_list_external_connectors)"
+                )
     if problems:
         raise BuildError("; ".join(problems))
 
@@ -86,7 +146,7 @@ def build_topology(
             if iface in used[node]:
                 raise BuildError(f"Link {link!r}: {node}:{iface} is used twice")
         else:
-            free = [x for x in names if x not in used[node]]
+            free = [x for x in auto_interfaces(names) if x not in used[node]]
             if not free:
                 raise BuildError(
                     f"Link {link!r}: {node} ({by_label[node].definition}) has no free interfaces left"
@@ -129,6 +189,8 @@ def build_topology(
             interfaces.append({"id": iid, "label": name, "type": "physical", "slot": slot})
             iface_ids[(n.label, name)] = iid
         x, y = _layout(idx, len(nodes))
+        x = n.x if n.x is not None else x
+        y = n.y if n.y is not None else y
         node: dict[str, Any] = {
             "id": f"n{idx}",
             "label": n.label,
@@ -138,8 +200,18 @@ def build_topology(
             "tags": n.tags,
             "interfaces": interfaces,
         }
+        configuration = []
         if n.config is not None:
-            node["configuration"] = [{"name": "Main", "content": n.config}]
+            # "Main" is CML's alias for the definition's main config file (ios_config.txt, day0-config...)
+            content = n.config.strip() if n.definition == "external_connector" else n.config
+            configuration.append({"name": "Main", "content": content})
+        configuration += [{"name": name, "content": text} for name, text in n.files.items()]
+        if configuration:
+            node["configuration"] = configuration
+        if n.credentials is not None:
+            node["pyats"] = {k: v for k, v in n.credentials.model_dump().items() if v is not None}
+        if n.parameters:
+            node["parameters"] = dict(n.parameters)
         if n.image:
             node["image_definition"] = n.image
         if n.ram:

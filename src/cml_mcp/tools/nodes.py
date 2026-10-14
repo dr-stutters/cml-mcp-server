@@ -2,12 +2,14 @@
 
 # No `from __future__ import annotations` in tool modules: FastMCP inspects signatures at runtime.
 
-from typing import Annotated, Any
+import re
+from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
 from stutters_mcp_core import (
+    InvalidRequest,
     ResponseFormat,
     ToolRegistrar,
     get_client,
@@ -18,6 +20,9 @@ from stutters_mcp_core import (
 from stutters_mcp_core.http import page_of
 
 from cml_mcp.client import CmlApp
+from cml_mcp.console import clean
+from cml_mcp.licence import licensed
+from cml_mcp.netops import address_commands, console_batch, parse_addresses
 from cml_mcp.tools.common import (
     LabRef,
     NodeRef,
@@ -143,17 +148,32 @@ def register(reg: ToolRegistrar) -> None:
         node: NodeRef,
         lines: Annotated[int, Field(ge=1, le=5000, description="How many of the most recent lines")] = 100,
         console: Annotated[int, Field(ge=0, le=64, description="Serial console number (0 = main)")] = 0,
+        grep: Annotated[
+            str | None,
+            Field(description="Only lines matching this regular expression (case-insensitive)"),
+        ] = None,
     ) -> ToolResult:
         """The recent output of a running node's serial console (boot messages, syslog lines printed
-        to the console, crash dumps). Use it to see why a node is stuck booting or what it logged
-        after a change. Only works while the node is started."""
+        to the console, crash dumps), with terminal escape codes removed. Use it to see why a node is
+        stuck booting or what it logged after a change; `grep` keeps only matching lines (e.g.
+        'error|fail|%LINK'). Only works while the node is started."""
+        pattern = None
+        if grep:
+            try:
+                pattern = re.compile(grep, re.IGNORECASE)
+            except re.error as e:
+                raise InvalidRequest(f"grep is not a valid regular expression: {e}") from e
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab)
         n = await app.resolve_node(info["id"], node)
         log = await app.api.get(
             f"/labs/{info['id']}/nodes/{n['id']}/consoles/{console}/log", {"lines": lines}
         )
-        text = strip_console_prefixes(str(log or ""))
+        text = clean(strip_console_prefixes(str(log or "")))
+        if pattern is not None:
+            text = "\n".join(line for line in text.splitlines() if pattern.search(line))
+            if not text:
+                return text_result(f"(no lines matching {grep!r} in the last {lines} lines)")
         return text_result(text or f"(console {console} of {n.get('label')} has no output yet)")
 
     @reg.read(title="List interfaces")
@@ -202,14 +222,42 @@ def register(reg: ToolRegistrar) -> None:
         ctx: Context,
         lab: LabRef,
         node: Annotated[str | None, Field(description="Only this node (label or id)")] = None,
+        source: Annotated[
+            Literal["snooped", "cli", "both"],
+            Field(
+                description="'snooped' (default): what CML learned from traffic on external-connector "
+                "segments; 'cli': ask each booted node over its console (show ip interface brief, FTD "
+                "show network, Linux ip addr); 'both'"
+            ),
+        ] = "snooped",
     ) -> ToolResult:
-        """IPv4/IPv6 addresses CML has learned for running nodes, per interface with its MAC. CML learns
-        them by snooping DHCP/ARP/ND on the lab's links, so statically addressed nodes that have not
-        sent traffic (or labs without an external connector) may show none; use the console or the
-        node's own CLI then."""
+        """IPv4/IPv6 addresses of a lab's running nodes, per interface. 'snooped' addresses are learned
+        by CML from DHCP/ARP/ND it sees on external-connector (bridge/NAT) segments, with MACs - fast,
+        but only for interfaces that sent traffic there. 'cli' logs in to every booted node and reads
+        its configured IPv4 addresses (all interfaces, including internal links and loopbacks) -
+        slower but complete. Use 'cli' or 'both' to find the management address to give another
+        system (FMC, Catalyst Center, ISE)."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab)
         lid = info["id"]
+        out: dict[str, Any] = {"lab": info.get("lab_title")}
+        if source in ("cli", "both"):
+            nodes = [await app.resolve_node(lid, node)] if node else await app.list_nodes(lid)
+            nodes = [n for n in nodes if licensed(n) and n.get("state") in ("BOOTED", "STARTED")]
+            batch = await console_batch(
+                app, lid, nodes, lambda _n, cred: address_commands(cred.os), timeout=30
+            )
+            cli_rows: list[dict[str, Any]] = []
+            for res in batch:
+                if res.get("error"):
+                    cli_rows.append({"node": res["node"], "error": res["error"]})
+                    continue
+                for o in res.get("outputs") or []:
+                    for row in parse_addresses(o["command"], o.get("output", "")):
+                        cli_rows.append({"node": res["node"], **row})
+            out["cli"] = cli_rows
+            if source == "cli":
+                return object_result(out, shape=False)
         if node:
             n = await app.resolve_node(lid, node)
             data = {n["id"]: await app.api.get(f"/labs/{lid}/nodes/{n['id']}/layer3_addresses")}
@@ -229,10 +277,10 @@ def register(reg: ToolRegistrar) -> None:
                     }
                 )
         learned = [r for r in rows if r["ipv4"] or r["ipv6"]]
-        out: dict[str, Any] = {"lab": info.get("lab_title"), "addresses": learned}
+        out["addresses"] = learned
         if not learned:
             out["note"] = (
                 f"No addresses learned yet on {len(rows)} interfaces. CML only learns addresses it sees "
-                "in DHCP/ARP/ND traffic; static addresses show up after the node sends traffic."
+                "in DHCP/ARP/ND traffic on external-connector segments; use source='cli' to ask the nodes."
             )
         return object_result(out, shape=False)
