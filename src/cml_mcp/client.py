@@ -6,6 +6,7 @@ import base64
 import json
 import re
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -178,8 +179,9 @@ class CmlApp:
             labs = [await self.api.get(f"/labs/{lab_id}") for lab_id in labs]
         return labs
 
-    async def resolve_lab(self, ref: str) -> dict[str, Any]:
-        """A lab by id or title (exact match first, then a unique case-insensitive substring)."""
+    async def resolve_lab(self, ref: str, *, exact: bool = False) -> dict[str, Any]:
+        """A lab by id or title: exact match first, then case-insensitive, then (unless `exact`, which
+        write tools use) a unique case-insensitive substring."""
         ref = ref.strip()
         if not ref:
             raise InvalidRequest("Give a lab id or title (see cml_list_labs).")
@@ -187,7 +189,7 @@ class CmlApp:
             lab: dict[str, Any] = await self.api.get(f"/labs/{ref}")
             return lab
         labs = await self.list_labs()
-        return pick_one(labs, ref, key="lab_title", kind="lab", list_tool="cml_list_labs")
+        return pick_one(labs, ref, key="lab_title", kind="lab", list_tool="cml_list_labs", fuzzy=not exact)
 
     # --- nodes / interfaces / links ------------------------------------------------------
 
@@ -198,16 +200,18 @@ class CmlApp:
         nodes: list[dict[str, Any]] = await self.api.get(f"/labs/{lab_id}/nodes", params)
         return nodes
 
-    async def resolve_node(self, lab_id: str, ref: str) -> dict[str, Any]:
-        """A node in the lab by id or label."""
+    async def resolve_node(self, lab_id: str, ref: str, *, exact: bool = False) -> dict[str, Any]:
+        """A node in the lab by id or label (substring matches only when not `exact`)."""
         ref = ref.strip()
+        if not ref:
+            raise InvalidRequest("Give a node label or id (see cml_list_nodes).")
         if is_uuid(ref):
             node: dict[str, Any] = await self.api.get(
                 f"/labs/{lab_id}/nodes/{ref}", {"operational": "true", "exclude_configurations": "true"}
             )
             return node
         nodes = await self.list_nodes(lab_id, operational=True)
-        return pick_one(nodes, ref, key="label", kind="node", list_tool="cml_list_nodes")
+        return pick_one(nodes, ref, key="label", kind="node", list_tool="cml_list_nodes", fuzzy=not exact)
 
     async def list_interfaces(self, lab_id: str, *, operational: bool = True) -> list[dict[str, Any]]:
         params = {"operational": "true"} if operational else None
@@ -228,7 +232,12 @@ class CmlApp:
         exact = [lk for lk in links if lk.get("label") == ref]
         if len(exact) == 1:
             return exact[0]
-        parts = re.split(r"\s*(?:<->|<>|--|\s)\s*", ref)
+        if "<->" in ref:
+            parts = [p.strip() for p in ref.split("<->")]
+        elif "<>" in ref:
+            parts = [p.strip() for p in ref.split("<>")]
+        else:
+            parts = ref.split()
         if len(parts) != 2 or not all(parts):
             raise NotFound(
                 f"No link {ref!r}. Give a link id, its label, or endpoints like 'r1<->r2' or "
@@ -239,10 +248,11 @@ class CmlApp:
 
         def matches(end: str, node_id: str, iface_id: str) -> bool:
             node_ref, _, iface_ref = end.partition(":")
-            node = nodes.get(node_id, {})
-            if node_ref not in (node.get("label"), node_id):
+            label = str(nodes.get(node_id, {}).get("label", "")).lower()
+            if node_ref.lower() not in (label, node_id):
                 return False
-            return not iface_ref or iface_ref in (ifaces.get(iface_id, {}).get("label"), iface_id)
+            iface_label = str(ifaces.get(iface_id, {}).get("label", "")).lower()
+            return not iface_ref or iface_ref.lower() in (iface_label, iface_id)
 
         a, b = parts
         found = [
@@ -262,13 +272,18 @@ class CmlApp:
         )
 
 
-def pick_one(items: list[dict[str, Any]], ref: str, *, key: str, kind: str, list_tool: str) -> dict[str, Any]:
-    """Resolve a name: exact id/name match, then case-insensitive exact, then unique substring."""
-    for test in (
+def pick_one(
+    items: list[dict[str, Any]], ref: str, *, key: str, kind: str, list_tool: str, fuzzy: bool = True
+) -> dict[str, Any]:
+    """Resolve a name: exact id/name match, then case-insensitive exact, then (if `fuzzy`) a unique
+    case-insensitive substring."""
+    tests: list[Callable[[dict[str, Any]], bool]] = [
         lambda it: it.get("id") == ref or it.get(key) == ref,
         lambda it: str(it.get(key, "")).lower() == ref.lower(),
-        lambda it: ref.lower() in str(it.get(key, "")).lower(),
-    ):
+    ]
+    if fuzzy:
+        tests.append(lambda it: ref.lower() in str(it.get(key, "")).lower())
+    for test in tests:
         hits = [it for it in items if test(it)]
         if len(hits) == 1:
             return hits[0]
