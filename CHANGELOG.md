@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 - 2026-10-14
+## 0.3.0 - 2026-10-15
 
 Phase 2: gap analysis against the CML 2.10 OpenAPI (docs/GAP-ANALYSIS.md) and hardening for the
 FMC / Catalyst Center / ISE builders, live-tested with FTDv 10.0, cat8000v, cat9000v-uadp, IOL and Alpine.
