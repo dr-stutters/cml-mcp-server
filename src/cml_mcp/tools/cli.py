@@ -75,7 +75,9 @@ def register(reg: ToolRegistrar) -> None:
         on one or more booted nodes through the CML console server and return the raw output per node
         and command. Works without any IP reachability to the devices; logs in with the credentials
         from the lab's pyATS testbed and turns off paging. Nodes run in parallel (4 at a time). For
-        configuration changes use cml_configure_node."""
+        configuration changes use cml_configure_node. On Linux nodes give ping a count
+        ('ping -c 3 x'), or it runs until the timeout. Secrets in output (passwords, community
+        strings) are masked."""
         problems = {c: p for c in commands if (p := read_only_problem(c))}
         if problems:
             raise InvalidRequest(
