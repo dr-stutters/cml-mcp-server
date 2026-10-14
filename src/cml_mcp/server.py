@@ -12,6 +12,7 @@ from cml_mcp.client import CmlApp
 from cml_mcp.config import Settings
 from cml_mcp.tools import (
     build_tool,
+    dangerous,
     definitions,
     lab_writes,
     labs,
@@ -83,6 +84,7 @@ def create_server(
             lab_writes.register,
             topology_writes.register,
             build_tool.register,
+            dangerous.register,
         ],
         status=CmlApp.status,
         spec_sources=spec_sources,

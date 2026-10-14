@@ -35,7 +35,7 @@ async def test_tiers_control_registration(lab_api: respx.MockRouter) -> None:
 
     ro, rw, rwd = await names(), await names(**RW), await names(**RWD)
     assert "cml_start_lab" not in ro and "cml_start_lab" in rw
-    assert "cml_delete_lab" not in rw and "cml_api_call" in rwd
+    assert "cml_delete_lab" not in rw and "cml_delete_lab" in rwd
     assert len(ro) >= 25
 
 
