@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 - 2026-10-15
+
+- Core pinned to stutters-mcp-core v0.1.1. It brings nested secret masking in the audit log and
+  stops masking flag-like values. Startup now survives configuration errors (`cml_status`
+  reports them).
+- Added `.dockerignore` (from the core template), so `.env`, tests and git data stay out of the
+  image build context.
+- The Dockerfile now matches the core template (the template copies `LICENSE` itself now).
+
 ## 0.2.0 - 2026-10-15
 
 - Device CLI through the CML console server (SSH to the controller, `open /lab/node/0`; new
