@@ -110,3 +110,33 @@ def raw(settings: Settings, method: str, path: str, **kw: Any) -> Any:
             await app.aclose()
 
     return asyncio.run(go())
+
+
+async def confirm_call(client: Any, name: str, args: dict[str, Any]) -> Any:
+    """Preview then apply a write tool through an MCP client; returns the 'result' of the apply."""
+    import json
+
+    def body(res: Any) -> Any:
+        return (
+            res.structured_content if res.structured_content is not None else json.loads(res.content[0].text)
+        )
+
+    preview = body(await client.call_tool(name, args))
+    assert preview["status"] == "preview", preview
+    applied = body(await client.call_tool(name, {**args, "confirm": preview["confirm"]}))
+    assert applied["status"] == "applied", applied
+    return applied.get("result")
+
+
+def find_lab(settings: Settings, title: str) -> str | None:
+    async def go() -> str | None:
+        app = CmlApp(settings)
+        try:
+            for lab in await app.list_labs():
+                if lab.get("lab_title") == title:
+                    return str(lab["id"])
+            return None
+        finally:
+            await app.aclose()
+
+    return asyncio.run(go())
