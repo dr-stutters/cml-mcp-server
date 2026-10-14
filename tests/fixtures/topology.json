@@ -1,0 +1,157 @@
+{
+ "annotations": [],
+ "smart_annotations": [],
+ "nodes": [
+  {
+   "boot_disk_size": null,
+   "configuration": [
+    {
+     "name": "ios_config.txt",
+     "content": "hostname r1\ninterface Loopback0\n ip address 1.1.1.1 255.255.255.255\ninterface Ethernet0/0\n ip address 10.0.12.1 255.255.255.0\n no shutdown\nend\n"
+    }
+   ],
+   "cpu_limit": null,
+   "cpus": null,
+   "data_volume": null,
+   "hide_links": false,
+   "id": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+   "image_definition": null,
+   "label": "r1",
+   "node_definition": "iol-xe",
+   "parameters": {},
+   "priority": null,
+   "pyats": {
+    "username": null,
+    "password": null,
+    "enable_password": null
+   },
+   "ram": null,
+   "tags": [],
+   "x": 0,
+   "y": 0,
+   "interfaces": [
+    {
+     "id": "b1880217-c39a-46a4-9a0c-ee6118cf4f7d",
+     "label": "Loopback0",
+     "mac_address": null,
+     "type": "loopback"
+    },
+    {
+     "id": "a5719a70-f658-4dd3-98c7-2f4c5355b6e7",
+     "label": "Ethernet0/0",
+     "mac_address": null,
+     "type": "physical",
+     "slot": 0
+    },
+    {
+     "id": "eab0a18c-1398-4aa6-a2f2-fc3f6ddfd9d9",
+     "label": "Ethernet0/1",
+     "mac_address": null,
+     "type": "physical",
+     "slot": 1
+    },
+    {
+     "id": "01c35bfd-a8a3-40d7-86af-a651d2615bbf",
+     "label": "Ethernet0/2",
+     "mac_address": null,
+     "type": "physical",
+     "slot": 2
+    },
+    {
+     "id": "85bc968c-e47b-496a-9cb3-781618372150",
+     "label": "Ethernet0/3",
+     "mac_address": null,
+     "type": "physical",
+     "slot": 3
+    }
+   ]
+  },
+  {
+   "boot_disk_size": null,
+   "configuration": [
+    {
+     "name": "ios_config.txt",
+     "content": "hostname r2\ninterface Ethernet0/0\n ip address 10.0.12.2 255.255.255.0\n no shutdown\nend\n"
+    }
+   ],
+   "cpu_limit": null,
+   "cpus": null,
+   "data_volume": null,
+   "hide_links": false,
+   "id": "567271f1-e97a-4103-8f89-825c115d7a7e",
+   "image_definition": null,
+   "label": "r2",
+   "node_definition": "iol-xe",
+   "parameters": {},
+   "priority": null,
+   "pyats": {
+    "username": null,
+    "password": null,
+    "enable_password": null
+   },
+   "ram": null,
+   "tags": [],
+   "x": 200,
+   "y": 0,
+   "interfaces": [
+    {
+     "id": "b4eb219d-c018-407e-97b7-2085758b3f61",
+     "label": "Loopback0",
+     "mac_address": null,
+     "type": "loopback"
+    },
+    {
+     "id": "105f0610-8257-4445-ab8e-fcea5332be63",
+     "label": "Ethernet0/0",
+     "mac_address": null,
+     "type": "physical",
+     "slot": 0
+    },
+    {
+     "id": "17bd6a6f-0f45-425a-b522-1f6305a9df7c",
+     "label": "Ethernet0/1",
+     "mac_address": null,
+     "type": "physical",
+     "slot": 1
+    },
+    {
+     "id": "bf55dbbe-0b4f-4f65-9823-a7fd07ea71bb",
+     "label": "Ethernet0/2",
+     "mac_address": null,
+     "type": "physical",
+     "slot": 2
+    },
+    {
+     "id": "f279dba1-a980-4af5-89da-6bbdb3bd7f63",
+     "label": "Ethernet0/3",
+     "mac_address": null,
+     "type": "physical",
+     "slot": 3
+    }
+   ]
+  }
+ ],
+ "links": [
+  {
+   "conditioning": {},
+   "id": "dbc9439c-9da2-4074-9199-556edbed1757",
+   "interface_a": "a5719a70-f658-4dd3-98c7-2f4c5355b6e7",
+   "interface_b": "105f0610-8257-4445-ab8e-fcea5332be63",
+   "label": "r1-Ethernet0/0<->r2-Ethernet0/0",
+   "node_a": "b75d18e7-f7b9-49af-bc61-babafb8fab02",
+   "node_b": "567271f1-e97a-4103-8f89-825c115d7a7e"
+  }
+ ],
+ "lab": {
+  "description": "probe lab for fixture capture",
+  "notes": "",
+  "owner": "00000000-0000-4000-a000-000000000000",
+  "title": "mcp-test-probe",
+  "node_staging": {
+   "enabled": false,
+   "start_remaining": true,
+   "abort_on_failure": false
+  },
+  "version": "0.3.1"
+ }
+}

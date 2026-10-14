@@ -1,0 +1,45 @@
+{
+ "links": {
+  "dbc9439c-9da2-4074-9199-556edbed1757": {
+   "readbytes": 4651,
+   "readpackets": 22,
+   "writebytes": 4822,
+   "writepackets": 25,
+   "drops": 0
+  }
+ },
+ "nodes": {
+  "b75d18e7-f7b9-49af-bc61-babafb8fab02": {
+   "cpu_usage": 1.08,
+   "ram_usage": 17.44,
+   "disk_usage": 348,
+   "block0_wr_bytes": 733184,
+   "block0_rd_bytes": 0,
+   "is_running": true,
+   "cpu_limit": 100,
+   "cpus": 1,
+   "ram": 1024,
+   "times": {
+    "QUEUED": 1,
+    "STARTED": 109,
+    "BOOTED": 84
+   }
+  },
+  "567271f1-e97a-4103-8f89-825c115d7a7e": {
+   "cpu_usage": 1.58,
+   "ram_usage": 17.41,
+   "disk_usage": 348,
+   "block0_wr_bytes": 733184,
+   "block0_rd_bytes": 0,
+   "is_running": true,
+   "cpu_limit": 100,
+   "cpus": 1,
+   "ram": 1024,
+   "times": {
+    "QUEUED": 4,
+    "STARTED": 106,
+    "BOOTED": 81
+   }
+  }
+ }
+}

@@ -1,9 +1,15 @@
 # cml-mcp-server
 
-FastMCP server for Cisco Modeling Labs (CML)
+MCP server for **Cisco Modeling Labs (CML 2.x)**, built on
+[stutters-mcp-core](https://github.com/dr-stutters/stutters-mcp-core).
 
-> Status: scaffolding (milestone M0). Not usable yet.
+> Status: in development (milestone M1: scaffold, login and `cml_status`).
 
-Built on [stutters-mcp-core](https://github.com/dr-stutters/stutters-mcp-core).
+```bash
+cp .env.example .env    # set CML_URL, CML_USERNAME, CML_PASSWORD
+uv sync
+uv run cml-mcp-server check     # connect and print cml_status
+uv run cml-mcp-server           # stdio MCP server
+```
 
 Not affiliated with or endorsed by Cisco Systems, Inc.

@@ -1,0 +1,33 @@
+{
+ "bandwidth": null,
+ "latency": null,
+ "delay_corr": null,
+ "limit": null,
+ "loss": null,
+ "loss_corr": null,
+ "gap": null,
+ "duplicate": null,
+ "duplicate_corr": null,
+ "jitter": null,
+ "reorder_prob": null,
+ "reorder_corr": null,
+ "corrupt_prob": null,
+ "corrupt_corr": null,
+ "enabled": false,
+ "operational": {
+  "bandwidth": null,
+  "latency": null,
+  "delay_corr": null,
+  "limit": null,
+  "loss": null,
+  "loss_corr": null,
+  "gap": null,
+  "duplicate": null,
+  "duplicate_corr": null,
+  "jitter": null,
+  "reorder_prob": null,
+  "reorder_corr": null,
+  "corrupt_prob": null,
+  "corrupt_corr": null
+ }
+}

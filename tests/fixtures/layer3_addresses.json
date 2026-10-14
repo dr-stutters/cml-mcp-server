@@ -1,0 +1,60 @@
+{
+ "b75d18e7-f7b9-49af-bc61-babafb8fab02": {
+  "name": "r1",
+  "interfaces": {
+   "aa:bb:cc:00:02:00": {
+    "id": "a5719a70-f658-4dd3-98c7-2f4c5355b6e7",
+    "label": "Ethernet0/0",
+    "ip4": [],
+    "ip6": []
+   },
+   "aa:bb:cc:00:02:10": {
+    "id": "eab0a18c-1398-4aa6-a2f2-fc3f6ddfd9d9",
+    "label": "Ethernet0/1",
+    "ip4": [],
+    "ip6": []
+   },
+   "aa:bb:cc:00:02:20": {
+    "id": "01c35bfd-a8a3-40d7-86af-a651d2615bbf",
+    "label": "Ethernet0/2",
+    "ip4": [],
+    "ip6": []
+   },
+   "aa:bb:cc:00:02:30": {
+    "id": "85bc968c-e47b-496a-9cb3-781618372150",
+    "label": "Ethernet0/3",
+    "ip4": [],
+    "ip6": []
+   }
+  }
+ },
+ "567271f1-e97a-4103-8f89-825c115d7a7e": {
+  "name": "r2",
+  "interfaces": {
+   "aa:bb:cc:00:03:00": {
+    "id": "105f0610-8257-4445-ab8e-fcea5332be63",
+    "label": "Ethernet0/0",
+    "ip4": [],
+    "ip6": []
+   },
+   "aa:bb:cc:00:03:10": {
+    "id": "17bd6a6f-0f45-425a-b522-1f6305a9df7c",
+    "label": "Ethernet0/1",
+    "ip4": [],
+    "ip6": []
+   },
+   "aa:bb:cc:00:03:20": {
+    "id": "bf55dbbe-0b4f-4f65-9823-a7fd07ea71bb",
+    "label": "Ethernet0/2",
+    "ip4": [],
+    "ip6": []
+   },
+   "aa:bb:cc:00:03:30": {
+    "id": "f279dba1-a980-4af5-89da-6bbdb3bd7f63",
+    "label": "Ethernet0/3",
+    "ip4": [],
+    "ip6": []
+   }
+  }
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "config": {
+  "maxpackets": 30,
+  "maxtime": 120,
+  "bpfilter": "",
+  "encap": "ethernet",
+  "link_capture_key": "dbc9439c-9da2-4074-9199-556edbed1757"
+ },
+ "starttime": "2026-10-14T12:16:42Z",
+ "packetscaptured": 17
+}

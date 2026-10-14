@@ -1,0 +1,35 @@
+{
+ "valid": true,
+ "computes": {
+  "bca30792-c8be-487a-ac26-8e0852c65404": {
+   "kvm_vmx_enabled": true,
+   "enough_cpus": true,
+   "lld_connected": true,
+   "lld_synced": true,
+   "libvirt": true,
+   "fabric": true,
+   "device_mux": true,
+   "refplat_images_available": true,
+   "docker_shim": true,
+   "valid": true,
+   "admission_state": "READY",
+   "is_controller": true,
+   "hostname": "cml-controller",
+   "cpu_overload": false,
+   "memory_overload": false,
+   "disk_overload": false
+  }
+ },
+ "is_licensed": null,
+ "is_enterprise": false,
+ "controller": {
+  "core_connected": true,
+  "nodes_loaded": true,
+  "images_loaded": true,
+  "airhandler": true,
+  "dispatcher": true,
+  "ipsnooper": true,
+  "pcapdemux": true,
+  "valid": true
+ }
+}
