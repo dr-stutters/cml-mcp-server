@@ -80,6 +80,11 @@ TESTBED = """devices:
       default:
         password: cisco
         username: cisco
+  r2:
+    credentials:
+      default:
+        password: cisco
+        username: cisco
   terminal_server:
     credentials:
       default:

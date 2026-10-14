@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import time
 from collections.abc import Callable
@@ -14,6 +15,7 @@ from stutters_mcp_core import InvalidRequest, NotFound, UpstreamError
 from stutters_mcp_core.http import ApiClient, LoginTokenAuth, NoPaging, RateLimiter, StaticHeaderAuth, Token
 
 from cml_mcp.config import Settings
+from cml_mcp.console import ConsoleServer
 
 API_BASE = "/api/v0"
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
@@ -106,6 +108,19 @@ class CmlApp:
         )
         self.pager = NoPaging()
         self._version: str | None = None
+        known_hosts: str | None = None
+        if settings.console_known_hosts:
+            known_hosts = os.path.expanduser(settings.console_known_hosts)
+        elif settings.verify_ssl or settings.ca_bundle is not None:
+            known_hosts = os.path.expanduser("~/.ssh/known_hosts")
+        self.console = ConsoleServer(
+            settings.url,
+            settings.username,
+            settings.password_value() or None,
+            port=settings.console_port,
+            timeout=settings.timeout,
+            known_hosts=known_hosts,
+        )
 
     # --- auth ----------------------------------------------------------------------------
 

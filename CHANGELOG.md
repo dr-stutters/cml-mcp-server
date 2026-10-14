@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 - 2026-10-15
+
+- Device CLI through the CML console server (SSH to the controller, `open /lab/node/0`; new
+  dependency `asyncssh`):
+  - `cml_run_commands` (read): show, ping and traceroute on several nodes in parallel. Commands
+    are allow-listed, and redirection and chaining are refused.
+  - `cml_configure_node` (write, preview-first): configuration lines with per-line rejection
+    reporting and an optional `write memory`.
+  - Handles RETURN prompts, the setup dialog, login, enable, `--More--` paging, and late syslog
+    output. Credentials come from the lab's pyATS testbed.
+- New settings: `CML_CONSOLE_PORT`, `CML_CONSOLE_KNOWN_HOSTS`.
+
 ## 0.1.0 - 2026-10-15
 
 First release, built on stutters-mcp-core 0.1.0 and tested against CML 2.10.0.

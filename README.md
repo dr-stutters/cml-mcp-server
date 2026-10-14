@@ -7,7 +7,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > Not affiliated with or endorsed by Cisco Systems, Inc. "Cisco" and "Cisco Modeling Labs" are
 > trademarks of Cisco Systems, Inc.
 
-- **46 tools** in three tiers: 25 read, 15 write, 6 dangerous. Write and dangerous tools are off by default.
+- **48 tools** in three tiers: 26 read, 16 write, 6 dangerous. Write and dangerous tools are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
 - **Preview-first writes.** A write call without `confirm` changes nothing. It returns a preview
@@ -73,6 +73,7 @@ or in `.mcp.json`:
 | `cml_get_pyats_testbed` | The pyATS testbed CML generates (passwords masked) |
 | `cml_list_nodes` / `cml_get_node` | Nodes with state, image and resources (optionally live CPU/RAM); one node with interfaces, peers and config |
 | `cml_get_node_console_log` | Recent serial console output |
+| `cml_run_commands` | Run show, ping and traceroute (or `ip addr` etc. on Linux nodes) on one or more booted nodes through the CML console server, in parallel. Only read-only commands are allowed |
 | `cml_list_interfaces` | Interfaces with MAC, state and peer; filter free or connected |
 | `cml_get_layer3_addresses` | IPs CML has snooped per interface |
 | `cml_list_links` / `cml_get_link` | Links as `node:interface` pairs; one link with conditioning and capture status |
@@ -94,6 +95,7 @@ or in `.mcp.json`:
 | `cml_set_node_config` | Replace a node's day-0 config; the preview shows a unified diff |
 | `cml_set_node_state` | Start or stop one node |
 | `cml_extract_node_configs` | Save running configs into the stored node configs |
+| `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`). Rejected lines are reported |
 | `cml_connect_nodes` | Link two nodes (first free interfaces, or the ones you name) |
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
@@ -106,6 +108,10 @@ or in `.mcp.json`:
 | `cml_wipe_lab` / `cml_wipe_node` | Erase node disks (`force=true` stops first) |
 | `cml_delete_lab` / `cml_delete_node` / `cml_delete_link` | Delete (`force=true` stops and wipes first where CML requires it) |
 | `cml_api_call` (non-GET) | Raw POST, PUT, PATCH or DELETE, preview-first |
+
+Device CLI uses the controller's console server: SSH to the controller with the CML credentials,
+then `open /<lab>/<node>/0`. This is the same path pyATS testbeds use. Device logins come from the
+lab's pyATS testbed (node pyATS credentials, or the definition defaults).
 
 CML only accepts config, RAM/CPU and new-interface changes while a node is **wiped**
 (`DEFINED_ON_CORE`). It only deletes wiped nodes and labs. The previews say so and point to the
@@ -123,6 +129,8 @@ tool that fixes it.
 | `CML_TIMEOUT` / `CML_RETRIES` | `30` / `2` | Per-request timeout (s) and retries for idempotent calls |
 | `CML_RATE_LIMIT` / `CML_MAX_CONCURRENCY` | none / `8` | Client-side throttling |
 | `CML_WAIT_TIMEOUT` | `600` | Default wait for start/stop/convergence (s) |
+| `CML_CONSOLE_PORT` | `22` | SSH port of the CML console server (used for device CLI) |
+| `CML_CONSOLE_KNOWN_HOSTS` | | known_hosts file for the console server's host key. When unset, the key is checked against `~/.ssh/known_hosts` if `CML_VERIFY_SSL=true`, and not checked otherwise |
 | `MCP_TRANSPORT` | `stdio` | `http` for a network server |
 | `MCP_HOST` / `MCP_PORT` / `MCP_PATH` | `0.0.0.0` / `8000` / `/mcp` | HTTP listener |
 | `MCP_AUTH_TOKENS` / `MCP_AUTH_TOKENS_FILE` | | `name:sha256:<hex>` entries; HTTP refuses to start without one |

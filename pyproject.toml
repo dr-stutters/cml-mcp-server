@@ -1,6 +1,6 @@
 [project]
 name = "cml-mcp-server"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server for Cisco Modeling Labs (CML 2.x), built on stutters-mcp-core"
 readme = "README.md"
 license = "MIT"
@@ -12,6 +12,7 @@ requires-python = ">=3.12,<3.15"
 dependencies = [
     "stutters-mcp-core",
     "pyyaml>=6.0.2",
+    "asyncssh>=2.21",
 ]
 
 [project.scripts]
