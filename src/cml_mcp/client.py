@@ -8,6 +8,7 @@ import os
 import re
 import time
 from collections.abc import Callable
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
@@ -19,6 +20,9 @@ from cml_mcp.console import ConsoleServer
 from cml_mcp.scenarios import FlapManager
 
 API_BASE = "/api/v0"
+# Labs resolved during the current tool call (ref -> lab), so the safety guard checks exactly the lab the tool
+# resolved and will act on, without a second lookup (a rename in between can't make them differ).
+RESOLVED_LABS: ContextVar[dict[str, dict[str, Any]] | None] = ContextVar("cml_resolved_labs", default=None)
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 DEFAULT_TOKEN_LIFETIME = 8 * 3600.0
 
@@ -146,6 +150,7 @@ class CmlApp:
         else:
             token = str(data["token"])
             self.user = {"username": data.get("username"), "id": data.get("id"), "admin": data.get("admin")}
+            self.console.admin = data.get("admin")
         claims = jwt_claims(token)
         return Token({"Authorization": f"Bearer {token}"}, Token.expiring_in(_lifetime(claims)))
 
@@ -168,12 +173,19 @@ class CmlApp:
             elif self.user.get("id"):
                 u = await self.api.get(f"/users/{self.user['id']}")
                 self.user = {"username": u.get("username"), "id": u.get("id"), "admin": u.get("admin")}
+                self.console.admin = u.get("admin")
         return dict(self.user)
 
     async def status(self) -> dict[str, Any]:
         info = await self.api.get("/system_information")
         self._version = str(info.get("version", "unknown"))
         out: dict[str, Any] = {"version": self._version, "ready": info.get("ready")}
+        try:  # TODO(core): status has core_version but not the server's own (CORE-REQUESTS.md)
+            from importlib.metadata import version as _pkg_version
+
+            out["server_version"] = _pkg_version("cml-mcp-server")
+        except Exception:  # noqa: BLE001 - source checkout without metadata
+            pass
         user = await self.current_user()
         out["user"] = user.get("username")
         out["admin"] = user.get("admin")
@@ -211,14 +223,22 @@ class CmlApp:
     async def resolve_lab(self, ref: str, *, exact: bool = False) -> dict[str, Any]:
         """A lab by id or title: exact match first, then case-insensitive, then (unless `exact`, which
         write tools use) a unique case-insensitive substring."""
+        raw = ref
         ref = ref.strip()
         if not ref:
             raise InvalidRequest("Give a lab id or title (see cml_list_labs).")
         if is_uuid(ref):
             lab: dict[str, Any] = await self.api.get(f"/labs/{ref}")
-            return lab
-        labs = await self.list_labs()
-        return pick_one(labs, ref, key="lab_title", kind="lab", list_tool="cml_list_labs", fuzzy=not exact)
+        else:
+            labs = await self.list_labs()
+            lab = pick_one(labs, ref, key="lab_title", kind="lab", list_tool="cml_list_labs", fuzzy=not exact)
+        if exact:  # write paths resolve exactly; remember it for the guard of this call
+            seen = RESOLVED_LABS.get()
+            if seen is None:
+                seen = {}
+                RESOLVED_LABS.set(seen)
+            seen[raw] = lab
+        return lab
 
     # --- nodes / interfaces / links ------------------------------------------------------
 

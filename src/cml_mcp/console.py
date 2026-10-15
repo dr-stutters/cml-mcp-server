@@ -603,6 +603,7 @@ class ConsoleServer:
         self._locks: dict[str, asyncio.Lock] = {}
         self._holders: dict[str, tuple[str, float]] = {}
         self._warned = False
+        self.admin: bool | None = None  # set by the login; admins already see every lab's consoles
 
     def lock(self, node_id: str) -> asyncio.Lock:
         """The node's console lock (one session per node per process)."""
@@ -685,7 +686,7 @@ class OpenConsole:
             session = ConsoleSession(self.proc, self.creds, s.timeout)
             await session.read_until(lambda t: "consoles>" in t, s.timeout)
             text = await self._open(session)
-            if "Escape character" not in text and "not found" in text.lower():
+            if "Escape character" not in text and "not found" in text.lower() and s.admin is not True:
                 # The console server lists only the account's own labs until 'all' is toggled; a
                 # non-admin account needs that for labs shared with it (verified on CML 2.10).
                 session.buffer = ""

@@ -285,3 +285,39 @@ async def test_wireless_capture_refuses_wired_nodes(lab_api: respx.MockRouter) -
     lab_api.get(f"/wireless/pcap/{NODES[0]['id']}").mock(return_value=httpx.Response(404, json={"code": 404}))
     preview = await preview_only("cml_capture_wireless", {"lab": LID, "node": "r1"}, **RW)
     assert preview["status"] == "blocked" and "wireless captures run at" in preview["blockers"][0]
+
+
+# --- L24 ---------------------------------------------------------------------------------------------
+
+
+async def test_guard_uses_the_lab_the_tool_resolved(lab_api: respx.MockRouter) -> None:
+    """The guard reuses the tool's own (exact) resolution: one /labs listing per write preview, not two."""
+    import traceback
+
+    import httpx
+
+    from .conftest import fixture
+
+    calls = {"n": 0}
+
+    def labs(request: httpx.Request) -> httpx.Response:
+        if any(f.filename.endswith("cml_mcp/safety.py") for f in traceback.extract_stack()):
+            calls["n"] += 1  # a listing made by the guard itself
+        return httpx.Response(200, json=fixture("labs.json"))
+
+    lab_api.get("/labs").mock(side_effect=labs)
+    preview = await preview_only("cml_stop_lab", {"lab": "mcp-test-probe"}, **RW, protected_labs="mcp-test-*")
+    assert preview["status"] == "blocked" and "CML_PROTECTED_LABS" in preview["blockers"][-1]
+    assert calls["n"] == 0
+
+
+def test_console_all_toggle_only_for_non_admins() -> None:
+    from cml_mcp.console import ConsoleServer
+
+    srv = ConsoleServer("https://cml.test", "u", "p")
+    assert srv.admin is None  # unknown until login: the retry is allowed
+
+
+async def test_status_reports_server_version(api: respx.MockRouter) -> None:
+    data = await call_tool(create_server(make_settings()), "cml_status")
+    assert data["cml"]["server_version"]

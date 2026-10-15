@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+- Safety guard (L24): checks exactly the lab the tool resolved (no second lookup; no rename window), the console
+  server's `all` toggle only for non-admin accounts, `cml_status` reports `server_version`.
+
 ### Added
 - Site replica (L16): `cml_plan_replica` (read) maps devices to CML node definitions (light: IOL; faithful: cat9000v,
   cat8000v, NX-OS 9000v, FTDv, FMCv, ...) within a node/RAM budget and only to installed images, keeps firewalls/routers/WLCs
