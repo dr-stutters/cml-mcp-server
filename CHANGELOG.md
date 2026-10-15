@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Recipe `wireless` (L13): Catalyst 9800-CL WLC (WLAN mcp-lab-dot1x, RADIUS to ISE) + CML's hostapd `wireless-ap` doing
+  WPA2-Enterprise with RADIUS straight to ISE + a `wireless-client` authenticating with PEAP-MSCHAPv2; verify contract
+  (11 checks, incl. the client passing data once authorized; the 9800 is checked over the network). CML's wireless-ap is not a CAPWAP AP, so it can't join
+  the 9800. Lab export `labs/mcp-cml-wireless.yaml`.
+- `cml_capture_wireless` (write): capture the simulated 802.11 medium at a wireless node and decode it. The pcap
+  decoder now reads 802.11 (radiotap or bare; CML 2.10 labels bare frames as radiotap): beacons/probes with SSID,
+  auth/assoc status, deauth/disassoc reasons, EAPOL over LLC/SNAP with EAPOL-Key 4-way/group handshake messages.
+  CML captures the frames a node transmits: capture at the AP for its side, at the client for the station side.
+
 ## 0.6.0 - 2026-10-15
 
 Production gate (L17, L19, L20, L21; L18 skipped) and the fabric recipe (L15 first slice). 65 -> 69 tools

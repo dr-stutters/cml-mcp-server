@@ -1,0 +1,203 @@
+# Wireless test bed (L13): a Catalyst 9800-CL WLC plus CML's simulated 802.11 medium - a hostapd access point doing
+# WPA2-Enterprise (802.1X) with RADIUS straight to ISE, and a wpa_supplicant client. CML's wireless-ap is a Linux
+# hostapd node, not a CAPWAP AP: it can't join the 9800, so the WLC is here for ISE/Catalyst Center WLC tests
+# (NAD, discovery, WLAN config) and the AP gives ISE real wireless 802.1X sessions (NAS-Port-Type Wireless-802.11).
+name: wireless
+summary: cat9800-CL WLC 198.18.128.195 + hostapd WPA2-Enterprise AP 198.18.128.196 (RADIUS to ISE) + wpa_supplicant PEAP client on SSID mcp-lab-dot1x
+address_plan:
+  wlc GigabitEthernet1: 198.18.128.195/18 (management + wireless management interface, gateway 198.18.128.1)
+  ap ens2: 198.18.128.196/18 (RADIUS source to ISE 198.18.134.35)
+  ap wlan0: 10.10.50.1/24 (SSID mcp-lab-dot1x, channel 6)
+  client wlan0: 10.10.50.10/24 static once associated
+credentials:
+  wlc_cli: netadmin / ${LAB_CLI_PASSWORD} (enable secret ${LAB_CLI_PASSWORD}), SNMP v2c ${LAB_SNMP_RO} / ${LAB_SNMP_RW}
+  radius_shared_secret: ${LAB_RADIUS_SECRET} (ISE network devices for 198.18.128.195 and 198.18.128.196)
+  wifi_user: mcp-test-cml-wifi / ${LAB_CLI_PASSWORD} (PEAP-MSCHAPv2; an ISE internal user; outer identity 'anonymous',
+    the client doesn't validate ISE's certificate - lab only)
+  ap_client_login: cisco / cisco
+ise_side: >-
+  Network devices: 198.18.128.196 (name mcp-test-cml-ap, RADIUS secret ${LAB_RADIUS_SECRET}) and optionally the WLC
+  198.18.128.195 (mcp-test-cml-wlc). Internal user mcp-test-cml-wifi with password ${LAB_CLI_PASSWORD}. ISE's
+  default policy then authenticates the client with PEAP (Default Network Access allows PEAP/MSCHAPv2).
+catalyst_center_discovery: WLC 198.18.128.195, CLI netadmin/${LAB_CLI_PASSWORD}/${LAB_CLI_PASSWORD}, SNMPv2c read ${LAB_SNMP_RO} write ${LAB_SNMP_RW}, NETCONF 830
+boot_minutes: >-
+  8-12 (cat9800 ~6-8 min; AP and client ~2 min). The 9800 reloads once during its first boot, and afterwards its
+  serial console stays silent (seen on every build) although the WLC is up (SSH, SNMP, HTTPS answer). The verify
+  contract therefore checks it over the network. For console tools on the wlc (cml_run_commands), stop and start
+  the wlc node once (cml_set_node_state, ~5 min); then 'show wlan summary' shows mcp-lab-dot1x UP and
+  'show aaa servers' the ISE server UP.
+verified: >-
+  2026-10-15 - client PEAP-MSCHAPv2 via ISE (session from NAS 198.18.128.196), EAPOL captured with
+  cml_capture_wireless, WLC WLAN UP and RADIUS UP (after a node restart); client re-authenticates after a node stop/start.
+verify:
+  booted: [wlc, ap, client]
+  nodes: [ap]
+  targets: [198.18.128.1, 198.18.134.35]
+  addresses: {ap: [198.18.128.196, 10.10.50.1]}
+  probes:
+    - name: client is authorized (802.1X PEAP via ISE) and passes data to the AP
+      node: client
+      command: ping -c 3 -W 2 10.10.50.1
+      expect: ' 0% packet loss'
+    - {name: wlc HTTPS (443) from the server, tcp: 198.18.128.195:443}
+    - {name: wlc SSH (22) from the server, tcp: 198.18.128.195:22}
+    - {name: wlc SNMP v2c from the server, snmp: {host: 198.18.128.195, community: "${LAB_SNMP_RO}"}}
+build:
+  title: mcp-cml-wireless
+  description: cat9800-CL WLC + hostapd WPA2-Enterprise AP (RADIUS to ISE) + client (cml-mcp-server recipe wireless)
+  nodes:
+    - {label: ext, definition: external_connector, config: System Bridge, x: 0, y: -160}
+    - {label: mgmt-sw, definition: unmanaged_switch, x: 0, y: -40}
+    - label: wlc
+      definition: cat9800
+      x: -200
+      y: 120
+      credentials: {username: netadmin, password: "${LAB_CLI_PASSWORD}", enable_password: "${LAB_CLI_PASSWORD}"}
+      config: |
+        platform console serial
+        hostname mcp-wlc
+        ip domain name mcp.lab
+        no ip domain lookup
+        username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+        enable secret ${LAB_CLI_PASSWORD}
+        aaa new-model
+        aaa authentication login default local
+        aaa authentication login CONSOLE local
+        aaa authorization exec default local
+        aaa authentication dot1x MCP-ISE group radius
+        aaa authorization network MCP-ISE group radius
+        aaa accounting identity MCP-ISE start-stop group radius
+        radius server ISE
+         address ipv4 198.18.134.35 auth-port 1812 acct-port 1813
+         key ${LAB_RADIUS_SECRET}
+        interface GigabitEthernet1
+         description management to the lab 198.18.128.0/18
+         no switchport
+         ip address 198.18.128.195 255.255.192.0
+         no shutdown
+        ip route 0.0.0.0 0.0.0.0 198.18.128.1
+        wireless management interface GigabitEthernet1
+        wlan mcp-lab-dot1x 1 mcp-lab-dot1x
+         security dot1x authentication-list MCP-ISE
+         no shutdown
+        crypto key generate rsa modulus 2048
+        ip ssh version 2
+        netconf-yang
+        snmp-server community ${LAB_SNMP_RO} RO
+        snmp-server community ${LAB_SNMP_RW} RW
+        line con 0
+         exec-timeout 0 0
+         logging synchronous
+         login authentication CONSOLE
+        line vty 0 15
+         transport input ssh
+        end
+    - label: ap
+      definition: wireless-ap
+      x: 200
+      y: 120
+      credentials: {username: cisco, password: cisco}
+      files:
+        user-data: |
+          #cloud-config
+          hostname: mcp-ap
+          manage_etc_hosts: true
+          system_info:
+            default_user:
+              name: cisco
+          password: cisco
+          chpasswd: {expire: false}
+          ssh_pwauth: true
+          write_files:
+            - path: /etc/mcp-hostapd.conf
+              permissions: '0600'
+              content: |
+                interface=wlan0
+                driver=nl80211
+                ssid=mcp-lab-dot1x
+                hw_mode=g
+                channel=6
+                auth_algs=1
+                ieee8021x=1
+                wpa=2
+                wpa_key_mgmt=WPA-EAP
+                rsn_pairwise=CCMP
+                own_ip_addr=198.18.128.196
+                nas_identifier=mcp-cml-ap
+                auth_server_addr=198.18.134.35
+                auth_server_port=1812
+                auth_server_shared_secret=${LAB_RADIUS_SECRET}
+                acct_server_addr=198.18.134.35
+                acct_server_port=1813
+                acct_server_shared_secret=${LAB_RADIUS_SECRET}
+                ctrl_interface=/var/run/hostapd
+            - path: /etc/systemd/system/mcp-hostapd.service
+              content: |
+                [Unit]
+                Description=mcp-lab-dot1x access point (cml-mcp-server wireless recipe)
+                After=network-online.target
+                [Service]
+                ExecStartPre=-/usr/sbin/ip addr add 10.10.50.1/24 dev wlan0
+                ExecStart=/usr/sbin/hostapd /etc/mcp-hostapd.conf
+                Restart=on-failure
+                [Install]
+                WantedBy=multi-user.target
+          runcmd:
+            - systemctl daemon-reload
+            - systemctl enable --now mcp-hostapd.service
+        network-config: |
+          #network-config
+          network:
+            version: 2
+            ethernets:
+              ens2:
+                addresses: [198.18.128.196/18]
+                routes: [{to: default, via: 198.18.128.1}]
+    - label: client
+      definition: wireless-client
+      x: 200
+      y: 300
+      credentials: {username: cisco, password: cisco}
+      files:
+        user-data: |
+          #cloud-config
+          hostname: mcp-wifi-client
+          manage_etc_hosts: true
+          system_info:
+            default_user:
+              name: cisco
+          password: cisco
+          chpasswd: {expire: false}
+          ssh_pwauth: true
+          write_files:
+            - path: /etc/mcp-wpa.conf
+              permissions: '0600'
+              content: |
+                ctrl_interface=/var/run/wpa_supplicant
+                network={
+                    ssid="mcp-lab-dot1x"
+                    key_mgmt=WPA-EAP
+                    eap=PEAP
+                    identity="mcp-test-cml-wifi"
+                    anonymous_identity="anonymous"
+                    password="${LAB_CLI_PASSWORD}"
+                    phase2="auth=MSCHAPV2"
+                }
+            - path: /etc/systemd/system/mcp-wpa.service
+              content: |
+                [Unit]
+                Description=PEAP client for mcp-lab-dot1x (cml-mcp-server wireless recipe)
+                After=network-online.target
+                [Service]
+                ExecStartPre=-/usr/sbin/ip addr add 10.10.50.10/24 dev wlan0
+                ExecStart=/usr/sbin/wpa_supplicant -i wlan0 -c /etc/mcp-wpa.conf
+                Restart=on-failure
+                [Install]
+                WantedBy=multi-user.target
+          runcmd:
+            - systemctl daemon-reload
+            - systemctl enable --now mcp-wpa.service
+  links:
+    - ext mgmt-sw
+    - wlc:GigabitEthernet1 mgmt-sw
+    - ap:ens2 mgmt-sw

@@ -23,6 +23,8 @@ PCAP_MAGIC = {
     b"\x4d\x3c\xb2\xa1": ("<", 1e-9),
 }
 LINKTYPE_ETHERNET = 1
+LINKTYPE_IEEE802_11 = 105
+LINKTYPE_RADIOTAP = 127
 MAX_PACKETS = 100_000
 
 
@@ -82,10 +84,15 @@ def read_pcap(data: bytes) -> list[Packet]:
         ts = sec + frac * scale
         first = ts if first is None else first
         pkt = Packet(no=len(packets) + 1, time=ts - first, length=orig)
-        if linktype == LINKTYPE_ETHERNET:
+        if linktype in (LINKTYPE_ETHERNET, LINKTYPE_IEEE802_11, LINKTYPE_RADIOTAP):
             try:
-                decode_ethernet(pkt, frame)
-            except (struct.error, IndexError, ValueError):
+                if linktype == LINKTYPE_ETHERNET:
+                    decode_ethernet(pkt, frame)
+                elif linktype == LINKTYPE_RADIOTAP:
+                    decode_80211(pkt, strip_radiotap(frame))
+                else:
+                    decode_80211(pkt, frame)
+            except Exception:  # noqa: BLE001 - one bad frame must never abort the whole capture
                 pkt.info = pkt.info or "malformed"
         else:
             pkt.protocol, pkt.info = f"LINKTYPE{linktype}", "not decoded"
@@ -128,6 +135,141 @@ def decode_ethernet(pkt: Packet, frame: bytes) -> None:
         decode_eapol(pkt, payload)
     else:
         pkt.protocol = ETHERTYPES.get(etype, f"0x{etype:04x}")
+
+
+# --- 802.11 (CML wireless captures: radiotap + 802.11) ------------------------------------------------
+
+MGMT_SUBTYPES = {
+    0: "assoc-request",
+    1: "assoc-response",
+    2: "reassoc-request",
+    3: "reassoc-response",
+    4: "probe-request",
+    5: "probe-response",
+    8: "beacon",
+    10: "disassociation",
+    11: "authentication",
+    12: "deauthentication",
+    13: "action",
+}
+CTRL_SUBTYPES = {8: "block-ack-request", 9: "block-ack", 11: "rts", 12: "cts", 13: "ack"}
+REASONS = {
+    1: "unspecified",
+    2: "previous auth no longer valid",
+    3: "station leaving",
+    4: "inactivity",
+    8: "station leaving BSS",
+    15: "4-way handshake timeout",
+    23: "802.1X authentication failed",
+}
+
+
+def strip_radiotap(frame: bytes) -> bytes:
+    """The 802.11 frame after a radiotap header. CML 2.10 labels its wireless captures radiotap (127) but
+    writes bare 802.11 frames: a first byte other than the radiotap version 0 means there is no header.
+    (A bare 802.11 frame starting with 0x00 is an association request, whose next byte is its flags.)"""
+    if len(frame) >= 10 and frame[0] == 0 and frame[1] == 0:
+        length = struct.unpack("<H", frame[2:4])[0]
+        present = struct.unpack("<I", frame[4:8])[0]
+        # radiotap: a plausible length, some present flags, and a valid 802.11 frame control after it
+        # (a bare association request also starts 00 00, followed by its duration, typically 314)
+        if 8 <= length <= len(frame) - 2 and present and frame[length] & 3 == 0 and length < 128:
+            return frame[length:]
+    return frame
+
+
+def _ssid(ies: bytes) -> str | None:
+    off = 0
+    while off + 2 <= len(ies):
+        eid, ln = ies[off], ies[off + 1]
+        if eid == 0:
+            raw = ies[off + 2 : off + 2 + min(ln, 32)]
+            if not raw.strip(b"\x00"):
+                return ""
+            return "".join(c if c.isprintable() else "?" for c in raw.decode(errors="replace"))
+        off += 2 + ln
+    return None
+
+
+def decode_80211(pkt: Packet, f: bytes) -> None:
+    """802.11 frame: management (SSID, auth/assoc, deauth reasons), control, and data (LLC/SNAP payload
+    decoded like Ethernet: EAPOL, IPv4, ARP); protected data is reported as such."""
+    if len(f) < 10:
+        pkt.protocol, pkt.info = "802.11", "malformed (short frame)"
+        return
+    fc0, fc1 = f[0], f[1]
+    ftype, subtype = (fc0 >> 2) & 3, fc0 >> 4
+    to_ds, from_ds, protected = bool(fc1 & 1), bool(fc1 & 2), bool(fc1 & 0x40)
+    order = bool(fc1 & 0x80)  # HT Control present on QoS data and management frames
+    pkt.dst = mac(f[4:10])
+    if ftype == 1:  # control frames carry 1-2 addresses
+        pkt.protocol, pkt.info = "802.11-CTRL", CTRL_SUBTYPES.get(subtype, f"subtype {subtype}")
+        if len(f) >= 16:
+            pkt.src = mac(f[10:16])
+        return
+    pkt.src = mac(f[10:16])
+    if ftype == 0:
+        name = MGMT_SUBTYPES.get(subtype, f"subtype {subtype}")
+        pkt.protocol, pkt.info = "802.11-MGMT", name
+        if protected:  # 802.11w: the body starts with a CCMP header
+            pkt.info = f"{name} (protected)"
+            return
+        body = f[24 + (4 if order else 0) :]
+        if subtype in (8, 5):  # beacon / probe response: 12 fixed bytes, then IEs
+            if (ssid := _ssid(body[12:])) is not None:
+                pkt.info, pkt.detail = f"{name} SSID {ssid or '<hidden>'}", {"ssid": ssid}
+        elif subtype == 4:
+            if (ssid := _ssid(body)) is not None:
+                pkt.info, pkt.detail = f"{name} SSID {ssid or '<any>'}", {"ssid": ssid}
+        elif subtype in (0, 2):  # (re)assoc request: capability + interval (+ current AP) then IEs
+            ssid = _ssid(body[4 if subtype == 0 else 10 :])
+            if ssid is not None:
+                pkt.info, pkt.detail = f"{name} SSID {ssid}", {"ssid": ssid}
+        elif subtype in (1, 3) and len(body) >= 4:
+            status = struct.unpack("<H", body[2:4])[0]
+            pkt.info, pkt.detail = f"{name} status {status}", {"status": status}
+        elif subtype == 11 and len(body) >= 6:
+            alg, seq, status = struct.unpack("<HHH", body[0:6])
+            method = {0: "open", 1: "shared-key", 3: "SAE"}.get(alg, f"alg {alg}")
+            pkt.info = f"{name} {method} seq {seq} status {status}"
+        elif subtype in (10, 12) and len(body) >= 2:
+            reason = struct.unpack("<H", body[0:2])[0]
+            pkt.info = f"{name} reason {reason} ({REASONS.get(reason, 'see 802.11 reason codes')})"
+            pkt.detail = {"reason": reason}
+        return
+    if ftype == 2:
+        qos = bool(subtype & 8)
+        hdr = 24 + (6 if to_ds and from_ds else 0) + (2 if qos else 0) + (4 if qos and order else 0)
+        # addresses by DS bits: report the real sender/receiver, not the BSSID
+        a1, a2, a3 = mac(f[4:10]), mac(f[10:16]), mac(f[16:22])
+        if to_ds and from_ds:
+            pkt.dst, pkt.src = a3, mac(f[24:30])
+        elif to_ds:
+            pkt.dst, pkt.src = a3, a2
+        elif from_ds:
+            pkt.dst, pkt.src = a1, a3
+        if subtype & 4:  # null / QoS null: no payload
+            pkt.protocol, pkt.info = "802.11-DATA", "null (power save)"
+            return
+        if protected:
+            pkt.protocol, pkt.info = "802.11-DATA", "protected (encrypted) data"
+            return
+        payload = f[hdr:]
+        if payload[:6] == b"\xaa\xaa\x03\x00\x00\x00":
+            etype = struct.unpack("!H", payload[6:8])[0]
+            inner = payload[8:]
+            if etype == 0x888E:
+                decode_eapol(pkt, inner)
+            elif etype == 0x0800:
+                decode_ipv4(pkt, inner)
+            elif etype == 0x0806:
+                decode_arp(pkt, inner)
+            else:
+                pkt.protocol = ETHERTYPES.get(etype, f"0x{etype:04x}")
+            return
+        pkt.protocol, pkt.info = "802.11-DATA", "data"
+        return
+    pkt.protocol, pkt.info = "802.11", f"type {ftype}"
 
 
 def decode_arp(pkt: Packet, p: bytes) -> None:
@@ -516,6 +658,26 @@ def decode_eapol(pkt: Packet, p: bytes) -> None:
         pkt.info += f" {eap.get('code', eap.get('error'))}" + (f" {eap['type']}" if "type" in eap else "")
         if "identity" in eap:
             pkt.info += f" identity={eap['identity']}"
+    elif typ == 3 and len(p) >= 7:
+        # EAPOL-Key: descriptor type, then key information (big endian); key data never decoded
+        info = struct.unpack("!H", p[5:7])[0]
+        pairwise, install, ack, mic, secure = (bool(info & b) for b in (0x08, 0x40, 0x80, 0x100, 0x200))
+        if info & 0x0800:
+            msg = "key request" + (" (MIC failure)" if info & 0x0400 else "")
+        elif not pairwise:
+            msg = "group key 1/2" if ack else "group key 2/2"
+        elif ack and not mic:
+            msg = "4-way 1/4"
+        elif ack and mic and install:
+            msg = "4-way 3/4"
+        elif mic and not ack and not secure:
+            msg = "4-way 2/4"
+        elif mic and not ack and secure:
+            msg = "4-way 4/4"
+        else:
+            msg = f"key info 0x{info:04x}"
+        pkt.info += f" {msg}"
+        pkt.detail["key"] = msg
 
 
 # --- filtering and summary ----------------------------------------------------------------------

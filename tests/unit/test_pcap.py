@@ -252,3 +252,105 @@ def test_tcp_filter_matches_named_tcp_apps() -> None:
     pkts = read_pcap(pcap(*frames()))
     assert [p.no for p in pkts if matches(p, protocol="tcp")] == [7]  # labelled sftunnel
     assert summarise(pkts, highlights=0).get("highlights") is None
+
+
+# --- 802.11 (wireless captures) -------------------------------------------------------------------
+
+
+def _pcap(linktype: int, frames: list[bytes], big_endian: bool = True) -> bytes:
+    import struct as st
+
+    e = ">" if big_endian else "<"
+    out = st.pack(e + "IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, linktype)
+    for i, f in enumerate(frames):
+        out += st.pack(e + "IIII", 1000 + i, 0, len(f), len(f)) + f
+    return out
+
+
+AP = bytes.fromhex("aa948d000000")
+STA = bytes.fromhex("aaeab5000000")
+BCAST = b"\xff" * 6
+
+
+def _beacon(ssid: bytes) -> bytes:
+    hdr = b"\x80\x00\x00\x00" + BCAST + AP + AP + b"\x00\x00"
+    fixed = b"\x00" * 8 + b"\x64\x00" + b"\x11\x04"
+    return hdr + fixed + bytes([0, len(ssid)]) + ssid + b"\x01\x01\x82"
+
+
+def _data(payload: bytes, protected: bool = False) -> bytes:
+    fc1 = 0x02 | (0x40 if protected else 0)  # from-DS
+    return bytes([0x08, fc1]) + b"\x00\x00" + STA + AP + AP + b"\x00\x00" + payload
+
+
+def test_80211_bare_frames_in_a_radiotap_capture() -> None:
+    from cml_mcp.pcap import read_pcap, summarise
+
+    eap_identity = b"\x02\x00\x00\x16" + b"\x02\x01\x00\x16\x01" + b"mcp-test-cml-wifi"
+    eapol_eap = b"\xaa\xaa\x03\x00\x00\x00\x88\x8e" + b"\x01\x00\x00\x16" + eap_identity[4:]
+    key_m1 = b"\xaa\xaa\x03\x00\x00\x00\x88\x8e" + b"\x02\x03\x00\x5f" + b"\x02" + b"\x00\x8a" + b"\x00" * 90
+    deauth = b"\xc0\x00\x00\x00" + STA + AP + AP + b"\x00\x00" + b"\x17\x00"
+    frames = [
+        _beacon(b"mcp-lab-dot1x"),
+        _data(eapol_eap),
+        _data(key_m1),
+        _data(b"x" * 20, protected=True),
+        deauth,
+    ]
+    pk = read_pcap(_pcap(127, frames))
+    assert pk[0].info == "beacon SSID mcp-lab-dot1x" and pk[0].src == "aa:94:8d:00:00:00"
+    assert pk[1].protocol == "EAPOL" and "identity=mcp-test-cml-wifi" in pk[1].info
+    assert pk[2].info.endswith("4-way 1/4")
+    assert pk[3].info == "protected (encrypted) data"
+    assert "reason 23 (802.1X authentication failed)" in pk[4].info
+    s = summarise(pk)
+    assert s["protocols"]["802.11-MGMT"] == 2 and s["eapol"]
+
+
+def test_radiotap_header_is_stripped() -> None:
+    from cml_mcp.pcap import read_pcap
+
+    radiotap = b"\x00\x00\x09\x00\x02\x00\x00\x00\x10"  # flags field present
+    pk = read_pcap(_pcap(127, [radiotap + _beacon(b"x")], big_endian=False))
+    assert pk[0].info == "beacon SSID x"
+
+
+def test_bare_assoc_request_is_not_mistaken_for_radiotap() -> None:
+    from cml_mcp.pcap import read_pcap
+
+    # assoc request: fc 00 00, duration 314 (3a 01), longer than 314 bytes
+    body = b"\x31\x04\x0a\x00" + bytes([0, 6]) + b"mcp-ab" + b"\xdd\x10" + b"x" * 400
+    frame = b"\x00\x00\x3a\x01" + AP + STA + AP + b"\x00\x00" + body
+    pk = read_pcap(_pcap(127, [frame]))
+    assert pk[0].info == "assoc-request SSID mcp-ab"
+
+
+def test_80211_decoder_survives_truncation_and_garbage() -> None:
+    import random
+
+    from cml_mcp.pcap import read_pcap
+
+    eapol = _data(b"\xaa\xaa\x03\x00\x00\x00\x88\x8e" + b"\x02\x03\x00\x5f\x02\x00\x8a" + b"\x00" * 90)
+    frames = [_beacon(b"mcp-lab"), eapol, _data(b"\xaa\xaa\x03\x00\x00\x00\x08\x00" + b"\x45" + b"\x00" * 30)]
+    rng = random.Random(7)
+    cases = [f[:n] for f in frames for n in range(len(f) + 1)]
+    cases += [bytes(rng.randrange(256) for _ in range(rng.randrange(1, 200))) for _ in range(300)]
+    for linktype in (105, 127):
+        pk = read_pcap(_pcap(linktype, cases))
+        assert len(pk) == len(cases)
+
+
+def test_data_frame_addresses_follow_ds_bits() -> None:
+    from cml_mcp.pcap import read_pcap
+
+    to_ds = (
+        bytes([0x08, 0x01])
+        + b"\x00\x00"
+        + AP
+        + STA
+        + BCAST
+        + b"\x00\x00"
+        + b"\xaa\xaa\x03\x00\x00\x00\x08\x06"
+    )
+    pk = read_pcap(_pcap(105, [to_ds]))
+    assert pk[0].src == "aa:ea:b5:00:00:00" and pk[0].dst == "ff:ff:ff:ff:ff:ff"

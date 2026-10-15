@@ -110,6 +110,7 @@ def create_server(
             links.register,
             link_scenarios.register,
             captures.register,
+            captures.register_wireless,
             annotations.register,
             definitions.register,
             images.register,
