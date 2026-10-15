@@ -275,3 +275,13 @@ def test_substitute_cannot_repoint_secret_references(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("LAB_X", "two\nlines")
     with pytest.raises(InvalidRequest, match="line break"):
         resolve_secrets("x ${LAB_X}", None)
+
+
+async def test_wireless_capture_refuses_wired_nodes(lab_api: respx.MockRouter) -> None:
+    import httpx
+
+    from .conftest import NODES
+
+    lab_api.get(f"/wireless/pcap/{NODES[0]['id']}").mock(return_value=httpx.Response(404, json={"code": 404}))
+    preview = await preview_only("cml_capture_wireless", {"lab": LID, "node": "r1"}, **RW)
+    assert preview["status"] == "blocked" and "wireless captures run at" in preview["blockers"][0]

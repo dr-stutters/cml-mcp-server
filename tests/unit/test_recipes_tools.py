@@ -195,3 +195,13 @@ def test_fabric_recipe_shape() -> None:
         a.startswith("198.18.128.19")
         for a in [r["verify"]["addresses"][n][0] for n in ("bcp", "edge1", "edge2")]
     )
+
+
+def test_wireless_recipe_shape() -> None:
+    from cml_mcp.recipes import placeholders, recipe_licensed_nodes
+
+    r = get_recipe("wireless")
+    assert r["build"]["title"] == "mcp-cml-wireless" and recipe_licensed_nodes(r) == 3
+    assert placeholders(r) == {"LAB_CLI_PASSWORD", "LAB_SNMP_RO", "LAB_SNMP_RW", "LAB_RADIUS_SECRET"}
+    defs = {n["label"]: n["definition"] for n in r["build"]["nodes"]}
+    assert defs["wlc"] == "cat9800" and defs["ap"] == "wireless-ap" and defs["client"] == "wireless-client"

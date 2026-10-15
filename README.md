@@ -7,7 +7,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > Not affiliated with or endorsed by Cisco Systems, Inc. "Cisco" and "Cisco Modeling Labs" are
 > trademarks of Cisco Systems, Inc.
 
-- **69 tools** in three tiers: 38 read, 23 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **70 tools** in three tiers: 38 read, 24 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -128,6 +128,7 @@ or in `.mcp.json`:
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
+| `cml_capture_wireless` | Capture the simulated 802.11 medium at a wireless-ap / wireless-client node and decode it (SSIDs, auth/assoc, deauth reasons, EAPOL 4-way handshake, EAP identity/method) |
 | `cml_build_recipe` | Build a packaged test-lab recipe (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses |
 | `cml_apply_link_scenario` | Apply a named scenario to a link: wan-good, wan-satellite, lossy-wifi, brownout, or `flap` (timed down/up cycles in the background, link always restored) |
 | `cml_clear_link_scenarios` | Stop flap jobs and remove conditioning from a lab's links |
