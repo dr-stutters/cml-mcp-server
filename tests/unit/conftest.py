@@ -84,6 +84,10 @@ def api() -> Iterator[respx.MockRouter]:
         )
         mock.get("/system_health").mock(return_value=httpx.Response(200, json=fixture("system_health.json")))
         mock.get("/licensing").mock(return_value=httpx.Response(200, json=fixture("licensing.json")))
+        mock.get("/system_stats").mock(return_value=httpx.Response(200, json=fixture("system_stats.json")))
+        mock.get("/simplified_node_definitions").mock(
+            return_value=httpx.Response(200, json=fixture("simplified_node_definitions.json"))
+        )
         mock.get("/labs").mock(return_value=httpx.Response(200, json=[]))
         mock.get("/users/00000000-0000-4000-a000-000000000000").mock(
             return_value=httpx.Response(

@@ -300,3 +300,74 @@ async def explain_licence_error(app: CmlApp, err: UpstreamError, what: str) -> E
         f"{running}. Stop one (cml_stop_lab) and retry; external connectors and unmanaged switches "
         "don't count."
     )
+
+
+# --- RAM (L28): with 70 licences, memory is the practical limit ------------------------------------
+
+
+def nodes_ram_mb(nodes: list[dict[str, Any]], defs: dict[str, dict[str, Any]]) -> int:
+    """RAM the nodes need when started: their own `ram`, or their definition's default."""
+    return sum(
+        int(
+            n.get("ram")
+            or (defs.get(str(n.get("node_definition") or n.get("definition"))) or {})
+            .get("sim", {})
+            .get("ram")
+            or 0
+        )
+        for n in nodes
+    )
+
+
+async def ram_headroom(app: CmlApp) -> dict[str, Any] | None:
+    """The controller's memory in MB: total, in use, allocated to running nodes, and free = total minus
+    the larger of used and allocated (booting nodes grow into their allocation). None if unreadable."""
+    try:
+        stats = await app.api.get("/system_stats")
+    except UpstreamError:
+        return None
+    mem = ((stats or {}).get("all") or {}).get("memory") or {}
+    total, used = mem.get("total"), mem.get("used")
+    if not isinstance(total, int | float) or not isinstance(used, int | float):
+        return None
+    allocated_kib = sum(
+        int(((c.get("stats") or {}).get("dominfo") or {}).get("allocated_memory") or 0)
+        for c in ((stats or {}).get("computes") or {}).values()
+    )
+    mib = 2**20
+    committed = max(float(used), allocated_kib * 1024.0)
+    return {
+        "total_mb": round(total / mib),
+        "used_mb": round(used / mib),
+        "allocated_to_running_nodes_mb": round(allocated_kib / 1024),
+        "free_mb": max(0, round((total - committed) / mib)),
+    }
+
+
+def ram_check(ram: dict[str, Any] | None, needed_mb: int) -> dict[str, Any] | None:
+    """{needed_mb, free_mb, total_mb, ok, warning?} for starting nodes that need `needed_mb`."""
+    if ram is None or needed_mb <= 0:
+        return None
+    ok = needed_mb <= ram["free_mb"]
+    out: dict[str, Any] = {
+        "needed_mb": needed_mb,
+        "free_mb": ram["free_mb"],
+        "total_mb": ram["total_mb"],
+        "ok": ok,
+    }
+    if not ok:
+        out["warning"] = (
+            f"Needs {needed_mb / 1024:.1f} GB RAM but only {ram['free_mb'] / 1024:.1f} GB of "
+            f"{ram['total_mb'] / 1024:.0f} GB are free ({ram['allocated_to_running_nodes_mb'] / 1024:.1f} GB "
+            "allocated to running nodes): nodes may fail to boot or the host may swap. Stop a lab first "
+            "(cml_get_resource_usage shows which labs hold the most RAM)."
+        )
+    return out
+
+
+def compact_usage(usage: dict[str, Any]) -> dict[str, Any]:
+    """The licence block for a preview: just the numbers when the start fits, everything otherwise."""
+    if usage.get("limit") is None or usage.get("free", 0) <= 0:
+        return usage
+    keep = ("running_licensed_nodes", "limit", "free", "limit_source", "scope", "pool_binds")
+    return {k: usage[k] for k in keep if k in usage}
