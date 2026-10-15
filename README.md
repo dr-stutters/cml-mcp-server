@@ -7,8 +7,8 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > Not affiliated with or endorsed by Cisco Systems, Inc. "Cisco" and "Cisco Modeling Labs" are
 > trademarks of Cisco Systems, Inc.
 
-- **52 tools** in three tiers: 30 read, 17 write, 5 dangerous (plus `cml_api_call` for non-GET). Write and
-  dangerous tools are off by default.
+- **59 tools** in three tiers: 35 read, 19 write, 5 dangerous (plus `cml_api_call` for non-GET), and the
+  prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
 - **Preview-first writes.** A write call without `confirm` changes nothing. It returns a preview
@@ -20,8 +20,12 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 - **Real platforms on the console.** IOS/IOS-XE, NX-OS (POAP skipped), FTD CLISH (no `enable`,
   `mode='exec'` for `configure manager add ...`), Linux. Questions (`[confirm]`, `[yes/no]`) are
   answered on request, runaway commands get Ctrl-C.
-- **Lab recipes.** `src/cml_mcp/recipes/*.yaml` are ready-made `cml_build_lab` specs (FTDv for FMC, IOS-XE routers
-  for Catalyst Center, a Cat9kv 802.1X switch for ISE); see [src/cml_mcp/recipes/README.md](src/cml_mcp/recipes/README.md).
+- **Lab recipes for the other suite servers.** FTDv for FMC, IOS-XE routers for Catalyst Center, a Cat9kv
+  802.1X switch for ISE: `cml_list_recipes`, `cml_build_recipe`, `cml_verify_recipe` (pass/fail contract)
+  and the prompt `cml_build_test_lab`; `cml_plan_licences` says which labs to stop. See
+  [src/cml_mcp/recipes/README.md](src/cml_mcp/recipes/README.md).
+- **Test oracles.** `cml_diff_node_config` shows what another server changed on a device;
+  `cml_capture` / `cml_summarize_capture` decode RADIUS, EAPOL, OSPF, DHCP and more from a link capture.
 - **Spec escape hatch.** `cml_search_spec` and `cml_get_definition` read the controller's own
   OpenAPI document. `cml_api_call` reaches any endpoint: GET in the read tier, other methods in the
   dangerous tier.
@@ -92,7 +96,11 @@ or in `.mcp.json`:
 | `cml_list_node_definitions` / `cml_get_node_definition` | What can be built: interfaces, resources, boot markers, default configs |
 | `cml_list_image_definitions` | Installed images |
 | `cml_wait_for_converged` | Wait until a lab or node has booted, with progress notifications; `console_pattern` waits for a later console message |
-| `cml_diff_lab` | Diff a lab with another lab or a saved YAML: nodes, interfaces, links, config diff |
+| `cml_diff_lab` | Diff a lab with another lab or a saved YAML: nodes, interfaces, links, config diff (`running_configs=true` for live configs) |
+| `cml_diff_node_config` | Running config (from the console) vs day-0, startup, another node or a baseline; secrets masked |
+| `cml_summarize_capture` | Decoded summary of a link capture: protocol mix, conversations, RADIUS/EAPOL/OSPF/DHCP/ARP/ICMP highlights |
+| `cml_plan_licences` | Licences in use per lab, what a lab or recipe needs, which labs to stop |
+| `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes (no secrets returned); pass/fail verify contract of a running recipe lab |
 | `cml_search_spec` / `cml_get_definition` / `cml_api_call` | OpenAPI search, operation and schema details, raw GET |
 
 **Write** (`MCP_ENABLE_WRITES=true`, all preview-first)
@@ -112,6 +120,11 @@ or in `.mcp.json`:
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
+| `cml_capture` | Capture for N seconds and return the decoded summary in one call |
+| `cml_build_recipe` | Build a packaged test-lab recipe (optionally start it) |
+
+**Prompt** (write tier): `cml_build_test_lab(recipe, reuse)` - recipe -> licence plan -> build/start ->
+converge -> verify -> hand-off block for the FMC / Catalyst Center / ISE server.
 
 **Dangerous** (`MCP_ENABLE_DANGEROUS=true` as well)
 
@@ -143,6 +156,7 @@ tool that fixes it.
 | `CML_WAIT_TIMEOUT` | `600` | Default wait for start/stop/convergence (s) |
 | `CML_NODE_LICENSE_LIMIT` | detected | Running licensed-node cap. Detected from `/licensing` when unset (base licence nodes + `CML_NODE_COUNT` expansion; 5 in evaluation mode). Start/build previews refuse to exceed it; `cml_plan_licences` says which labs to stop |
 | `CML_CONSOLE_PORT` | `22` | SSH port of the CML console server (used for device CLI) |
+| `CML_CONSOLE_LOCK_WAIT` | `60` | Seconds a console call waits for another call on the same node before reporting it busy |
 | `CML_CONSOLE_KNOWN_HOSTS` | | known_hosts file for the console server's host key. When unset, the key is checked against `~/.ssh/known_hosts` if `CML_VERIFY_SSL=true`, and not checked otherwise |
 | `MCP_TRANSPORT` | `stdio` | `http` for a network server |
 | `MCP_HOST` / `MCP_PORT` / `MCP_PATH` | `0.0.0.0` / `8000` / `/mcp` | HTTP listener |
