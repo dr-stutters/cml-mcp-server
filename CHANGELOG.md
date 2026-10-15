@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Recipe `fmc-local` (L14): a private FMCv 10.0.1 (198.18.128.192, evaluation licence) with an FTDv (.193) that registers to it
+  from day 0, for destructive fmc-server tests that must not touch the lab FMC. Verify: FTD `show managers` -> the local FMC,
+  FMC HTTPS and FTD SSH from the server. Lab export `labs/mcp-cml-fmc-local.yaml`. `ftd-ha`'s suggested outside addresses moved off .192/.193.
 - Recipe `wireless` (L13): Catalyst 9800-CL WLC (WLAN mcp-lab-dot1x, RADIUS to ISE) + CML's hostapd `wireless-ap` doing
   WPA2-Enterprise with RADIUS straight to ISE + a `wireless-client` authenticating with PEAP-MSCHAPv2; verify contract
   (11 checks, incl. the client passing data once authorized; the 9800 is checked over the network). CML's wireless-ap is not a CAPWAP AP, so it can't join

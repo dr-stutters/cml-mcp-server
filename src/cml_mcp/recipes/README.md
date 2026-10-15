@@ -21,6 +21,7 @@ All of them attach to the lab network (198.18.128.0/18, gateway 198.18.128.1) th
 |---|---|---:|---|---|
 | `ftd-fmc` | `mcp-cml-ftd` | 1 (ftdv, 8 GB, 4 vCPU) | ftd1 mgmt 198.18.128.151 | FMC 198.18.134.76, reg key `${LAB_FTD_REG_KEY}` |
 | `catc-routers` | `mcp-cml-catc` | 2 (cat8000v) | r1 198.18.128.152, r2 198.18.128.153 | Catalyst Center 198.18.128.11 discovery |
+| `fmc-local` | `mcp-cml-fmc-local` | 2 (fmcv 32 GB + ftdv 8 GB) | fmc 198.18.128.192, ftd .193 | A private, resettable FMCv 10.0.1 (evaluation licence) with an FTDv pre-registered to it: destructive fmc-server tests away from the lab FMC |
 | `ftd-ha` | `mcp-cml-ftd-ha` | 3 (2x ftdv + alpine) | ftd-a 198.18.128.190, ftd-b .191 (not registered) | FMC HA pair tests (`fmc_form_ha`); failover link Gi0/2, state link Gi0/3 |
 | `fabric` | `mcp-cml-fabric` | 5 (3x cat9000v-uadp 18 GB + iol-xe + alpine) | bcp 198.18.128.197, edge1 .198, edge2 .199 (management); Loopback0 RLOCs 10.255.255.11-.14 | Catalyst Center SD-Access (D13): pre-built underlay (OSPF, MTU 9100), fusion router with DHCP for the fabric pool 10.10.40.0/24, unassigned client port edge1 Gi1/0/3 |
 | `wireless` | `mcp-cml-wireless` | 3 (cat9800 6 GB + wireless-ap + wireless-client) | wlc 198.18.128.195, ap .196 | ISE wireless 802.1X: hostapd WPA2-Enterprise AP with RADIUS to ISE (NAD `mcp-test-cml-ap`) and a PEAP client (`mcp-test-cml-wifi`); a 9800-CL WLC (WLAN + RADIUS) for ISE/CatC WLC tests. CML's wireless-ap is hostapd, not CAPWAP: it can't join the 9800 |

@@ -1,0 +1,93 @@
+# A private Secure Firewall Management Center (FMCv 10.0.1) with one FTDv registered to it (day 0), on the
+# lab network. A resettable FMC for destructive fmc-server tests (HA break, failed deploys, version skew) that
+# leaves the lab FMC (198.18.134.76) alone. FMCv: 32 GB RAM, 4 vCPU, first boot 25-45 min; evaluation licence.
+name: fmc-local
+summary: FMCv 10.0.1 at 198.18.128.192 (private, evaluation licence) + FTDv 10.0 (management .193) pre-registered to it with reg key ${LAB_FTD_REG_KEY}
+address_plan:
+  fmc eth0: 198.18.128.192/18 (management + API https://198.18.128.192, gateway 198.18.128.1, DNS 198.18.133.1)
+  ftd Management0/0: 198.18.128.193/18 (manager 198.18.128.192)
+  ftd GigabitEthernet0/0 / 0/1: unaddressed (outside to the lab network via ext-outside, inside to inside-sw)
+credentials:
+  fmc: admin / ${LAB_FTD_ADMIN_PASSWORD} (web UI and REST API; FMC forces no change for a strong day-0 password)
+  ftd_cli: admin / ${LAB_FTD_ADMIN_PASSWORD}
+  fmc_registration: host 198.18.128.192, registration key ${LAB_FTD_REG_KEY}, no NAT id
+fmc_side: >-
+  Point an fmc-mcp-server instance at https://198.18.128.192 (admin / ${LAB_FTD_ADMIN_PASSWORD}, FMC_VERIFY_SSL=false). Turn on
+  the evaluation licence (fmc_register_eval_license or Smart Licenses > Evaluation mode), then fmc_register_device with
+  host 198.18.128.193 and the reg key (the FTD already shows 'show managers' -> 198.18.128.192 Pending).
+boot_minutes: 30-45 (FMCv first boot; the API answers several minutes after the console's 'login:'); FTDv 15-25 in parallel
+verify:
+  booted: [fmc, ftd]
+  nodes: [ftd]
+  targets: [198.18.128.192, 198.18.128.1]
+  vrf: management
+  addresses: {ftd: [198.18.128.193]}
+  probes:
+    - name: ftd manager is the local FMC 198.18.128.192
+      node: ftd
+      command: show managers
+      expect: '198\.18\.128\.192'
+    - {name: fmc HTTPS (443) from the server, tcp: 198.18.128.192:443}
+    - {name: ftd management SSH (22) from the server, tcp: 198.18.128.193:22}
+build:
+  title: mcp-cml-fmc-local
+  description: Private FMCv + FTDv for destructive FMC tests (cml-mcp-server recipe fmc-local)
+  nodes:
+    - {label: ext-mgmt, definition: external_connector, config: System Bridge, x: 0, y: -160}
+    - {label: mgmt-sw, definition: unmanaged_switch, x: 0, y: -40}
+    - {label: ext-outside, definition: external_connector, config: System Bridge, x: 400, y: 120}
+    - {label: inside-sw, definition: unmanaged_switch, x: 200, y: 320}
+    - label: fmc
+      definition: fmcv
+      x: -200
+      y: 120
+      credentials: {username: admin, password: "${LAB_FTD_ADMIN_PASSWORD}"}
+      config: |
+        {
+            "EULA": "accept",
+            "Hostname": "mcp-fmc-local",
+            "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+            "DNS1": "198.18.133.1",
+            "DNS2": "",
+            "IPv4Mode": "manual",
+            "IPv4Addr": "198.18.128.192",
+            "IPv4Mask": "255.255.192.0",
+            "IPv4Gw": "198.18.128.1",
+            "IPv6Mode": "disabled",
+            "IPv6Addr": "",
+            "IPv6Mask": "",
+            "IPv6Gw": ""
+        }
+    - label: ftd
+      definition: ftdv
+      x: 200
+      y: 120
+      credentials: {username: admin, password: "${LAB_FTD_ADMIN_PASSWORD}"}
+      config: |
+        {
+          "EULA": "accept",
+          "Hostname": "mcp-ftd-local",
+          "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+          "FirewallMode": "routed",
+          "DNS1": "198.18.133.1",
+          "DNS2": "",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "198.18.128.193",
+          "IPv4Mask": "255.255.192.0",
+          "IPv4Gw": "198.18.128.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "198.18.128.192",
+          "FmcRegKey": "${LAB_FTD_REG_KEY}",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+        }
+  links:
+    - ext-mgmt mgmt-sw
+    - fmc:eth0 mgmt-sw
+    - ftd:Management0/0 mgmt-sw
+    - ftd:GigabitEthernet0/0 ext-outside
+    - ftd:GigabitEthernet0/1 inside-sw

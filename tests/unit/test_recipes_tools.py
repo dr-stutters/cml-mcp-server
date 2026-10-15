@@ -205,3 +205,13 @@ def test_wireless_recipe_shape() -> None:
     assert placeholders(r) == {"LAB_CLI_PASSWORD", "LAB_SNMP_RO", "LAB_SNMP_RW", "LAB_RADIUS_SECRET"}
     defs = {n["label"]: n["definition"] for n in r["build"]["nodes"]}
     assert defs["wlc"] == "cat9800" and defs["ap"] == "wireless-ap" and defs["client"] == "wireless-client"
+
+
+def test_fmc_local_recipe_shape() -> None:
+    from cml_mcp.recipes import placeholders, recipe_licensed_nodes
+
+    r = get_recipe("fmc-local")
+    assert r["build"]["title"] == "mcp-cml-fmc-local" and recipe_licensed_nodes(r) == 2
+    assert placeholders(r) == {"LAB_FTD_ADMIN_PASSWORD", "LAB_FTD_REG_KEY"}
+    ftd = next(n for n in r["build"]["nodes"] if n["label"] == "ftd")
+    assert '"FmcIp": "198.18.128.192"' in ftd["config"]
