@@ -49,7 +49,7 @@ async def use_running_configs(app: CmlApp, lab: dict[str, Any], topology: dict[s
 
 
 def register(reg: ToolRegistrar) -> None:
-    @reg.read(title="Wait for convergence")
+    @reg.read(title="Wait for convergence", task=True)
     async def cml_wait_for_converged(
         ctx: Context,
         lab: LabRef,

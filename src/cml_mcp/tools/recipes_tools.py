@@ -205,7 +205,7 @@ def register(reg: ToolRegistrar) -> None:
             )
         return list_result(page_of(rows, limit=limit, offset=offset), fmt=response_format)
 
-    @reg.write(title="Build a lab recipe")
+    @reg.write(title="Build a lab recipe", task=True)
     async def cml_build_recipe(
         ctx: Context,
         recipe: RecipeName,

@@ -99,7 +99,7 @@ def register(reg: ToolRegistrar) -> None:
         Changes nothing: stop the listed labs with cml_stop_lab."""
         return shaped(await plan_for(get_client(ctx), target))
 
-    @reg.read(title="Verify a lab recipe", idempotent=False)
+    @reg.read(title="Verify a lab recipe", idempotent=False, task=True)
     async def cml_verify_recipe(
         ctx: Context,
         recipe: Annotated[

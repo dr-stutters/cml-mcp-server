@@ -150,7 +150,7 @@ def register(reg: ToolRegistrar) -> None:
             apply=apply,
         )
 
-    @reg.write(title="Start lab", idempotent=True)
+    @reg.write(title="Start lab", idempotent=True, task=True)
     async def cml_start_lab(
         ctx: Context,
         lab: LabRef,

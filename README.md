@@ -183,6 +183,7 @@ tool that fixes it.
 | `MCP_HOST` / `MCP_PORT` / `MCP_PATH` | `0.0.0.0` / `8000` / `/mcp` | HTTP listener |
 | `MCP_AUTH_TOKENS` / `MCP_AUTH_TOKENS_FILE` | | `name:sha256:<hex>` entries; HTTP refuses to start without one |
 | `MCP_ENABLE_WRITES` / `MCP_ENABLE_DANGEROUS` | `false` | Register the write and dangerous tiers |
+| `MCP_TASKS` / `MCP_TASKS_URL` | `false` / `memory://` | Run the long tools (image upload, builds/starts with wait, convergence waits, recipe verify, captures) as MCP background tasks for clients that support them; others still call them synchronously |
 | `MCP_CONFIRM_TTL` | `600` | Confirm-token lifetime (s) |
 | `MCP_CACHE_DIR` | `~/.cache/cml-mcp-server` | OpenAPI index cache (`""` disables it) |
 | `MCP_MAX_RESPONSE_CHARS` | `40000` | Response size budget |
