@@ -1,0 +1,496 @@
+annotations: []
+smart_annotations: []
+nodes:
+- boot_disk_size: null
+  configuration:
+  - name: default
+    content: System Bridge
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n0
+  image_definition: null
+  label: ext-mgmt
+  node_definition: external_connector
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags: []
+  x: -300
+  y: 0
+  interfaces:
+  - id: i0
+    label: port
+    mac_address: null
+    type: physical
+    slot: 0
+- boot_disk_size: null
+  configuration:
+  - name: default
+    content: System Bridge
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n1
+  image_definition: null
+  label: ext-outside
+  node_definition: external_connector
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags: []
+  x: 300
+  y: 0
+  interfaces:
+  - id: i0
+    label: port
+    mac_address: null
+    type: physical
+    slot: 0
+- boot_disk_size: null
+  configuration: []
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n2
+  image_definition: null
+  label: mgmt-sw
+  node_definition: unmanaged_switch
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags: []
+  x: -300
+  y: 160
+  interfaces:
+  - id: i0
+    label: port0
+    mac_address: null
+    type: physical
+    slot: 0
+  - id: i1
+    label: port1
+    mac_address: null
+    type: physical
+    slot: 1
+  - id: i2
+    label: port2
+    mac_address: null
+    type: physical
+    slot: 2
+  - id: i3
+    label: port3
+    mac_address: null
+    type: physical
+    slot: 3
+  - id: i4
+    label: port4
+    mac_address: null
+    type: physical
+    slot: 4
+  - id: i5
+    label: port5
+    mac_address: null
+    type: physical
+    slot: 5
+  - id: i6
+    label: port6
+    mac_address: null
+    type: physical
+    slot: 6
+  - id: i7
+    label: port7
+    mac_address: null
+    type: physical
+    slot: 7
+- boot_disk_size: null
+  configuration: []
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n3
+  image_definition: null
+  label: outside-sw
+  node_definition: unmanaged_switch
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags: []
+  x: 300
+  y: 160
+  interfaces:
+  - id: i0
+    label: port0
+    mac_address: null
+    type: physical
+    slot: 0
+  - id: i1
+    label: port1
+    mac_address: null
+    type: physical
+    slot: 1
+  - id: i2
+    label: port2
+    mac_address: null
+    type: physical
+    slot: 2
+  - id: i3
+    label: port3
+    mac_address: null
+    type: physical
+    slot: 3
+  - id: i4
+    label: port4
+    mac_address: null
+    type: physical
+    slot: 4
+  - id: i5
+    label: port5
+    mac_address: null
+    type: physical
+    slot: 5
+  - id: i6
+    label: port6
+    mac_address: null
+    type: physical
+    slot: 6
+  - id: i7
+    label: port7
+    mac_address: null
+    type: physical
+    slot: 7
+- boot_disk_size: null
+  configuration:
+  - name: day0-config
+    content: |-
+      {
+       "EULA": "accept",
+       "Hostname": "mcp-ftd2",
+       "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+       "FirewallMode": "routed",
+       "DNS1": "198.18.133.1",
+       "DNS2": "",
+       "DNS3": "",
+       "IPv4Mode": "manual",
+       "IPv4Addr": "198.18.128.161",
+       "IPv4Mask": "255.255.192.0",
+       "IPv4Gw": "198.18.128.1",
+       "IPv6Mode": "disabled",
+       "IPv6Addr": "",
+       "IPv6Mask": "",
+       "IPv6Gw": "",
+       "FmcIp": "198.18.134.76",
+       "FmcRegKey": "${LAB_FTD_REG_KEY}",
+       "FmcNatId": "",
+       "ManageLocally": "No"
+      }
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n4
+  image_definition: null
+  label: ftd2
+  node_definition: ftdv
+  parameters: {}
+  priority: null
+  pyats:
+    username: admin
+    password: ${LAB_FTD_ADMIN_PASSWORD}
+    enable_password: null
+  ram: null
+  tags: []
+  x: -120
+  y: 320
+  interfaces:
+  - id: i0
+    label: Management0/0
+    mac_address: 52:54:00:23:41:85
+    type: physical
+    slot: 0
+  - id: i1
+    label: donotuse1
+    mac_address: 52:54:00:32:59:f8
+    type: physical
+    slot: 1
+  - id: i2
+    label: GigabitEthernet0/0
+    mac_address: 52:54:00:4d:6e:0c
+    type: physical
+    slot: 2
+  - id: i3
+    label: GigabitEthernet0/1
+    mac_address: 52:54:00:2d:ce:7b
+    type: physical
+    slot: 3
+  - id: i4
+    label: GigabitEthernet0/2
+    mac_address: 52:54:00:40:39:e2
+    type: physical
+    slot: 4
+- boot_disk_size: null
+  configuration:
+  - name: day0-config
+    content: |-
+      {
+       "EULA": "accept",
+       "Hostname": "mcp-ftd3",
+       "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+       "FirewallMode": "routed",
+       "DNS1": "198.18.133.1",
+       "DNS2": "",
+       "DNS3": "",
+       "IPv4Mode": "manual",
+       "IPv4Addr": "198.18.128.162",
+       "IPv4Mask": "255.255.192.0",
+       "IPv4Gw": "198.18.128.1",
+       "IPv6Mode": "disabled",
+       "IPv6Addr": "",
+       "IPv6Mask": "",
+       "IPv6Gw": "",
+       "FmcIp": "198.18.134.76",
+       "FmcRegKey": "${LAB_FTD_REG_KEY}",
+       "FmcNatId": "",
+       "ManageLocally": "No"
+      }
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n5
+  image_definition: null
+  label: ftd3
+  node_definition: ftdv
+  parameters: {}
+  priority: null
+  pyats:
+    username: admin
+    password: ${LAB_FTD_ADMIN_PASSWORD}
+    enable_password: null
+  ram: null
+  tags: []
+  x: 120
+  y: 320
+  interfaces:
+  - id: i0
+    label: Management0/0
+    mac_address: 52:54:00:84:3c:34
+    type: physical
+    slot: 0
+  - id: i1
+    label: donotuse1
+    mac_address: 52:54:00:9a:53:57
+    type: physical
+    slot: 1
+  - id: i2
+    label: GigabitEthernet0/0
+    mac_address: 52:54:00:1a:77:88
+    type: physical
+    slot: 2
+  - id: i3
+    label: GigabitEthernet0/1
+    mac_address: 52:54:00:93:31:66
+    type: physical
+    slot: 3
+  - id: i4
+    label: GigabitEthernet0/2
+    mac_address: 52:54:00:0b:22:e1
+    type: physical
+    slot: 4
+- boot_disk_size: null
+  configuration: []
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n6
+  image_definition: null
+  label: inside-sw
+  node_definition: unmanaged_switch
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags: []
+  x: 0
+  y: 480
+  interfaces:
+  - id: i0
+    label: port0
+    mac_address: null
+    type: physical
+    slot: 0
+  - id: i1
+    label: port1
+    mac_address: null
+    type: physical
+    slot: 1
+  - id: i2
+    label: port2
+    mac_address: null
+    type: physical
+    slot: 2
+  - id: i3
+    label: port3
+    mac_address: null
+    type: physical
+    slot: 3
+  - id: i4
+    label: port4
+    mac_address: null
+    type: physical
+    slot: 4
+  - id: i5
+    label: port5
+    mac_address: null
+    type: physical
+    slot: 5
+  - id: i6
+    label: port6
+    mac_address: null
+    type: physical
+    slot: 6
+  - id: i7
+    label: port7
+    mac_address: null
+    type: physical
+    slot: 7
+- boot_disk_size: null
+  configuration:
+  - name: node.cfg
+    content: |-
+      # this is a shell script which will be sourced at boot
+      hostname inside-host2
+      USERNAME=cisco
+      PASSWORD=${LAB_DEFAULT_PASSWORD}
+      ip link set eth0 up
+      ip addr add 10.99.2.10/24 dev eth0
+      ip route add default via 10.99.2.1
+      echo "nameserver 198.18.133.1" > /etc/resolv.conf
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n7
+  image_definition: null
+  label: inside-host2
+  node_definition: alpine
+  parameters: {}
+  priority: null
+  pyats:
+    username: cisco
+    password: ${LAB_DEFAULT_PASSWORD}
+    enable_password: null
+  ram: null
+  tags: []
+  x: 0
+  y: 640
+  interfaces:
+  - id: i0
+    label: eth0
+    mac_address: 52:54:00:0e:be:76
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: n0
+  n2: n2
+  i1: i0
+  i2: i0
+  conditioning: {}
+  label: ext-mgmt-port<->mgmt-sw-port0
+- id: l1
+  n1: n1
+  n2: n3
+  i1: i0
+  i2: i0
+  conditioning: {}
+  label: ext-outside-port<->outside-sw-port0
+- id: l2
+  n1: n4
+  n2: n2
+  i1: i0
+  i2: i1
+  conditioning: {}
+  label: ftd2-Management0/0<->mgmt-sw-port1
+- id: l3
+  n1: n5
+  n2: n2
+  i1: i0
+  i2: i2
+  conditioning: {}
+  label: ftd3-Management0/0<->mgmt-sw-port2
+- id: l4
+  n1: n4
+  n2: n3
+  i1: i2
+  i2: i1
+  conditioning: {}
+  label: ftd2-GigabitEthernet0/0<->outside-sw-port1
+- id: l5
+  n1: n5
+  n2: n3
+  i1: i2
+  i2: i2
+  conditioning: {}
+  label: ftd3-GigabitEthernet0/0<->outside-sw-port2
+- id: l6
+  n1: n4
+  n2: n6
+  i1: i3
+  i2: i0
+  conditioning: {}
+  label: ftd2-GigabitEthernet0/1<->inside-sw-port0
+- id: l7
+  n1: n5
+  n2: n6
+  i1: i3
+  i2: i1
+  conditioning: {}
+  label: ftd3-GigabitEthernet0/1<->inside-sw-port1
+- id: l8
+  n1: n4
+  n2: n5
+  i1: i4
+  i2: i4
+  conditioning: {}
+  label: ftd2-GigabitEthernet0/2<->ftd3-GigabitEthernet0/2
+- id: l9
+  n1: n7
+  n2: n6
+  i1: i0
+  i2: i2
+  conditioning: {}
+  label: inside-host2-eth0<->inside-sw-port2
+lab:
+  description: 'fmc-mcp-server F8/F10/F11: FTDv HA pair (mcp-ftd2 .161, mcp-ftd3 .162; outside .163/.164), inside 10.99.2.0/24'
+  notes: ''
+  title: mcp-fmc-ha
+  node_staging:
+    enabled: false
+    start_remaining: true
+    abort_on_failure: false
+  version: 0.3.1

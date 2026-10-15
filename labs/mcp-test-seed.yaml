@@ -1,0 +1,423 @@
+annotations:
+- border_color: '#00000000'
+  border_style: ''
+  color: '#202020'
+  rotation: 0
+  text_bold: true
+  text_content: |-
+    mcp-test-seed: OSPF area 0 between r1 and r2
+    h1/h2 Alpine hosts
+  text_font: monospace
+  text_italic: false
+  text_size: 10
+  text_unit: pt
+  thickness: 1
+  type: text
+  x1: -100.0
+  y1: -132.0
+  z_index: 42
+- border_color: '#00000000'
+  border_style: ''
+  color: '#202020'
+  rotation: 0
+  text_bold: false
+  text_content: |-
+    Lo0 1.1.1.1/32
+    E0/0 10.0.12.1/24
+    E0/1 10.0.10.1/24
+  text_font: monospace
+  text_italic: false
+  text_size: 9
+  text_unit: pt
+  thickness: 1
+  type: text
+  x1: -60.0
+  y1: 40.0
+  z_index: 42
+- border_color: '#00000000'
+  border_style: ''
+  color: '#202020'
+  rotation: 0
+  text_bold: false
+  text_content: |-
+    Lo0 2.2.2.2/32
+    E0/0 10.0.12.2/24
+    E0/1 10.0.20.1/24
+  text_font: monospace
+  text_italic: false
+  text_size: 9
+  text_unit: pt
+  thickness: 1
+  type: text
+  x1: 140.0
+  y1: 40.0
+  z_index: 42
+- border_color: '#00000000'
+  border_style: ''
+  color: '#202020'
+  rotation: 0
+  text_bold: false
+  text_content: eth0 10.0.10.10/24
+  text_font: monospace
+  text_italic: false
+  text_size: 9
+  text_unit: pt
+  thickness: 1
+  type: text
+  x1: -60.0
+  y1: 200.0
+  z_index: 42
+- border_color: '#00000000'
+  border_style: ''
+  color: '#202020'
+  rotation: 0
+  text_bold: false
+  text_content: eth0 10.0.20.10/24
+  text_font: monospace
+  text_italic: false
+  text_size: 9
+  text_unit: pt
+  thickness: 1
+  type: text
+  x1: 140.0
+  y1: 200.0
+  z_index: 42
+smart_annotations:
+- tag: access
+  is_on: true
+  padding: 35
+  label: access
+  tag_offset_x: 0
+  tag_offset_y: 0
+  tag_size: 14
+  group_distance: 400
+  thickness: 1
+  border_style: ''
+  fill_color: '#A4C8E180'
+  border_color: '#00000080'
+  z_index: 1
+- tag: core
+  is_on: true
+  padding: 35
+  label: core
+  tag_offset_x: 0
+  tag_offset_y: 0
+  tag_size: 14
+  group_distance: 400
+  thickness: 1
+  border_style: ''
+  fill_color: '#A4C8E180'
+  border_color: '#00000080'
+  z_index: 1
+- tag: host
+  is_on: true
+  padding: 35
+  label: host
+  tag_offset_x: 0
+  tag_offset_y: 0
+  tag_size: 14
+  group_distance: 400
+  thickness: 1
+  border_style: ''
+  fill_color: '#A4C8E180'
+  border_color: '#00000080'
+  z_index: 1
+nodes:
+- boot_disk_size: null
+  configuration:
+  - name: ios_config.txt
+    content: |-
+      hostname r1
+      username cisco privilege 15 secret ${LAB_DEFAULT_PASSWORD}
+      enable secret ${LAB_DEFAULT_PASSWORD}
+      interface Loopback0
+       ip address 1.1.1.1 255.255.255.255
+      interface Ethernet0/0
+       ip address 10.0.12.1 255.255.255.0
+       ip ospf 1 area 0
+       no shutdown
+      interface Ethernet0/1
+       ip address 10.0.10.1 255.255.255.0
+       ip ospf 1 area 0
+       no shutdown
+      router ospf 1
+       router-id 1.1.1.1
+       network 0.0.0.0 255.255.255.255 area 0
+      line con 0
+       exec-timeout 0 0
+       logging synchronous
+      end
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n0
+  image_definition: null
+  label: r1
+  node_definition: iol-xe
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags:
+  - core
+  x: 0
+  y: 0
+  interfaces:
+  - id: i0
+    label: Loopback0
+    mac_address: null
+    type: loopback
+  - id: i1
+    label: Ethernet0/0
+    mac_address: aa:bb:cc:00:19:00
+    type: physical
+    slot: 0
+  - id: i2
+    label: Ethernet0/1
+    mac_address: aa:bb:cc:00:19:10
+    type: physical
+    slot: 1
+  - id: i3
+    label: Ethernet0/2
+    mac_address: aa:bb:cc:00:19:20
+    type: physical
+    slot: 2
+  - id: i4
+    label: Ethernet0/3
+    mac_address: aa:bb:cc:00:19:30
+    type: physical
+    slot: 3
+- boot_disk_size: null
+  configuration:
+  - name: ios_config.txt
+    content: |-
+      hostname r2
+      username cisco privilege 15 secret ${LAB_DEFAULT_PASSWORD}
+      enable secret ${LAB_DEFAULT_PASSWORD}
+      interface Loopback0
+       ip address 2.2.2.2 255.255.255.255
+      interface Ethernet0/0
+       ip address 10.0.12.2 255.255.255.0
+       ip ospf 1 area 0
+       no shutdown
+      interface Ethernet0/1
+       ip address 10.0.20.1 255.255.255.0
+       ip ospf 1 area 0
+       no shutdown
+      router ospf 1
+       router-id 2.2.2.2
+       network 0.0.0.0 255.255.255.255 area 0
+      line con 0
+       exec-timeout 0 0
+       logging synchronous
+      end
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n1
+  image_definition: null
+  label: r2
+  node_definition: iol-xe
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags:
+  - core
+  x: 200
+  y: 0
+  interfaces:
+  - id: i0
+    label: Loopback0
+    mac_address: null
+    type: loopback
+  - id: i1
+    label: Ethernet0/0
+    mac_address: aa:bb:cc:00:1a:00
+    type: physical
+    slot: 0
+  - id: i2
+    label: Ethernet0/1
+    mac_address: aa:bb:cc:00:1a:10
+    type: physical
+    slot: 1
+  - id: i3
+    label: Ethernet0/2
+    mac_address: aa:bb:cc:00:1a:20
+    type: physical
+    slot: 2
+  - id: i4
+    label: Ethernet0/3
+    mac_address: aa:bb:cc:00:1a:30
+    type: physical
+    slot: 3
+- boot_disk_size: null
+  configuration:
+  - name: ios_config.txt
+    content: |-
+      hostname sw1
+      username cisco privilege 15 secret ${LAB_DEFAULT_PASSWORD}
+      enable secret ${LAB_DEFAULT_PASSWORD}
+      end
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n2
+  image_definition: null
+  label: sw1
+  node_definition: ioll2-xe
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags:
+  - access
+  x: 400
+  y: 0
+  interfaces:
+  - id: i0
+    label: Loopback0
+    mac_address: null
+    type: loopback
+  - id: i1
+    label: Ethernet0/0
+    mac_address: aa:bb:cc:00:1b:00
+    type: physical
+    slot: 0
+  - id: i2
+    label: Ethernet0/1
+    mac_address: aa:bb:cc:00:1b:10
+    type: physical
+    slot: 1
+  - id: i3
+    label: Ethernet0/2
+    mac_address: aa:bb:cc:00:1b:20
+    type: physical
+    slot: 2
+  - id: i4
+    label: Ethernet0/3
+    mac_address: aa:bb:cc:00:1b:30
+    type: physical
+    slot: 3
+- boot_disk_size: null
+  configuration:
+  - name: node.cfg
+    content: |-
+      # this is a shell script which will be sourced at boot
+      hostname h1
+      USERNAME=cisco
+      PASSWORD=${LAB_DEFAULT_PASSWORD}
+      ip link set eth0 up
+      ip address add 10.0.10.10/24 dev eth0
+      ip route add default via 10.0.10.1
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n3
+  image_definition: null
+  label: h1
+  node_definition: alpine
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags:
+  - host
+  x: 0
+  y: 160
+  interfaces:
+  - id: i0
+    label: eth0
+    mac_address: 52:54:00:f7:05:c5
+    type: physical
+    slot: 0
+- boot_disk_size: null
+  configuration:
+  - name: node.cfg
+    content: |-
+      # this is a shell script which will be sourced at boot
+      hostname h2
+      USERNAME=cisco
+      PASSWORD=${LAB_DEFAULT_PASSWORD}
+      ip link set eth0 up
+      ip address add 10.0.20.10/24 dev eth0
+      ip route add default via 10.0.20.1
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n4
+  image_definition: null
+  label: h2
+  node_definition: alpine
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags:
+  - host
+  x: 200
+  y: 160
+  interfaces:
+  - id: i0
+    label: eth0
+    mac_address: 52:54:00:cc:74:85
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: n0
+  n2: n1
+  i1: i1
+  i2: i1
+  conditioning: {}
+  label: r1-Ethernet0/0<->r2-Ethernet0/0
+- id: l1
+  n1: n0
+  n2: n2
+  i1: i2
+  i2: i1
+  conditioning: {}
+  label: r1-Ethernet0/1<->sw1-Ethernet0/0
+- id: l2
+  n1: n2
+  n2: n3
+  i1: i2
+  i2: i0
+  conditioning: {}
+  label: sw1-Ethernet0/1<->h1-eth0
+- id: l3
+  n1: n1
+  n2: n4
+  i1: i2
+  i2: i0
+  conditioning: {}
+  label: r2-Ethernet0/1<->h2-eth0
+lab:
+  description: Reusable test topology (seed_lab.py)
+  notes: ''
+  title: mcp-test-seed
+  node_staging:
+    enabled: false
+    start_remaining: true
+    abort_on_failure: false
+  version: 0.3.1
