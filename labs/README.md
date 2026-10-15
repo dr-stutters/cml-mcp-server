@@ -37,6 +37,7 @@ CML .190-.199.
 | - | `mcp-test-seed` | CML (`scripts/seed_lab.py`) | IOL OSPF pair + L2 switch + 2 Alpine hosts, internal only | r1, r2, sw1, h1, h2 (5) | internal 10.0.x | <1 min |
 | - | `mcp-catc-onboard` | CatC (D3/D6) | fresh cat9000v for the onboarding prompt test (the test discovers and deletes it) | sw2 cat9000v-uadp (1) | sw2 198.18.128.170 | ~8 min |
 | - | `mcp-catc-pnp` | CatC (D11) | blank cat8000v booting into PnP; Alpine `dhcp` serves option 43 -> CatC for pnp1's MAC only (the DHCP server is set up at runtime, not in day-0) | pnp1 cat8000v, dhcp alpine (2) | dhcp 198.18.128.171 | ~6 min |
+| - | `mcp-cml-ospf` | CML (operator pass, v0.9.0) | IOL OSPF triangle r1-r3 + r4 behind r3 (loopbacks 10.255.0.x), internal only; used for the "prove it converges", diff and link-scenario tasks | r1-r4 iol-xe (4) | internal 10.0.x | <1 min |
 | - | `mcp-cml-probe` | CML (P1) | obsolete reachability probe; kept for the record, don't import | probe alpine (1) | - | - |
 
 "-" = import only, start when a test needs it. Exported 2026-10-15 ~12:00 UTC from CML 2.10.0.

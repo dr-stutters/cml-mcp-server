@@ -300,6 +300,10 @@
       "tier": "write",
       "title": "Stop lab"
     },
+    "cml_stop_labs": {
+      "tier": "write",
+      "title": "Stop several labs"
+    },
     "cml_summarize_capture": {
       "tier": "read",
       "title": "Summarize packet capture"
@@ -329,5 +333,5 @@
       "title": "Wipe node"
     }
   },
-  "version": "0.6.0"
+  "version": "0.9.0"
 }
