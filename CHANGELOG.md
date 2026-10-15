@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Core pinned to stutters-mcp-core v0.2.0 (prompts, events, receivers; no behaviour change on its own).
+
 ## 0.3.0 - 2026-10-15
 
 Phase 2: gap analysis against the CML 2.10 OpenAPI (docs/GAP-ANALYSIS.md) and hardening for the
