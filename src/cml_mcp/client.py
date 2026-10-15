@@ -16,6 +16,7 @@ from stutters_mcp_core.http import ApiClient, LoginTokenAuth, NoPaging, RateLimi
 
 from cml_mcp.config import Settings
 from cml_mcp.console import ConsoleServer
+from cml_mcp.scenarios import FlapManager
 
 API_BASE = "/api/v0"
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
@@ -115,6 +116,7 @@ class CmlApp:
             known_hosts = os.path.expanduser("~/.ssh/known_hosts")
         # (monotonic time, running-node limit, how it was derived): see licence.node_limit
         self.node_limit_cache: tuple[float, int | None, str] | None = None
+        self.flaps = FlapManager()
         self.console = ConsoleServer(
             settings.url,
             settings.username,
@@ -147,6 +149,7 @@ class CmlApp:
         return Token({"Authorization": f"Bearer {token}"}, Token.expiring_in(_lifetime(claims)))
 
     async def aclose(self) -> None:
+        await self.flaps.shutdown()  # every flapping link is brought back up first
         await self.api.aclose()
 
     # --- system --------------------------------------------------------------------------

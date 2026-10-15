@@ -19,6 +19,7 @@ from cml_mcp.tools import (
     definitions,
     lab_writes,
     labs,
+    link_scenarios,
     links,
     network,
     nodes,
@@ -46,7 +47,10 @@ Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the C
 cml_configure_node (write tier; mode='exec' for FTD 'configure manager add ...').
 What changed on a device: cml_diff_node_config (running config vs day-0, startup, another node, a baseline).
 Outside networks: cml_list_external_connectors, then an external_connector node in cml_build_lab.
-Proving connectivity: cml_check_reachability; addresses: cml_get_layer3_addresses(source='cli').
+Degraded networks: cml_apply_link_scenario (wan-good, wan-satellite, lossy-wifi, brownout, flap) and
+cml_clear_link_scenarios; cml_get_link_scenarios shows values, expected ping deltas and flap jobs.
+Proving connectivity: cml_check_reachability (success % and average RTT);
+addresses: cml_get_layer3_addresses(source='cli').
 Slow images (FTDv 15-30 min, cat9000v ~10): build/start with wait=false, then cml_wait_for_converged.
 Running nodes are capped by the licence; external connectors and unmanaged switches don't count.
 cml_plan_licences(target) says which labs to stop before starting a lab or recipe.
@@ -99,6 +103,7 @@ def create_server(
             labs.register,
             nodes.register,
             links.register,
+            link_scenarios.register,
             captures.register,
             definitions.register,
             smart.register,

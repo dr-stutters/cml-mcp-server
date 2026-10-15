@@ -174,17 +174,30 @@ def ping_command(
     return f"ping{vrf_part} {target} repeat {count} timeout 2", None
 
 
+# IOS 'round-trip min/avg/max = 1/2/3 ms', Linux 'rtt min/avg/max/mdev = 0.1/0.2/...', NX-OS
+# 'round-trip min/avg/max = 1.2/1.5/2.0 ms': the second number is the average.
+RTT = re.compile(r"(?:round-trip|rtt) min/avg/max(?:/mdev)? = [\d.]+/([\d.]+)/")
+
+
 def ping_result(output: str) -> dict[str, Any]:
     """{success_percent, ok} (ok = at least one reply: the first echo is often lost to ARP) from
     IOS ('Success rate is 100 percent (5/5)') or Linux/NX-OS
     ('3 packets transmitted, 3 received, 0% packet loss') ping output."""
+    rtt = RTT.search(output)
+    extra: dict[str, Any] = {"rtt_avg_ms": float(rtt.group(1))} if rtt else {}
     m = re.search(r"Success rate is (\d+) percent \((\d+)/(\d+)\)", output)
     if m:
         pct = int(m.group(1))
-        return {"success_percent": pct, "received": int(m.group(2)), "sent": int(m.group(3)), "ok": pct > 0}
+        return {
+            "success_percent": pct,
+            "received": int(m.group(2)),
+            "sent": int(m.group(3)),
+            "ok": pct > 0,
+            **extra,
+        }
     m2 = re.search(r"(\d+) packets transmitted, (\d+) (?:packets )?received", output)
     if m2:
         sent, got = int(m2.group(1)), int(m2.group(2))
         pct = round(100 * got / sent) if sent else 0
-        return {"success_percent": pct, "received": got, "sent": sent, "ok": got > 0}
+        return {"success_percent": pct, "received": got, "sent": sent, "ok": got > 0, **extra}
     return {"ok": False, "unparsed": output.strip()[-300:]}
