@@ -1,0 +1,67 @@
+# Recipe verification against the real CML controller (roadmap L12).
+#
+# Runs scripts/recipes.py ci on a SELF-HOSTED runner that can reach the lab (CML 198.18.128.10 and the
+# appliances). GitHub-hosted runners cannot. It is DISABLED until the repository variable
+# RECIPE_CI_ENABLED is set to 'true' and a runner with the labels [self-hosted, cml-lab] is online;
+# see docs/ci-runner.md for the install and security steps.
+#
+# Manual only for now; to run nightly, uncomment the schedule below.
+name: recipes-verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipes:
+        description: "Space-separated recipe names (empty = all)"
+        required: false
+        default: ""
+      build_missing:
+        description: "Build recipes whose lab doesn't exist yet (slow; FTDv 15-30 min)"
+        type: boolean
+        default: false
+  # schedule:
+  #   - cron: "30 15 * * *"   # 15:30 UTC = 01:30 AEST
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recipes-verify   # one run at a time: runs start and stop shared labs
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # main only: a dispatch on another branch could run edited scripts with the lab secrets
+    if: vars.RECIPE_CI_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, cml-lab]
+    timeout-minutes: 240
+    environment: cml-lab   # holds the CML_* secrets; can require a reviewer (see docs/ci-runner.md)
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.10.9"
+          python-version: "3.12"
+      - name: Install (private core via a per-step token, never written to the runner's git config)
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.CORE_READ_TOKEN }}@github.com/.insteadOf
+          GIT_CONFIG_VALUE_0: https://github.com/
+        run: uv sync --locked
+      - name: Verify recipes
+        env:
+          CML_URL: ${{ secrets.CML_URL }}
+          CML_USERNAME: ${{ secrets.CML_USERNAME }}
+          CML_PASSWORD: ${{ secrets.CML_PASSWORD }}
+          CML_VERIFY_SSL: "false"
+          RECIPES: ${{ inputs.recipes }}
+          BUILD_MISSING: ${{ inputs.build_missing && '--build-missing' || '' }}
+        run: |
+          set -f   # no glob expansion of the input
+          if ! [[ "$RECIPES" =~ ^[a-z0-9\ -]*$ ]] || [[ "$RECIPES" == *--* ]]; then
+            echo "recipes: plain recipe names separated by spaces" >&2; exit 2
+          fi
+          # shellcheck disable=SC2086 - RECIPES is a word list on purpose
+          uv run python scripts/recipes.py ci $RECIPES $BUILD_MISSING --summary "$GITHUB_STEP_SUMMARY"
