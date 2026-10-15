@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Background tasks (L23): with `MCP_TASKS=true`, `cml_upload_image`, `cml_build_lab`, `cml_build_recipe`, `cml_start_lab`,
+  `cml_wait_for_converged`, `cml_verify_recipe`, `cml_capture` and `cml_capture_wireless` run as MCP background tasks (core C12);
+  clients without task support call them as before. Depends on `stutters-mcp-core[tasks]`.
+
 ## 0.7.0 - 2026-10-15
 
 Later milestone (L13 wireless, L14 fmc-local, L16 site replica; L15 serial fix) and L24. 69 -> 71 tools (read 39, write 24,

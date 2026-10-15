@@ -190,7 +190,7 @@ async def build_lab_flow(
 
 
 def register(reg: ToolRegistrar) -> None:
-    @reg.write(title="Build lab from spec")
+    @reg.write(title="Build lab from spec", task=True)
     async def cml_build_lab(
         ctx: Context,
         title: Annotated[str, Field(min_length=1, max_length=64, description="Title of the new lab")],

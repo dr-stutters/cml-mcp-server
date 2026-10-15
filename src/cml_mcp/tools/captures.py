@@ -128,7 +128,7 @@ def register(reg: ToolRegistrar) -> None:
         )
         return shaped({"lab": info.get("lab_title"), "link": lk.get("label"), **result})
 
-    @reg.write(title="Capture and summarize")
+    @reg.write(title="Capture and summarize", task=True)
     async def cml_capture(
         ctx: Context,
         lab: LabRef,
@@ -264,7 +264,7 @@ def wireless_running(status: dict[str, Any]) -> str | None:
 
 
 def register_wireless(reg: ToolRegistrar) -> None:
-    @reg.write(title="Capture wireless traffic")
+    @reg.write(title="Capture wireless traffic", task=True)
     async def cml_capture_wireless(
         ctx: Context,
         lab: LabRef,

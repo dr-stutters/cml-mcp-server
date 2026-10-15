@@ -62,7 +62,7 @@ def register(reg: ToolRegistrar) -> None:
             }
         )
 
-    @reg.dangerous(title="Upload a disk image", idempotent=False)
+    @reg.dangerous(title="Upload a disk image", idempotent=False, task=True)
     async def cml_upload_image(
         ctx: Context,
         file: Annotated[
