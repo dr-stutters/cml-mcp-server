@@ -226,6 +226,27 @@ def mask_line(line: str) -> str:
     return GENERIC_SECRET.sub(_mask_group, line)
 
 
+def strip_route_legend(text: str) -> str:
+    """`text` without IOS's route-code legend ('Codes: L - local, C - connected, ...' and its indented
+    continuation lines, about 900 characters per 'show ip route'), L32."""
+    if "Codes: " not in text:
+        return text
+    out: list[str] = []
+    skipping = False
+    for line in text.split("\n"):
+        if line.startswith("Codes: ") and " - " in line:
+            skipping = True
+            continue
+        if skipping:
+            if line[:1].isspace() and " - " in line:
+                continue
+            skipping = False
+            if not line.strip():
+                continue  # the blank line after the legend
+        out.append(line)
+    return "\n".join(out)
+
+
 def mask_secrets(text: str) -> str:
     """Mask the secret token in config/CLI lines: 'username x secret 9 $9$...', 'snmp-server
     community x', 'key 7 ...', OSPF/NTP keys, IKE pre-shared keys, SNMPv3 users, trap communities.

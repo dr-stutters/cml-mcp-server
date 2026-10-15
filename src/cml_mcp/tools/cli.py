@@ -19,7 +19,7 @@ from stutters_mcp_core import (
 )
 
 from cml_mcp.client import CmlApp
-from cml_mcp.console import Credentials, mask_secrets, read_only_problem
+from cml_mcp.console import Credentials, mask_secrets, read_only_problem, strip_route_legend
 from cml_mcp.netops import console_batch, lab_credentials, prepare
 from cml_mcp.safety import denied_lines
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
@@ -78,6 +78,10 @@ def register(reg: ToolRegistrar) -> None:
         results = await console_batch(
             app, lid, targets, lambda _n, _c: commands, timeout=command_timeout, purpose="cml_run_commands"
         )
+        for res in results:  # the IOS route-code legend is noise in a model's context (L32)
+            for o in res.get("outputs") or []:
+                if isinstance(o.get("output"), str):
+                    o["output"] = strip_route_legend(o["output"])
         return shaped({"lab": info.get("lab_title"), "results": list(results)})
 
     @reg.write(title="Configure node via CLI")
