@@ -34,6 +34,9 @@ class Settings(BaseServerSettings):
     # or returned by tools).
     lab_secrets_file: str | None = Field(default=None, description="CML_LAB_SECRETS_FILE")
 
+    # Image upload (L19): the only directory cml_upload_image reads from (streamed, never sent via MCP)
+    image_dir: str | None = Field(default=None, description="CML_IMAGE_DIR")
+
     # Safety rails (L20, docs/safety.md). Comma-separated lab title globs or lab ids.
     protected_labs: str | None = Field(default=None, description="CML_PROTECTED_LABS")
     managed_labs: str | None = Field(default=None, description="CML_MANAGED_LABS")
