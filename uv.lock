@@ -289,7 +289,7 @@ dev = [
 requires-dist = [
     { name = "asyncssh", specifier = ">=2.21" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "stutters-mcp-core", git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.3.0" },
+    { name = "stutters-mcp-core", git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.3.1" },
 ]
 
 [package.metadata.requires-dev]
@@ -1469,8 +1469,8 @@ wheels = [
 
 [[package]]
 name = "stutters-mcp-core"
-version = "0.3.0"
-source = { git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.3.0#c1de1e926c20a828f8f376c0fd490ec9294db3c7" }
+version = "0.3.1"
+source = { git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.3.1#b44ef31d90d50997304ec124b1893efb764085dd" }
 dependencies = [
     { name = "fastmcp" },
     { name = "httpx" },
