@@ -41,7 +41,10 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests/unit"]
-markers = ["live: needs the lab appliance (skipped when unreachable)"]
+markers = [
+    "live: needs the lab appliance (skipped when unreachable)",
+    "live_recipes: verifies running recipe labs (cml_verify_recipe); never starts or stops labs",
+]
 
 [tool.ruff]
 line-length = 110

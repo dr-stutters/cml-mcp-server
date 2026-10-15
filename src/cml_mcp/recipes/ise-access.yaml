@@ -15,8 +15,21 @@ boot_minutes: 10-15 (BOOTED after ~6 min; the routed uplink forwards 2-3 min lat
 verified: 2026-10-14 - sw1 pinged 198.18.128.1 and ISE; MAB from the client's MAC reached ISE (temporary NAD,
   'Rejected per authorization profile' with ISE's default policy). Note a wipe gives the client a new MAC.
 verify:
+  booted: [sw1, client]
   nodes: [sw1]
   targets: [198.18.128.1, 198.18.134.35]
+  addresses: {sw1: [198.18.128.154, 10.10.10.1]}
+  probes:
+    - name: sw1 RADIUS server ISE is UP
+      node: sw1
+      command: 'show aaa servers | include State: current'
+      expect: 'current UP'
+    - name: sw1 RADIUS round trip to ISE (test aaa, any answer counts)
+      node: sw1
+      command: test aaa group radius mcp-test-probe mcp-test-probe new-code
+      expect: '(?i)user (was )?rejected|user successfully authenticated'
+      reject: '(?i)timed out|no response|not responding|not authenticated'
+    - {name: sw1 SSH (22) from the server, tcp: 198.18.128.154:22}
 build:
   title: mcp-cml-ise
   description: cat9000v access switch with 802.1X/MAB against ISE + client (cml-mcp-server recipe ise-access)

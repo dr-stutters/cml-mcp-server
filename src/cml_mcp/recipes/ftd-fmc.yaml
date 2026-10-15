@@ -12,9 +12,18 @@ credentials:
 fmc_side: fmc_register_device with host 198.18.128.151, reg key ***REDACTED*** (the FTD already shows 'show managers' -> 198.18.134.76 Pending)
 boot_minutes: 15-30
 verify:
+  booted: [ftd1]
   nodes: [ftd1]
   targets: [198.18.134.76, 198.18.128.1]
   vrf: management
+  addresses: {ftd1: [198.18.128.151]}
+  probes:
+    - name: ftd1 manager is FMC 198.18.134.76
+      node: ftd1
+      command: show managers
+      expect: '198\.18\.134\.76'
+    - name: ftd1 management SSH (22) from the server
+      tcp: 198.18.128.151:22
 build:
   title: mcp-cml-ftd
   description: FTDv on the lab network for FMC registration (cml-mcp-server recipe ftd-fmc)

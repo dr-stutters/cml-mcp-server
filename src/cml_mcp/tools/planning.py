@@ -13,6 +13,7 @@ from cml_mcp.client import CmlApp
 from cml_mcp.licence import RUNNING_STATES, licence_usage, licensed, plan_stops, plan_text
 from cml_mcp.recipes import get_recipe, recipe_licensed_nodes, recipe_names
 from cml_mcp.tools.common import shaped
+from cml_mcp.verify import verify_recipe
 
 
 async def plan_for(app: CmlApp, target: str) -> dict[str, Any]:
@@ -87,3 +88,20 @@ def register(reg: ToolRegistrar) -> None:
         CML_NODE_LICENSE_LIMIT overrides it; external connectors and unmanaged switches don't count.
         Changes nothing: stop the listed labs with cml_stop_lab."""
         return shaped(await plan_for(get_client(ctx), target))
+
+    @reg.read(title="Verify a lab recipe", idempotent=False)
+    async def cml_verify_recipe(
+        ctx: Context,
+        recipe: Annotated[
+            str, Field(description="Recipe name, e.g. 'ftd-fmc', 'catc-routers', 'ise-access'")
+        ],
+    ) -> ToolResult:
+        """Check that a recipe's running lab is known-good before another server's tests rely on
+        it. Runs the recipe's verify contract and returns pass/fail per check: nodes BOOTED,
+        expected addresses on each node (from its CLI), a ping matrix to the appliances, and
+        product probes - FTD 'show managers' points at FMC, IOS-XE SSH/NETCONF/SNMP answer from
+        this server, the switch's RADIUS server is UP and answers 'test aaa'. Changes no
+        configuration (console probes come only from the packaged recipe and must be read-only),
+        but the RADIUS test leaves a failed authentication for user 'mcp-test-probe' in ISE's logs,
+        so it isn't idempotent. Start the lab first (cml_plan_licences, then cml_start_lab)."""
+        return shaped(await verify_recipe(get_client(ctx), recipe))
