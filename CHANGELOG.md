@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-10-15
+
+Production gate (L17, L19, L20, L21; L18 skipped) and the fabric recipe (L15 first slice). 65 -> 69 tools
+(read 38, write 23, dangerous 8 incl. `cml_api_call`). Core pinned v0.10.0.
 
 ### Added
 - Recipe `fabric` (L15, first slice): SD-Access-style underlay for Catalyst Center - border/control plane + 2 edges
