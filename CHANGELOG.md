@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 - 2026-10-15
 
 ### Added
 - Background tasks (L23): with `MCP_TASKS=true`, `cml_upload_image`, `cml_build_lab`, `cml_build_recipe`, `cml_start_lab`,
