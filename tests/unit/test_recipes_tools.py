@@ -21,7 +21,23 @@ KNOWN_SECRETS = ("Fake-Cli-Pw9", "Fake-Ftd-Pw9!", "Fake-FtdHa-Pw9!", "fake-radiu
 def test_recipe_detail_never_carries_secrets(name: str) -> None:
     blob = json.dumps(recipe_detail(name))
     assert not [s for s in KNOWN_SECRETS if s in blob]
-    assert recipe_secrets(get_recipe(name))  # something was found to scrub
+    r = get_recipe(name)
+    # every credential is a ${LAB_*} reference or a scrubbed literal (L21)
+    assert recipe_secrets(r) or recipe_detail(name)["credentials"]["references"]
+
+
+@pytest.mark.parametrize("name", recipe_names())
+def test_recipe_detail_keeps_references_and_names_intact(name: str) -> None:
+    """L26: ${LAB_*} references are where the secret is kept, not secrets; prose and node names
+    ('eaptls-client', '(the FTD ...') must come through unmasked."""
+    blob = json.dumps(recipe_detail(name))
+    assert "********}" not in blob and "********-" not in blob and "/********/" not in blob
+
+
+def test_fmc_local_hand_off_names_the_reg_key_reference() -> None:
+    side = recipe_detail("fmc-local")["product_side"]["fmc_side"]
+    assert "reg key ${LAB_FTD_REG_KEY} (the FTD" in side
+    assert "node='eaptls-client'" in recipe_detail("ise-access")["product_side"]["ise_side"]
 
 
 async def test_prompt_contract(api: respx.MockRouter) -> None:
@@ -148,6 +164,12 @@ async def test_build_recipe_fills_secrets_only_in_what_goes_to_cml(api: respx.Mo
         and "${LAB_" not in body.split("annotations")[0]
     )
     assert "Fake-Cli-Pw9" not in json.dumps(applied)
+    import yaml
+
+    from cml_mcp.recipes import read_recipe_marker
+
+    notes = yaml.safe_load(body)["lab"]["notes"]
+    assert read_recipe_marker(notes) == {"recipe": "catc-routers", "substitute": {}}  # L25
 
 
 async def test_build_recipe_names_missing_secrets(
@@ -218,3 +240,36 @@ def test_fmc_local_recipe_shape() -> None:
     assert placeholders(r) == {"LAB_FTD_ADMIN_PASSWORD", "LAB_FTD_REG_KEY"}
     ftd = next(n for n in r["build"]["nodes"] if n["label"] == "ftd")
     assert '"FmcIp": "198.18.128.192"' in ftd["config"]
+
+
+def test_mask_secrets_keeps_lab_references() -> None:
+    from cml_mcp.console import mask_secrets
+
+    assert mask_secrets("radius key ${LAB_RADIUS_SECRET}") == "radius key ${LAB_RADIUS_SECRET}"
+    assert mask_secrets("username a secret 9 $9$abc") == "username a secret 9 ********"
+
+
+def test_recipe_marker_round_trip() -> None:
+    from cml_mcp.recipes import read_recipe_marker, recipe_marker
+
+    sub = {"198.18.128.154": "198.18.128.194"}
+    notes = "free text\n" + recipe_marker("ise-access", sub) + "\nmore"
+    assert read_recipe_marker(notes) == {"recipe": "ise-access", "substitute": sub}
+    assert read_recipe_marker("no marker") is None
+    assert read_recipe_marker("cml-mcp-recipe: {not json}") is None
+    assert read_recipe_marker(None) is None
+
+
+def test_reference_exemption_is_exact() -> None:
+    from cml_mcp.console import mask_secrets
+
+    assert "hunter2" not in mask_secrets("username a secret ${LAB_X}hunter2")
+    assert "realpw" not in mask_secrets("password ${LAB_X},realpw")
+    assert mask_secrets("key ${LAB_X}).") == "key ${LAB_X})."
+
+
+def test_scrub_masks_secrets_with_punctuation_edges() -> None:
+    from cml_mcp.tools.recipes_tools import scrub
+
+    assert scrub("login admin!Pw9 and pw-2x", {"!Pw9", "pw-2x"}) == "login admin******** and ********"
+    assert scrub("node eaptls-client", {"eaptls"}) == "node eaptls-client"

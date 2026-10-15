@@ -24,10 +24,10 @@ from cml_mcp.build import NodeSpec
 from cml_mcp.client import CmlApp
 from cml_mcp.console import mask_secrets
 from cml_mcp.recipes import (
-    PLACEHOLDER,
     get_recipe,
     placeholders,
     recipe_licensed_nodes,
+    recipe_marker,
     recipe_names,
     resolve_secrets,
     secret_names_by_value,
@@ -51,7 +51,8 @@ RecipeName = Annotated[str, Field(description="Recipe name (see cml_list_recipes
 # Fields that describe the product side of a recipe (what the fmc/catc/ise server must configure).
 PRODUCT_SIDE = re.compile(r"(?:_side|_discovery)$")
 SECRET_IN_TEXT = re.compile(
-    r"(?i)(?:secret|password|passwd|key|community|regkey|adminpassword|psk)[\"'\s:=]+(?:\d\s+)?([^\s\"',}]+)"
+    r"(?i)(?<![\w.-])(?:secret|password|passwd|key|community|regkey|adminpassword|psk)(?![\w.-])"
+    r"[\"'\s:=]+(?:\d\s+)?(?!(?:generate|chain|config-key|zeroize|import|export|label|pair)\b)([^\s\"',;{}()]+)"
 )
 
 
@@ -70,13 +71,19 @@ def recipe_secrets(recipe: dict[str, Any]) -> set[str]:
     for key in ("credentials", "fmc_side", "ise_side", "catalyst_center_discovery"):
         found.update(SECRET_IN_TEXT.findall(str(recipe.get(key) or "")))
     for text in re.findall(
-        r"(?i)\b(?:\w+\s*/\s*)(\S+?)(?:\s*/\s*(\S+?))?(?=[\s,)]|$)", str(recipe.get("credentials"))
+        # 'user / password' as the credentials section writes it (not paths like /etc/eaptls)
+        r"(?i)\b(?:\w+ / )([^\s/'\"{}]+?)(?: / ([^\s/'\"{}]+?))?(?=[\s,);]|$)",
+        str(recipe.get("credentials")),
     ):
         found.update(t for t in text if t)
     return {
         s
         for s in found
-        if len(s) >= 4 and s.lower() not in {"none", "same", "true", "false"} and not PLACEHOLDER.search(s)
+        if len(s) >= 4
+        and s.lower() not in {"none", "same", "true", "false"}
+        # ${LAB_*} references (or a regex's cut-off piece of one) and prose like '(the' aren't secrets
+        and "${" not in s
+        and not s.startswith("(")
     }
 
 
@@ -89,7 +96,10 @@ def scrub(value: Any, secrets: set[str]) -> Any:
     if not isinstance(value, str):
         return value
     for s in sorted(secrets, key=len, reverse=True):
-        value = value.replace(s, "********")
+        # whole tokens only: a secret 'eaptls' must not garble the node name 'eaptls-client'
+        before = r"(?<![\w.-])" if re.match(r"\w", s) else ""
+        after = r"(?![\w-])" if re.search(r"\w$", s) else ""
+        value = re.sub(before + re.escape(s) + after, "********", value)
     return mask_secrets(value)
 
 
@@ -229,8 +239,9 @@ def register(reg: ToolRegistrar) -> None:
         where the credentials are kept (never the values) - and by default start it without waiting
         (FTDv and cat9000v take 10-30 minutes: follow up with cml_wait_for_converged, then
         cml_verify_recipe). Refuses if the lab already exists: start that one with cml_start_lab
-        instead, or pass `title` (and `substitute` for other addresses) to build a copy.
-        Preview-first; the preview shows wiring and licence use."""
+        instead, or pass `title` (and `substitute` for other addresses) to build a copy; the lab's
+        notes record the recipe and substitutions, so cml_verify_recipe(recipe, lab=title) needs
+        nothing else. Preview-first; the preview shows wiring and licence use."""
         r = substituted(get_recipe(recipe), substitute)
         b = r["build"]
         # ${LAB_*} secrets are filled only in what goes to CML (configs, files, logins); the preview shows
@@ -262,6 +273,7 @@ def register(reg: ToolRegistrar) -> None:
             timeout=timeout,
             confirm=confirm,
             redact=secret_names_by_value(secrets_file),
+            lab_notes=recipe_marker(recipe, substitute),
         )
 
     @reg.prompt(title="Build a test lab from a recipe", uses=["cml"], tier=Tier.WRITE)

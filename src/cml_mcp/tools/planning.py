@@ -111,7 +111,10 @@ def register(reg: ToolRegistrar) -> None:
         ] = None,
         substitute: Annotated[
             dict[str, str] | None,
-            Field(max_length=20, description="The substitutions the copy was built with"),
+            Field(
+                max_length=20,
+                description="The substitutions the copy was built with (default: read from the lab's notes)",
+            ),
         ] = None,
     ) -> ToolResult:
         """Check that a recipe's running lab is known-good before another server's tests rely on
@@ -122,6 +125,6 @@ def register(reg: ToolRegistrar) -> None:
         configuration (console probes come only from the packaged recipe and must be read-only),
         but the RADIUS test leaves a failed authentication for user 'mcp-test-probe' in ISE's logs,
         so it isn't idempotent. Start the lab first (cml_plan_licences, then cml_start_lab). For a
-        copy built with cml_build_recipe(title=..., substitute=...), pass the same `lab` title and
-        `substitute`."""
+        copy built with cml_build_recipe(title=...), pass `lab`: the substitutions it was built with
+        are read from the lab's notes (pass `substitute` only for copies built before v0.9.0)."""
         return shaped(await verify_recipe(get_client(ctx), recipe, lab=lab, substitute=substitute))

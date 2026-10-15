@@ -99,8 +99,10 @@ async def build_lab_flow(
     confirm: str | None,
     annotations: list[dict[str, Any]] | None = None,
     redact: dict[str, str] | None = None,
+    lab_notes: str | None = None,
 ) -> dict[str, Any]:
-    """Preview/apply a lab build (shared by cml_build_lab and cml_build_recipe)."""
+    """Preview/apply a lab build (shared by cml_build_lab and cml_build_recipe). `lab_notes` become the
+    lab's notes (cml_build_recipe records the recipe and its substitutions there)."""
     app: CmlApp = get_client(ctx)
     defs = await known_definitions(app)
     nodes, serials = await assign_cat9kv_serials(app, title, nodes)
@@ -124,6 +126,8 @@ async def build_lab_flow(
         )
     except BuildError as e:
         blockers.append(str(e))
+    if lab_notes and topology:
+        topology["lab"]["notes"] = lab_notes
     if await title_taken(app, title):
         blockers.append(f"A lab titled {title!r} already exists")
     needed = sum(1 for n in nodes if n.definition not in UNLICENSED_DEFINITIONS)

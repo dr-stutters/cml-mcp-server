@@ -6,6 +6,7 @@ descriptive fields (summary, address plan, credentials, what to configure on the
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from functools import cache
@@ -181,3 +182,29 @@ def substituted(value: Any, mapping: dict[str, str] | None) -> Any:
         return v
 
     return walk(value)
+
+
+# A recipe build records itself in the lab's notes, so cml_verify_recipe can verify a copy with the
+# substitutions it was built with (L25). Substitutions are address/name tokens only, never secrets.
+RECIPE_MARKER = "cml-mcp-recipe:"
+_MARKER_LINE = re.compile(r"^cml-mcp-recipe:\s*(\{.*\})\s*$", re.M)
+
+
+def recipe_marker(name: str, substitute: dict[str, str] | None) -> str:
+    """The notes line a recipe's lab is built with."""
+    return f"{RECIPE_MARKER} " + json.dumps({"recipe": name, "substitute": substitute or {}}, sort_keys=True)
+
+
+def read_recipe_marker(notes: Any) -> dict[str, Any] | None:
+    """{'recipe': name, 'substitute': {...}} from a lab's notes, or None."""
+    m = _MARKER_LINE.search(notes) if isinstance(notes, str) else None
+    if not m:
+        return None
+    try:
+        data = json.loads(m.group(1))
+    except ValueError:
+        return None
+    sub = data.get("substitute")
+    if not isinstance(data.get("recipe"), str) or not isinstance(sub, dict):
+        return None
+    return {"recipe": data["recipe"], "substitute": {str(k): str(v) for k, v in sub.items()}}

@@ -205,8 +205,14 @@ GENERIC_SECRET = re.compile(
 )
 
 
+# A recipe's ${LAB_*} reference names where a secret is kept; it isn't a secret itself (L26)
+_REFERENCE = re.compile(r"\$\{LAB_[A-Z0-9_]+\}[,.;:)\]'\"]*")
+
+
 def _mask_group(m: re.Match[str]) -> str:
     whole, start = m.group(0), m.start("secret") - m.start(0)
+    if _REFERENCE.fullmatch(m.group("secret")):
+        return whole
     return whole[:start] + _M + whole[m.end("secret") - m.start(0) :]
 
 
