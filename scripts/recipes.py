@@ -1,10 +1,12 @@
-"""Build, start, verify and stop the reusable lab recipes in recipes/*.yaml through the MCP tools.
+"""Build, start, verify and stop the lab recipes (src/cml_mcp/recipes/*.yaml) through the MCP tools.
 
     uv run python scripts/recipes.py list
     uv run python scripts/recipes.py build catc-routers [--start] [--no-wait] [--recreate]
     uv run python scripts/recipes.py wait catc-routers            # until every node has booted
     uv run python scripts/recipes.py verify catc-routers          # ping the recipe's targets
     uv run python scripts/recipes.py stop catc-routers            # stop (keep the lab defined)
+    uv run python scripts/recipes.py plan ise-access              # which labs would have to stop
+    uv run python scripts/recipes.py swap ise-access [--yes]      # stop those (asks first), start/build it
 
 Each recipe's `build:` section is exactly the argument set of the cml_build_lab tool, so a model can
 also build it with that one tool call. The script drives the tools the same way a model would
@@ -17,7 +19,6 @@ import argparse
 import asyncio
 import json
 import sys
-from pathlib import Path
 from typing import Any
 
 import yaml
@@ -25,17 +26,14 @@ from fastmcp import Client
 from stutters_mcp_core.testing import live_settings
 
 from cml_mcp.config import Settings
+from cml_mcp.recipes import get_recipe, recipe_names
 from cml_mcp.server import create_server
-
-RECIPES = Path(__file__).resolve().parent.parent / "recipes"
 
 
 def load(name: str) -> dict[str, Any]:
-    path = RECIPES / f"{name}.yaml"
-    if not path.exists():
-        sys.exit(f"No recipe {name!r}; have: {', '.join(p.stem for p in sorted(RECIPES.glob('*.yaml')))}")
-    data: dict[str, Any] = yaml.safe_load(path.read_text())
-    return data
+    if name not in recipe_names():
+        sys.exit(f"No recipe {name!r}; have: {', '.join(recipe_names())}")
+    return get_recipe(name)
 
 
 async def call(c: Client, tool: str, args: dict[str, Any], *, write: bool = False) -> Any:
@@ -43,6 +41,8 @@ async def call(c: Client, tool: str, args: dict[str, Any], *, write: bool = Fals
     data = res.structured_content if res.structured_content is not None else res.content[0].text
     if res.is_error:
         raise SystemExit(f"{tool} failed: {data}")
+    if write and isinstance(data, dict) and data.get("status") == "blocked":
+        raise SystemExit(f"{tool} is blocked: {data.get('blockers')}")
     if write and isinstance(data, dict) and data.get("confirm"):
         if data.get("blockers"):
             raise SystemExit(f"{tool} is blocked: {data['blockers']}")
@@ -58,19 +58,59 @@ async def lab_exists(c: Client, title: str) -> bool:
     return any(row.get("title") == title or row.get("lab_title") == title for row in data.get("results", []))
 
 
+async def swap(
+    c: Client, name: str, recipe: dict[str, Any], *, wait: bool, limit: float, assume_yes: bool
+) -> Any:
+    """Stop the labs the licence plan names, then start the recipe's lab (building it if missing).
+
+    The labs to stop may belong to someone else's running session: it lists them and asks before
+    stopping anything unless --yes is given."""
+    title = recipe["build"]["title"]
+    plan = await call(c, "cml_plan_licences", {"target": name})
+    if plan["plan"].get("feasible") is False:
+        raise SystemExit(f"Can't run {name}: {plan['plan']['summary']}")
+    if plan["plan"].get("feasible") is None:
+        print(
+            f"licence limit unknown, starting without stopping anything: {plan['plan']['summary']}",
+            file=sys.stderr,
+        )
+    stopped = []
+    to_stop = plan["plan"].get("stop") or []
+    if to_stop and not assume_yes:
+        names = ", ".join(f"{lab['title']} [{lab['id']}] ({lab['running']} nodes)" for lab in to_stop)
+        answer = await asyncio.to_thread(input, f"Stop {names} to free licences? [y/N] ")
+        if answer.strip().lower() != "y":
+            raise SystemExit("nothing changed")
+    for lab in to_stop:
+        print(f"stopping {lab['title']!r} ({lab['running']} licensed nodes)", file=sys.stderr)
+        await call(c, "cml_stop_lab", {"lab": lab["id"]}, write=True)
+        stopped.append(lab["title"])
+    if plan["lab"].get("exists") is False:
+        print(f"building {title!r}", file=sys.stderr)
+        build = {**recipe["build"], "start": True, "wait": wait, "timeout": limit}
+        started = await call(c, "cml_build_lab", build, write=True)
+    else:
+        print(f"starting {title!r}", file=sys.stderr)
+        started = await call(c, "cml_start_lab", {"lab": title, "wait": wait, "timeout": limit}, write=True)
+    return {"stopped": stopped, "started": title, "result": started}
+
+
 async def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("action", choices=["list", "show", "build", "start", "wait", "verify", "stop"])
+    ap.add_argument(
+        "action", choices=["list", "show", "build", "start", "wait", "verify", "stop", "plan", "swap"]
+    )
     ap.add_argument("recipe", nargs="?")
     ap.add_argument("--start", action="store_true", help="build: start the lab after building it")
     ap.add_argument("--no-wait", action="store_true", help="build/start: don't wait for the boot")
     ap.add_argument("--recreate", action="store_true", help="build: delete an existing lab first")
+    ap.add_argument("--yes", action="store_true", help="swap: stop the planned labs without asking")
     ap.add_argument("--timeout", type=float, default=2400, help="seconds to wait for boots")
     args = ap.parse_args()
     if args.action == "list":
-        for p in sorted(RECIPES.glob("*.yaml")):
-            r = yaml.safe_load(p.read_text())
-            print(f"{p.stem:16} {r['build']['title']:18} {r.get('summary', '')}")
+        for name in recipe_names():
+            r = get_recipe(name)
+            print(f"{name:16} {r['build']['title']:18} {r.get('summary', '')}")
         return
     if not args.recipe:
         sys.exit("give a recipe name (see 'list')")
@@ -89,6 +129,12 @@ async def main() -> None:
             build = {**recipe["build"], "start": args.start, "wait": not args.no_wait}
             build["timeout"] = args.timeout
             out = await call(c, "cml_build_lab", build, write=True)
+        elif args.action == "plan":
+            out = await call(c, "cml_plan_licences", {"target": args.recipe})
+        elif args.action == "swap":
+            out = await swap(
+                c, args.recipe, recipe, wait=not args.no_wait, limit=args.timeout, assume_yes=args.yes
+            )
         elif args.action == "start":
             out = await call(
                 c,

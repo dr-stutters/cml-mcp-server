@@ -26,8 +26,10 @@ All three attach to the dCloud network (198.18.128.0/18, gateway 198.18.128.1) t
 Reserved for recipes: 198.18.128.150-.159 (.150 probe, .155 spare FTD outside, .156-.159 free);
 checked unused by ping/ARP on 2026-10-14.
 
-The EVAL licence allows **5 running licensed nodes** in total (external connectors and unmanaged
-switches don't count): all three recipes together need exactly 5. Stop what you don't need.
+Running licensed nodes are capped by the controller's licence (external connectors and unmanaged
+switches don't count); the three recipes together need 5. `scripts/recipes.py plan <recipe>` (or
+`cml_plan_licences`) shows the cap and which labs to stop; `scripts/recipes.py swap <recipe>` stops
+them and starts the recipe.
 
 Gotchas found while building them:
 - FTDv forces a password change at first login when the day-0 `AdminPassword` is weak or a

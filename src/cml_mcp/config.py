@@ -19,6 +19,7 @@ class Settings(BaseServerSettings):
     # the console as busy (one session per node per server process).
     console_lock_wait: float = Field(default=60.0, ge=0, description="CML_CONSOLE_LOCK_WAIT")
 
-    # Node-licence cap (CML doesn't report it: an EVAL Personal licence allows 5 running nodes).
-    # When set, start/build previews refuse to start more licensed nodes than are free.
+    # Running licensed-node cap. Detected from GET /licensing when unset (base licence nodes plus
+    # CML_NODE_COUNT expansion; 5 in evaluation mode); set it to override the detection.
+    # Start/build previews refuse to start more licensed nodes than are free.
     node_license_limit: int | None = Field(default=None, ge=1, description="CML_NODE_LICENSE_LIMIT")

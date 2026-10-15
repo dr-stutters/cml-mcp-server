@@ -24,7 +24,7 @@ FMC / Catalyst Center / ISE builders, live-tested with FTDv 10.0, cat8000v, cat9
   `login_password`, `enable_password`).
 - `CML_NODE_LICENSE_LIMIT`: start/build/node-start previews refuse to exceed the licence; CML's
   "N of N node licenses are in use" becomes an error naming the labs that hold them.
-- `recipes/` (ftd-fmc, catc-routers, ise-access) and `scripts/recipes.py`.
+- `recipes/` (now `src/cml_mcp/recipes/`: ftd-fmc, catc-routers, ise-access) and `scripts/recipes.py`.
 
 ### Changed
 - Console: os-aware login from the pyATS testbed (no `enable` on FTD), NX-OS POAP skipped, terminal
