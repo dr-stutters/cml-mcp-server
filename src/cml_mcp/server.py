@@ -44,24 +44,29 @@ Start with cml_list_labs, then cml_get_lab_topology (compact summary; detail='fu
 Nodes: cml_list_nodes / cml_get_node / cml_get_node_console_log; wiring: cml_list_interfaces,
 cml_list_links / cml_get_link (conditioning, capture status), cml_list_capture_packets.
 Captures: cml_capture (capture + decoded summary in one call), cml_summarize_capture (RADIUS, EAPOL,
-OSPF, DHCP, ARP, ICMP decoded; secrets never shown).
+OSPF, DHCP, ARP, ICMP decoded; `findings` names what got no answer; secrets never shown).
 What can be built: cml_list_node_definitions (iol-xe / ioll2-xe boot in under a minute).
 Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the CML console server
 (no IP reachability needed; IOS/IOS-XE, NX-OS, FTD, Linux); config changes go through
 cml_configure_node (write tier; mode='exec' for FTD 'configure manager add ...').
 Diagrams: cml_export_topology (mermaid / drawio / json with addresses); cml_list_annotations and
 cml_annotate_lab (notes, per-node addresses, recipe purpose) make a lab self-describing.
-What changed on a device: cml_diff_node_config (running config vs day-0, startup, another node, a baseline).
+What changed on a device: cml_diff_node_config (running config vs day-0, startup, another node, a baseline;
+by default only real changes, by section, with IOS's own default lines hidden).
 Outside networks: cml_list_external_connectors, then an external_connector node in cml_build_lab.
 Degraded networks: cml_apply_link_scenario (wan-good, wan-satellite, lossy-wifi, brownout, flap) and
 cml_clear_link_scenarios; cml_get_link_scenarios shows values, expected ping deltas and flap jobs.
-Proving connectivity: cml_check_reachability (success % and average RTT);
+Proving connectivity: cml_check_reachability (success % and average RTT). BOOTED is not a converged
+network: right after a boot, pass wait_seconds so it retries until routing protocols have converged;
 addresses: cml_get_layer3_addresses(source='cli').
 Slow images (FTDv 15-30 min, cat9000v ~10): build/start with wait=false, then cml_wait_for_converged.
 Running nodes are capped by the licence; external connectors and unmanaged switches don't count.
-cml_plan_licences(target) says which labs to stop before starting a lab or recipe.
+cml_plan_licences(target) says which labs to stop before starting a lab or recipe, and whether RAM
+suffices. What is using the controller: cml_get_resource_usage (running labs by RAM, biggest nodes);
+stop several labs at once with cml_stop_labs.
 Test labs for the other suite servers: cml_list_recipes, cml_build_recipe, cml_verify_recipe, and the
-prompt cml_build_test_lab (recipe -> licences -> build/start -> converge -> verify -> hand-off).
+prompt cml_build_test_lab (recipe -> licences -> build/start -> converge -> verify -> hand-off). A copy
+(cml_build_recipe with title/substitute) records its substitutions: cml_verify_recipe(recipe, lab=copy).
 CML returns whole collections; list tools page client-side with limit/offset.
 Call cml_status first if anything fails. cml_search_spec / cml_get_definition describe the REST API
 (paths are relative to /api/v0) and cml_api_call reaches endpoints no other tool covers.

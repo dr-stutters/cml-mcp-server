@@ -379,3 +379,27 @@ def test_mask_helpers() -> None:
 
     assert mask_testbed("  - password: x\n  password: null\n") == "  - password: ********\n  password: null\n"
     assert "y" not in mask_export("    enable_password: y\n")
+
+
+async def test_reachability_retries_until_all_ok(
+    lab_api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """L29: wait_seconds repeats the matrix until routing has converged."""
+    import cml_mcp.tools.network as network
+
+    calls = {"n": 0}
+
+    async def batch(*_a: Any, **_k: Any) -> list[dict[str, Any]]:
+        calls["n"] += 1
+        rate = "100 percent (3/3)" if calls["n"] >= 2 else "0 percent (0/3)"
+        return [{"node": "r1", "outputs": [{"output": f"Success rate is {rate}"}]}]
+
+    async def no_sleep(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(network, "console_batch", batch)
+    monkeypatch.setattr(network.asyncio, "sleep", no_sleep)
+    data = await call(
+        "cml_check_reachability", {"lab": LID, "nodes": [R1], "targets": ["10.0.0.2"], "wait_seconds": 60}
+    )
+    assert data["all_ok"] is True and data["attempts"] == 2

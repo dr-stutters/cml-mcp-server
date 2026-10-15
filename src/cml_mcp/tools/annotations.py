@@ -39,7 +39,7 @@ from cml_mcp.topology import (
 
 AddressSource = Literal["config", "snooped", "cli", "none"]
 ADDRESS_SOURCE_HELP = (
-    "'config' (default): addresses in each node's day-0 config (works on stopped labs); 'snooped': "
+    "'config': addresses in each node's day-0 config (works on stopped labs); 'snooped': "
     "what CML learned on external-connector segments; 'cli': ask every booted node over its console "
     "(slow but complete); 'none'"
 )
