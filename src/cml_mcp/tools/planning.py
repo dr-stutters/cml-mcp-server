@@ -93,7 +93,7 @@ def register(reg: ToolRegistrar) -> None:
     async def cml_verify_recipe(
         ctx: Context,
         recipe: Annotated[
-            str, Field(description="Recipe name, e.g. 'ftd-fmc', 'catc-routers', 'ise-access'")
+            str, Field(description="Recipe name, e.g. 'ftd-fmc', 'ftd-ha', 'catc-routers', 'ise-access'")
         ],
     ) -> ToolResult:
         """Check that a recipe's running lab is known-good before another server's tests rely on
