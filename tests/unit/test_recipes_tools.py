@@ -179,3 +179,19 @@ async def test_list_recipes_shows_secret_names_not_values(api: respx.MockRouter)
     detail = await call_tool(create_server(make_settings()), "cml_list_recipes", {"recipe": "ftd-fmc"})
     assert detail["credentials"]["references"] == ["LAB_FTD_ADMIN_PASSWORD", "LAB_FTD_REG_KEY"]
     assert "fake-reg-key" not in json.dumps(detail)
+
+
+def test_fabric_recipe_shape() -> None:
+    from cml_mcp.recipes import placeholders, recipe_licensed_nodes
+
+    r = get_recipe("fabric")
+    assert r["build"]["title"] == "mcp-cml-fabric" and recipe_licensed_nodes(r) == 5
+    assert placeholders(r) == {"LAB_CLI_PASSWORD", "LAB_SNMP_RO", "LAB_SNMP_RW"}
+    labels = {n["label"] for n in r["build"]["nodes"]}
+    assert {"bcp", "edge1", "edge2", "fusion", "client"} <= labels
+    # CML's own address block only (.190-.199)
+    assert set(r["verify"]["addresses"]) == {"bcp", "edge1", "edge2"}
+    assert all(
+        a.startswith("198.18.128.19")
+        for a in [r["verify"]["addresses"][n][0] for n in ("bcp", "edge1", "edge2")]
+    )

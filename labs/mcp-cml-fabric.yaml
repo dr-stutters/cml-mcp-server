@@ -1,0 +1,991 @@
+annotations:
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: true
+    text_content: |-
+      cml-mcp-server recipe: fabric
+      3x cat9000v-uadp fabric underlay (bcp 198.18.128.197, edge1 .198, edge2 .199; OSPF, Loopback0 RLOCs) + fusion router + Alpine client on edge1 Gi1/0/3, discoverable by Catalyst Center
+      Verify: cml_verify_recipe(recipe='fabric')
+    text_font: monospace
+    text_italic: false
+    text_size: 10
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: -340.0
+    y1: -492.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: |-
+      Address plan
+      bcp GigabitEthernet1/0/1: 198.18.128.197/18 (management, gateway 198.18.128.1)
+      edge1 GigabitEthernet1/0/1: 198.18.128.198/18 (management)
+      edge2 GigabitEthernet1/0/1: 198.18.128.199/18 (management)
+      Loopback0 (RLOC): bcp 10.255.255.11, edge1 .12, edge2 .13, fusion .14 (/32)
+      underlay: bcp-edge1 10.255.20.0/30 (.1/.2), bcp-edge2 10.255.20.4/30 (.5/.6), bcp-fusion 10.255.20.8/30 (.9/.10), OSPF area 0
+      fabric client pool (to create in CatC): 10.10.40.0/24, anycast gateway 10.10.40.1, DHCP server 10.255.255.14 (fusion)
+      client: Alpine on edge1 GigabitEthernet1/0/3 (unconfigured access port; assign it in CatC), DHCP
+    text_font: monospace
+    text_italic: false
+    text_size: 10
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: -340.0
+    y1: -424.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: 'Credentials: not shown here. See cml_list_recipes(recipe=''fabric'')
+      -> credentials.where (keys: cli, client, netconf, snmp_v2c)'
+    text_font: monospace
+    text_italic: false
+    text_size: 10
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: -340.0
+    y1: -276.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: |-
+      Lo0 10.255.255.11/32
+      Gi1/0/1 198.18.128.197/18
+      Gi1/0/2 10.255.20.1/30
+      Gi1/0/3 10.255.20.5/30
+      Gi1/0/4 10.255.20.9/30
+    text_font: monospace
+    text_italic: false
+    text_size: 9
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: -60.0
+    y1: 160.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: |-
+      Lo0 10.255.255.12/32
+      Gi1/0/1 198.18.128.198/18
+      Gi1/0/2 10.255.20.2/30
+    text_font: monospace
+    text_italic: false
+    text_size: 9
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: -300.0
+    y1: 340.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: |-
+      Lo0 10.255.255.13/32
+      Gi1/0/1 198.18.128.199/18
+      Gi1/0/2 10.255.20.6/30
+    text_font: monospace
+    text_italic: false
+    text_size: 9
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: 180.0
+    y1: 340.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: |-
+      Lo0 10.255.255.14/32
+      E0/0 10.255.20.10/30
+    text_font: monospace
+    text_italic: false
+    text_size: 9
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: 180.0
+    y1: 160.0
+    z_index: 42
+smart_annotations: []
+nodes:
+  - boot_disk_size: null
+    configuration:
+      - name: default
+        content: System Bridge
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n0
+    image_definition: null
+    label: ext
+    node_definition: external_connector
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 0
+    y: -160
+    interfaces:
+      - id: i0
+        label: port
+        mac_address: null
+        type: physical
+        slot: 0
+  - boot_disk_size: null
+    configuration: []
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n1
+    image_definition: null
+    label: mgmt-sw
+    node_definition: unmanaged_switch
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 0
+    y: -40
+    interfaces:
+      - id: i0
+        label: port0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i1
+        label: port1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i2
+        label: port2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i3
+        label: port3
+        mac_address: null
+        type: physical
+        slot: 3
+      - id: i4
+        label: port4
+        mac_address: null
+        type: physical
+        slot: 4
+      - id: i5
+        label: port5
+        mac_address: null
+        type: physical
+        slot: 5
+      - id: i6
+        label: port6
+        mac_address: null
+        type: physical
+        slot: 6
+      - id: i7
+        label: port7
+        mac_address: null
+        type: physical
+        slot: 7
+  - boot_disk_size: null
+    configuration:
+      - name: iosxe_config.txt
+        content: |-
+          hostname mcp-fab-bcp
+          ip domain name mcp.lab
+          no ip domain lookup
+          ip routing
+          system mtu 9100
+          username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+          enable secret ${LAB_CLI_PASSWORD}
+          aaa new-model
+          aaa authentication login default local
+          aaa authentication login CONSOLE local
+          aaa authorization exec default local
+          interface Loopback0
+           ip address 10.255.255.11 255.255.255.255
+           ip ospf 1 area 0
+          interface GigabitEthernet1/0/1
+           description management to dCloud 198.18.128.0/18
+           no switchport
+           ip address 198.18.128.197 255.255.192.0
+           no shutdown
+          interface GigabitEthernet1/0/2
+           description underlay to edge1
+           no switchport
+           ip address 10.255.20.1 255.255.255.252
+           ip ospf network point-to-point
+           ip ospf 1 area 0
+           no shutdown
+          interface GigabitEthernet1/0/3
+           description underlay to edge2
+           no switchport
+           ip address 10.255.20.5 255.255.255.252
+           ip ospf network point-to-point
+           ip ospf 1 area 0
+           no shutdown
+          interface GigabitEthernet1/0/4
+           description underlay to fusion
+           no switchport
+           ip address 10.255.20.9 255.255.255.252
+           ip ospf network point-to-point
+           ip ospf 1 area 0
+           no shutdown
+          router ospf 1
+           router-id 10.255.255.11
+           passive-interface GigabitEthernet1/0/1
+          ip route 0.0.0.0 0.0.0.0 198.18.128.1
+          crypto key generate rsa modulus 2048
+          ip ssh version 2
+          netconf-yang
+          snmp-server community ${LAB_SNMP_RO} RO
+          snmp-server community ${LAB_SNMP_RW} RW
+          line con 0
+           exec-timeout 0 0
+           logging synchronous
+           login authentication CONSOLE
+          line vty 0 15
+           transport input ssh
+          end
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n2
+    image_definition: null
+    label: bcp
+    node_definition: cat9000v-uadp
+    parameters: {}
+    priority: null
+    pyats:
+      username: netadmin
+      password: ${LAB_CLI_PASSWORD}
+      enable_password: ${LAB_CLI_PASSWORD}
+    ram: null
+    tags: []
+    x: 0
+    y: 120
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: GigabitEthernet0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet1/0/1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet1/0/2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet1/0/3
+        mac_address: null
+        type: physical
+        slot: 3
+      - id: i5
+        label: GigabitEthernet1/0/4
+        mac_address: null
+        type: physical
+        slot: 4
+      - id: i6
+        label: GigabitEthernet1/0/5
+        mac_address: null
+        type: physical
+        slot: 5
+      - id: i7
+        label: GigabitEthernet1/0/6
+        mac_address: null
+        type: physical
+        slot: 6
+      - id: i8
+        label: GigabitEthernet1/0/7
+        mac_address: null
+        type: physical
+        slot: 7
+      - id: i9
+        label: GigabitEthernet1/0/8
+        mac_address: null
+        type: physical
+        slot: 8
+      - id: i10
+        label: GigabitEthernet1/0/9
+        mac_address: null
+        type: physical
+        slot: 9
+      - id: i11
+        label: GigabitEthernet1/0/10
+        mac_address: null
+        type: physical
+        slot: 10
+      - id: i12
+        label: GigabitEthernet1/0/11
+        mac_address: null
+        type: physical
+        slot: 11
+      - id: i13
+        label: GigabitEthernet1/0/12
+        mac_address: null
+        type: physical
+        slot: 12
+      - id: i14
+        label: GigabitEthernet1/0/13
+        mac_address: null
+        type: physical
+        slot: 13
+      - id: i15
+        label: GigabitEthernet1/0/14
+        mac_address: null
+        type: physical
+        slot: 14
+      - id: i16
+        label: GigabitEthernet1/0/15
+        mac_address: null
+        type: physical
+        slot: 15
+      - id: i17
+        label: GigabitEthernet1/0/16
+        mac_address: null
+        type: physical
+        slot: 16
+      - id: i18
+        label: GigabitEthernet1/0/17
+        mac_address: null
+        type: physical
+        slot: 17
+      - id: i19
+        label: GigabitEthernet1/0/18
+        mac_address: null
+        type: physical
+        slot: 18
+      - id: i20
+        label: GigabitEthernet1/0/19
+        mac_address: null
+        type: physical
+        slot: 19
+      - id: i21
+        label: GigabitEthernet1/0/20
+        mac_address: null
+        type: physical
+        slot: 20
+      - id: i22
+        label: GigabitEthernet1/0/21
+        mac_address: null
+        type: physical
+        slot: 21
+      - id: i23
+        label: GigabitEthernet1/0/22
+        mac_address: null
+        type: physical
+        slot: 22
+      - id: i24
+        label: GigabitEthernet1/0/23
+        mac_address: null
+        type: physical
+        slot: 23
+      - id: i25
+        label: GigabitEthernet1/0/24
+        mac_address: null
+        type: physical
+        slot: 24
+  - boot_disk_size: null
+    configuration:
+      - name: iosxe_config.txt
+        content: |-
+          hostname mcp-fab-edge1
+          ip domain name mcp.lab
+          no ip domain lookup
+          ip routing
+          system mtu 9100
+          username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+          enable secret ${LAB_CLI_PASSWORD}
+          aaa new-model
+          aaa authentication login default local
+          aaa authentication login CONSOLE local
+          aaa authorization exec default local
+          interface Loopback0
+           ip address 10.255.255.12 255.255.255.255
+           ip ospf 1 area 0
+          interface GigabitEthernet1/0/1
+           description management to dCloud 198.18.128.0/18
+           no switchport
+           ip address 198.18.128.198 255.255.192.0
+           no shutdown
+          interface GigabitEthernet1/0/2
+           description underlay to bcp
+           no switchport
+           ip address 10.255.20.2 255.255.255.252
+           ip ospf network point-to-point
+           ip ospf 1 area 0
+           no shutdown
+          router ospf 1
+           router-id 10.255.255.12
+           passive-interface GigabitEthernet1/0/1
+          ip route 0.0.0.0 0.0.0.0 198.18.128.1
+          crypto key generate rsa modulus 2048
+          ip ssh version 2
+          netconf-yang
+          snmp-server community ${LAB_SNMP_RO} RO
+          snmp-server community ${LAB_SNMP_RW} RW
+          line con 0
+           exec-timeout 0 0
+           logging synchronous
+           login authentication CONSOLE
+          line vty 0 15
+           transport input ssh
+          end
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n3
+    image_definition: null
+    label: edge1
+    node_definition: cat9000v-uadp
+    parameters: {}
+    priority: null
+    pyats:
+      username: netadmin
+      password: ${LAB_CLI_PASSWORD}
+      enable_password: ${LAB_CLI_PASSWORD}
+    ram: null
+    tags: []
+    x: -240
+    y: 300
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: GigabitEthernet0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet1/0/1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet1/0/2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet1/0/3
+        mac_address: null
+        type: physical
+        slot: 3
+      - id: i5
+        label: GigabitEthernet1/0/4
+        mac_address: null
+        type: physical
+        slot: 4
+      - id: i6
+        label: GigabitEthernet1/0/5
+        mac_address: null
+        type: physical
+        slot: 5
+      - id: i7
+        label: GigabitEthernet1/0/6
+        mac_address: null
+        type: physical
+        slot: 6
+      - id: i8
+        label: GigabitEthernet1/0/7
+        mac_address: null
+        type: physical
+        slot: 7
+      - id: i9
+        label: GigabitEthernet1/0/8
+        mac_address: null
+        type: physical
+        slot: 8
+      - id: i10
+        label: GigabitEthernet1/0/9
+        mac_address: null
+        type: physical
+        slot: 9
+      - id: i11
+        label: GigabitEthernet1/0/10
+        mac_address: null
+        type: physical
+        slot: 10
+      - id: i12
+        label: GigabitEthernet1/0/11
+        mac_address: null
+        type: physical
+        slot: 11
+      - id: i13
+        label: GigabitEthernet1/0/12
+        mac_address: null
+        type: physical
+        slot: 12
+      - id: i14
+        label: GigabitEthernet1/0/13
+        mac_address: null
+        type: physical
+        slot: 13
+      - id: i15
+        label: GigabitEthernet1/0/14
+        mac_address: null
+        type: physical
+        slot: 14
+      - id: i16
+        label: GigabitEthernet1/0/15
+        mac_address: null
+        type: physical
+        slot: 15
+      - id: i17
+        label: GigabitEthernet1/0/16
+        mac_address: null
+        type: physical
+        slot: 16
+      - id: i18
+        label: GigabitEthernet1/0/17
+        mac_address: null
+        type: physical
+        slot: 17
+      - id: i19
+        label: GigabitEthernet1/0/18
+        mac_address: null
+        type: physical
+        slot: 18
+      - id: i20
+        label: GigabitEthernet1/0/19
+        mac_address: null
+        type: physical
+        slot: 19
+      - id: i21
+        label: GigabitEthernet1/0/20
+        mac_address: null
+        type: physical
+        slot: 20
+      - id: i22
+        label: GigabitEthernet1/0/21
+        mac_address: null
+        type: physical
+        slot: 21
+      - id: i23
+        label: GigabitEthernet1/0/22
+        mac_address: null
+        type: physical
+        slot: 22
+      - id: i24
+        label: GigabitEthernet1/0/23
+        mac_address: null
+        type: physical
+        slot: 23
+      - id: i25
+        label: GigabitEthernet1/0/24
+        mac_address: null
+        type: physical
+        slot: 24
+  - boot_disk_size: null
+    configuration:
+      - name: iosxe_config.txt
+        content: |-
+          hostname mcp-fab-edge2
+          ip domain name mcp.lab
+          no ip domain lookup
+          ip routing
+          system mtu 9100
+          username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+          enable secret ${LAB_CLI_PASSWORD}
+          aaa new-model
+          aaa authentication login default local
+          aaa authentication login CONSOLE local
+          aaa authorization exec default local
+          interface Loopback0
+           ip address 10.255.255.13 255.255.255.255
+           ip ospf 1 area 0
+          interface GigabitEthernet1/0/1
+           description management to dCloud 198.18.128.0/18
+           no switchport
+           ip address 198.18.128.199 255.255.192.0
+           no shutdown
+          interface GigabitEthernet1/0/2
+           description underlay to bcp
+           no switchport
+           ip address 10.255.20.6 255.255.255.252
+           ip ospf network point-to-point
+           ip ospf 1 area 0
+           no shutdown
+          router ospf 1
+           router-id 10.255.255.13
+           passive-interface GigabitEthernet1/0/1
+          ip route 0.0.0.0 0.0.0.0 198.18.128.1
+          crypto key generate rsa modulus 2048
+          ip ssh version 2
+          netconf-yang
+          snmp-server community ${LAB_SNMP_RO} RO
+          snmp-server community ${LAB_SNMP_RW} RW
+          line con 0
+           exec-timeout 0 0
+           logging synchronous
+           login authentication CONSOLE
+          line vty 0 15
+           transport input ssh
+          end
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n4
+    image_definition: null
+    label: edge2
+    node_definition: cat9000v-uadp
+    parameters: {}
+    priority: null
+    pyats:
+      username: netadmin
+      password: ${LAB_CLI_PASSWORD}
+      enable_password: ${LAB_CLI_PASSWORD}
+    ram: null
+    tags: []
+    x: 240
+    y: 300
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: GigabitEthernet0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet1/0/1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet1/0/2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet1/0/3
+        mac_address: null
+        type: physical
+        slot: 3
+      - id: i5
+        label: GigabitEthernet1/0/4
+        mac_address: null
+        type: physical
+        slot: 4
+      - id: i6
+        label: GigabitEthernet1/0/5
+        mac_address: null
+        type: physical
+        slot: 5
+      - id: i7
+        label: GigabitEthernet1/0/6
+        mac_address: null
+        type: physical
+        slot: 6
+      - id: i8
+        label: GigabitEthernet1/0/7
+        mac_address: null
+        type: physical
+        slot: 7
+      - id: i9
+        label: GigabitEthernet1/0/8
+        mac_address: null
+        type: physical
+        slot: 8
+      - id: i10
+        label: GigabitEthernet1/0/9
+        mac_address: null
+        type: physical
+        slot: 9
+      - id: i11
+        label: GigabitEthernet1/0/10
+        mac_address: null
+        type: physical
+        slot: 10
+      - id: i12
+        label: GigabitEthernet1/0/11
+        mac_address: null
+        type: physical
+        slot: 11
+      - id: i13
+        label: GigabitEthernet1/0/12
+        mac_address: null
+        type: physical
+        slot: 12
+      - id: i14
+        label: GigabitEthernet1/0/13
+        mac_address: null
+        type: physical
+        slot: 13
+      - id: i15
+        label: GigabitEthernet1/0/14
+        mac_address: null
+        type: physical
+        slot: 14
+      - id: i16
+        label: GigabitEthernet1/0/15
+        mac_address: null
+        type: physical
+        slot: 15
+      - id: i17
+        label: GigabitEthernet1/0/16
+        mac_address: null
+        type: physical
+        slot: 16
+      - id: i18
+        label: GigabitEthernet1/0/17
+        mac_address: null
+        type: physical
+        slot: 17
+      - id: i19
+        label: GigabitEthernet1/0/18
+        mac_address: null
+        type: physical
+        slot: 18
+      - id: i20
+        label: GigabitEthernet1/0/19
+        mac_address: null
+        type: physical
+        slot: 19
+      - id: i21
+        label: GigabitEthernet1/0/20
+        mac_address: null
+        type: physical
+        slot: 20
+      - id: i22
+        label: GigabitEthernet1/0/21
+        mac_address: null
+        type: physical
+        slot: 21
+      - id: i23
+        label: GigabitEthernet1/0/22
+        mac_address: null
+        type: physical
+        slot: 22
+      - id: i24
+        label: GigabitEthernet1/0/23
+        mac_address: null
+        type: physical
+        slot: 23
+      - id: i25
+        label: GigabitEthernet1/0/24
+        mac_address: null
+        type: physical
+        slot: 24
+  - boot_disk_size: null
+    configuration:
+      - name: ios_config.txt
+        content: |-
+          hostname mcp-fab-fusion
+          no ip domain lookup
+          username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+          enable secret ${LAB_CLI_PASSWORD}
+          interface Loopback0
+           ip address 10.255.255.14 255.255.255.255
+           ip ospf 1 area 0
+          interface Ethernet0/0
+           description handoff to bcp
+           ip address 10.255.20.10 255.255.255.252
+           ip ospf network point-to-point
+           ip ospf 1 area 0
+           no shutdown
+          router ospf 1
+           router-id 10.255.255.14
+          ! DHCP for the fabric client pool (CatC: IP pool 10.10.40.0/24, anycast gateway 10.10.40.1, DHCP server 10.255.255.14)
+          ip dhcp excluded-address 10.10.40.1 10.10.40.99
+          ip dhcp pool MCP-FABRIC-CLIENTS
+           network 10.10.40.0 255.255.255.0
+           default-router 10.10.40.1
+          line con 0
+           exec-timeout 0 0
+           logging synchronous
+          end
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n5
+    image_definition: null
+    label: fusion
+    node_definition: iol-xe
+    parameters: {}
+    priority: null
+    pyats:
+      username: netadmin
+      password: ${LAB_CLI_PASSWORD}
+      enable_password: ${LAB_CLI_PASSWORD}
+    ram: null
+    tags: []
+    x: 240
+    y: 120
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: Ethernet0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: Ethernet0/1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: Ethernet0/2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: Ethernet0/3
+        mac_address: null
+        type: physical
+        slot: 3
+  - boot_disk_size: null
+    configuration:
+      - name: node.cfg
+        content: |-
+          # this is a shell script which will be sourced at boot
+          hostname client
+          USERNAME=cisco
+          PASSWORD=cisco
+          ip link set eth0 up
+          # DHCP once CatC assigns the edge port to the fabric pool; retries in the background (never block)
+          (udhcpc -i eth0 -f -t 0 -T 10 >/dev/null 2>&1 &)
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n6
+    image_definition: null
+    label: client
+    node_definition: alpine
+    parameters: {}
+    priority: null
+    pyats:
+      username: cisco
+      password: cisco
+      enable_password: null
+    ram: null
+    tags: []
+    x: -240
+    y: 460
+    interfaces:
+      - id: i0
+        label: eth0
+        mac_address: null
+        type: physical
+        slot: 0
+links:
+  - id: l0
+    n1: n0
+    n2: n1
+    i1: i0
+    i2: i0
+    conditioning: {}
+    label: ext-port<->mgmt-sw-port0
+  - id: l1
+    n1: n2
+    n2: n1
+    i1: i2
+    i2: i1
+    conditioning: {}
+    label: bcp-GigabitEthernet1/0/1<->mgmt-sw-port1
+  - id: l2
+    n1: n3
+    n2: n1
+    i1: i2
+    i2: i2
+    conditioning: {}
+    label: edge1-GigabitEthernet1/0/1<->mgmt-sw-port2
+  - id: l3
+    n1: n4
+    n2: n1
+    i1: i2
+    i2: i3
+    conditioning: {}
+    label: edge2-GigabitEthernet1/0/1<->mgmt-sw-port3
+  - id: l4
+    n1: n2
+    n2: n3
+    i1: i3
+    i2: i3
+    conditioning: {}
+    label: bcp-GigabitEthernet1/0/2<->edge1-GigabitEthernet1/0/2
+  - id: l5
+    n1: n2
+    n2: n4
+    i1: i4
+    i2: i3
+    conditioning: {}
+    label: bcp-GigabitEthernet1/0/3<->edge2-GigabitEthernet1/0/2
+  - id: l6
+    n1: n2
+    n2: n5
+    i1: i5
+    i2: i1
+    conditioning: {}
+    label: bcp-GigabitEthernet1/0/4<->fusion-Ethernet0/0
+  - id: l7
+    n1: n3
+    n2: n6
+    i1: i4
+    i2: i0
+    conditioning: {}
+    label: edge1-GigabitEthernet1/0/3<->client-eth0
+lab:
+  description: SD-Access-style fabric underlay for Catalyst Center (cml-mcp-server
+    recipe fabric)
+  notes: ''
+  title: mcp-cml-fabric
+  node_staging:
+    enabled: false
+    start_remaining: true
+    abort_on_failure: false
+  version: 0.3.1
