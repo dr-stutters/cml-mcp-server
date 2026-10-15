@@ -101,13 +101,16 @@ def test_licence_blocker() -> None:
 
 
 def ftd() -> Callable[[str], str]:
+    state = {"in": False}
+
     def reply(text: str) -> str:
         cmd = text.rstrip("\r")
         if cmd == "":
-            return "\r\nmcp-ftd1 login: "
+            return "\r\n> " if state["in"] else "\r\nmcp-ftd1 login: "
         if cmd == "admin":
             return "admin\r\nPassword: "
         if cmd == "pw":
+            state["in"] = True
             return "\r\nCopyright...\r\n> "
         if cmd == "enable":
             return "enable\r\nSyntax error: Illegal command line\r\n> "
@@ -117,6 +120,10 @@ def ftd() -> Callable[[str], str]:
             return "yes\r\nManager successfully deleted.\r\n> "
         if cmd == "ping system 1.1.1.1":
             return f"{cmd}\r\n64 bytes from 1.1.1.1: icmp_seq=1\r\n"
+        if cmd == "show interface bogus":
+            return f"{cmd}\r\nSyntax error: Illegal command line\r\n> show interface bogus"
+        if cmd == "\x15":
+            return "\r\x1b[K> "
         if cmd == "\x03":
             return "^C\r\n1 packets transmitted, 1 received, 0% packet loss\r\n> "
         return f"{cmd}\r\noutput\r\n> "
@@ -134,6 +141,38 @@ async def test_ftd_login_skips_enable_and_answers_questions() -> None:
     dev.queue.put_nowait("\r\n> ")
     out = await s.run("configure manager delete", answer_questions=True)
     assert "successfully deleted" in out and "yes\r" in dev.written
+
+
+async def test_ftd_refilled_command_after_syntax_error_is_cleared() -> None:
+    dev = FakeDevice(ftd())
+    s = ConsoleSession(dev, Credentials("admin", "pw", os="fxos"), timeout=2)
+    await s.wake()
+    out = await s.run("show interface bogus")
+    assert "Syntax error: Illegal command line" in out and "\x15" in dev.written
+    assert dev.written[dev.written.index("\x15") + 1] == "\r"  # fresh prompt, line already cleared
+    assert "show interface bogus" not in out.splitlines()[-1]
+    assert "output" in await s.run("show version")  # the session is usable afterwards
+
+
+async def test_refill_detection_ignores_ordinary_output() -> None:
+    def reply(text: str) -> str:
+        cmd = text.rstrip("\r")
+        if cmd == "show log":
+            return f"{cmd}\r\nSyntax error: Illegal command line\r\n> show other\r\nmore\r\n> "
+        return ftd()(text)
+
+    dev = FakeDevice(reply)
+    s = ConsoleSession(dev, Credentials("admin", "pw", os="fxos"), timeout=2)
+    await s.wake()
+    out = await s.run("show log")  # the '> show other' line isn't the command we sent
+    assert "more" in out and "\x15" not in dev.written
+    ios_dev = FakeDevice(ftd())  # non-FTD sessions never look for refills
+    s2 = ConsoleSession(ios_dev, Credentials("admin", "pw", os="ios"), timeout=1)
+    s2.prompt = ">"
+    s2.at_prompt = True
+    with pytest.raises(UpstreamError):
+        await s2.run("show interface bogus")
+    assert "\x15" not in ios_dev.written
 
 
 async def test_interrupt_after_sends_ctrl_c() -> None:

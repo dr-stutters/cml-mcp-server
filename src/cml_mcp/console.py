@@ -31,6 +31,11 @@ PASSWORD = re.compile(r"password\s*:\s*$", re.IGNORECASE)
 NEW_PASSWORD = re.compile(r"(?:enter|confirm) new password\s*:\s*$", re.IGNORECASE)
 PRESS_RETURN = re.compile(r"press return to get started", re.IGNORECASE)
 # A login prompt on its own final line ('Username:', 'h1 login:'): a session that was logged out.
+# FTD (clish) answers a bad command with 'Syntax error: ...' and then re-prints the prompt with the
+# rejected command already typed in, waiting for an edit: there's no bare prompt to wait for.
+# Only checked on FTD sessions, and only when the last line is the prompt plus the command just sent.
+REFILLED = re.compile(r"(?m)^Syntax error[^\n]*\n(?P<line>[^\n]*)$")
+REFILL_OS = ("fxos", "ftd")
 LOGIN_LINE = re.compile(r"(?:^|\n)[ \t]*(?:[\w.-]+[ \t]+)?(?:username|login)[ \t]*:[ \t]*$", re.IGNORECASE)
 PRESS_RETURN_LINE = re.compile(r"press return to get started!?[ \t]*\n?[ \t]*$", re.IGNORECASE)
 # How long the device must stay quiet after a login-looking tail before it counts as a lost session.
@@ -469,9 +474,25 @@ class ConsoleSession:
                 LOGIN_LINE.search(tail) or PRESS_RETURN_LINE.search(tail) or CONFIG_DIALOG.search(tail)
             )
 
+        sent = command.strip()
+        refill_os = (self.creds.os or "").lower() in REFILL_OS
+
+        def refilled(r: str) -> bool:
+            """FTD re-typed the rejected command after the prompt: '... Syntax error ...\n> cmd'."""
+            if not refill_os:
+                return False
+            m = REFILLED.search(r[-400:])
+            if not m:
+                return False
+            line = m.group("line").rstrip()
+            head = line[: -len(sent)].rstrip() if sent and line.endswith(sent) else ""
+            return bool(head) and bool(prompt.search("\n" + head))
+
         def finished(t: str) -> bool:
             r = view(t)
-            return r is not None and bool(prompt.search(r) or QUESTION.search(r[-120:]) or logged_out(r))
+            return r is not None and bool(
+                prompt.search(r) or QUESTION.search(r[-120:]) or logged_out(r) or refilled(r)
+            )
 
         while True:
             try:
@@ -490,6 +511,24 @@ class ConsoleSession:
                 raise
             rest = view(text) or ""
             if prompt.search(rest):
+                break
+            if refilled(rest) and not await self._more_output(0.6):
+                # clear the re-typed command (Ctrl-U) so it is never run by a later RETURN
+                self.send("\x15")
+                await self.drain(quiet=0.5, limit=3.0)
+                # a RETURN now gives a fresh prompt; were the line not cleared, it could only repeat the
+                # command FTD already rejected (another syntax error), never run something new
+                self.send("\r")
+                try:
+                    await self.read_until(lambda t: bool(prompt.search(t)), 5)
+                except UpstreamError:
+                    self._cancel_pending()
+                    raise UpstreamTimeout(
+                        f"{self.safe(command)!r} was rejected and the console did not clear the re-typed "
+                        "command; the line was cancelled with Ctrl-C"
+                    ) from None
+                head, _, refill = rest.rpartition("\n")
+                rest = head + "\n" + refill.rstrip()[: -len(sent)].rstrip()  # the bare prompt
                 break
             if logged_out(rest):
                 # ordinary output can end a chunk in 'login:'; a real logout stays quiet

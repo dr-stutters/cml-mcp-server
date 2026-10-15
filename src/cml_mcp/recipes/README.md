@@ -14,16 +14,17 @@ uv run python scripts/recipes.py stop ftd-fmc                      # keep it def
 uv run python scripts/recipes.py start catc-routers                # bring a stopped recipe back
 ```
 
-All three attach to the dCloud network (198.18.128.0/18, gateway 198.18.128.1) through the
+All of them attach to the dCloud network (198.18.128.0/18, gateway 198.18.128.1) through the
 `System Bridge` external connector (layer 2 on the controller's `ens192`; CML snoops addresses there).
 
 | Recipe | Lab | Licensed nodes | Addresses | For |
 |---|---|---:|---|---|
 | `ftd-fmc` | `mcp-cml-ftd` | 1 (ftdv, 8 GB, 4 vCPU) | ftd1 mgmt 198.18.128.151 | FMC 198.18.134.76, reg key `***REDACTED***` |
 | `catc-routers` | `mcp-cml-catc` | 2 (cat8000v) | r1 198.18.128.152, r2 198.18.128.153 | Catalyst Center 198.18.128.11 discovery |
+| `ftd-ha` | `mcp-cml-ftd-ha` | 3 (2x ftdv + alpine) | ftd-a 198.18.128.190, ftd-b .191 (not registered) | FMC HA pair tests (`fmc_form_ha`); failover link Gi0/2, state link Gi0/3 |
 | `ise-access` | `mcp-cml-ise` | 2 (cat9000v-uadp 18 GB + alpine) | sw1 198.18.128.154 | ISE 198.18.134.35 RADIUS/802.1X/MAB |
 
-Reserved for recipes: 198.18.128.150-.159 (.150 probe, .155 spare FTD outside, .156-.159 free);
+Reserved for recipes: 198.18.128.150-.159 and (since phase 4) .190-.199: .190/.191 ftd-ha management, .192/.193 ftd-ha outside (suggested), .194 copies of ise-access (`mcp-cml2-ise`); (.150 probe, .155 spare FTD outside, .156-.159 free);
 checked unused by ping/ARP on 2026-10-14.
 
 Running licensed nodes are capped by the controller's licence (external connectors and unmanaged

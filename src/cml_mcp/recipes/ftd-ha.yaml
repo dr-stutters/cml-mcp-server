@@ -1,0 +1,152 @@
+# Two FTDv on the dCloud network, wired for an FMC-managed high-availability (failover) pair. Day 0 sets
+# management addresses only: neither FTD is told about a manager, so building this lab never touches FMC.
+# Build with scripts/recipes.py, or pass `build:` to cml_build_lab. Boot takes 15-30 minutes.
+name: ftd-ha
+summary: 2x FTDv 10.0 for an FMC HA pair (fmc_form_ha / fmc_ha_action / fmc_break_ha), management 198.18.128.190/.191, not registered to any manager
+address_plan:
+  ftd-a Management0/0: 198.18.128.190/18 (gateway 198.18.128.1, DNS 198.18.133.1) via mgmt-sw + ext-mgmt
+  ftd-b Management0/0: 198.18.128.191/18 (same)
+  note: CML calls the data ports GigabitEthernet0/0-0/3; FTD 10 and FMC call them Ethernet0/0-0/3
+  GigabitEthernet0/0 (both): outside, to outside-sw + ext-outside on the dCloud network; suggested 198.18.128.192 active / .193 standby
+  GigabitEthernet0/1 (both): inside, to inside-sw with host inside-host; suggested 10.20.0.1/24 active / .2 standby, host 10.20.0.10/24 (gw 10.20.0.1)
+  GigabitEthernet0/2: failover link, direct cable ftd-a <-> ftd-b; suggested 10.255.0.1/30 / .2
+  GigabitEthernet0/3: stateful failover link, direct cable ftd-a <-> ftd-b; suggested 10.255.0.5/30 / .6
+credentials:
+  cli: 'admin / ***REDACTED*** on both FTDs (strong - FTD forces a change of weak day-0 passwords)'
+  inside_host: 'Alpine, login cisco / cisco'
+fmc_side: >-
+  Not registered on purpose. To use it with FMC: on each FTD run 'configure manager add 198.18.134.76 <regkey>'
+  (cml_configure_node mode='exec'), then fmc_register_device for 198.18.128.190 and .191 with that key, assign
+  the same access policy and licences, then fmc_form_ha with Ethernet0/2 (CML GigabitEthernet0/2) as the failover link and
+  Ethernet0/3 as the state link. Test failover with cml_apply_link_scenario(scenario='flap') on
+  'ftd-a:GigabitEthernet0/2<->ftd-b:GigabitEthernet0/2' or by stopping ftd-a; undo with fmc_break_ha and
+  'configure manager delete' on both.
+boot_minutes: 15-30
+verified: 2026-10-15 - verify 14/14 (both FTDs BOOTED about 5 min after start), both reach 198.18.128.1 and FMC 198.18.134.76 from the management interface,
+  'show managers' shows no manager, 'show failover' shows failover off.
+verify:
+  booted: [ftd-a, ftd-b, inside-host]
+  nodes: [ftd-a, ftd-b]
+  targets: [198.18.128.1, 198.18.134.76]
+  vrf: management
+  addresses: {ftd-a: [198.18.128.190], ftd-b: [198.18.128.191]}
+  probes:
+    - name: ftd-a has no manager (recipe never registers to FMC)
+      node: ftd-a
+      command: show managers
+      expect: '(?i)no managers'
+    - name: ftd-b has no manager (recipe never registers to FMC)
+      node: ftd-b
+      command: show managers
+      expect: '(?i)no managers'
+    - name: ftd-a failover not configured yet
+      node: ftd-a
+      command: show failover
+      expect: '(?i)failover off'
+    - {name: ftd-a management SSH (22) from the server, tcp: 198.18.128.190:22}
+    - {name: ftd-b management SSH (22) from the server, tcp: 198.18.128.191:22}
+build:
+  title: mcp-cml-ftd-ha
+  description: 2x FTDv cabled for an FMC HA pair, unregistered (cml-mcp-server recipe ftd-ha)
+  nodes:
+    - label: ext-mgmt
+      definition: external_connector
+      config: System Bridge
+      x: -400
+      y: -160
+    - label: mgmt-sw
+      definition: unmanaged_switch
+      x: -400
+      y: 0
+    - label: ext-outside
+      definition: external_connector
+      config: System Bridge
+      x: 0
+      y: -320
+    - label: outside-sw
+      definition: unmanaged_switch
+      x: 0
+      y: -160
+    - label: ftd-a
+      definition: ftdv
+      x: -200
+      y: 80
+      credentials: {username: admin, password: ***REDACTED***}
+      config: |
+        {
+          "EULA": "accept",
+          "Hostname": "mcp-ftd-a",
+          "AdminPassword": "***REDACTED***",
+          "FirewallMode": "routed",
+          "DNS1": "198.18.133.1",
+          "DNS2": "",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "198.18.128.190",
+          "IPv4Mask": "255.255.192.0",
+          "IPv4Gw": "198.18.128.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "",
+          "FmcRegKey": "",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+        }
+    - label: ftd-b
+      definition: ftdv
+      x: 200
+      y: 80
+      credentials: {username: admin, password: ***REDACTED***}
+      config: |
+        {
+          "EULA": "accept",
+          "Hostname": "mcp-ftd-b",
+          "AdminPassword": "***REDACTED***",
+          "FirewallMode": "routed",
+          "DNS1": "198.18.133.1",
+          "DNS2": "",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "198.18.128.191",
+          "IPv4Mask": "255.255.192.0",
+          "IPv4Gw": "198.18.128.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "",
+          "FmcRegKey": "",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+        }
+    - label: inside-sw
+      definition: unmanaged_switch
+      x: 0
+      y: 280
+    - label: inside-host
+      definition: alpine
+      x: 0
+      y: 440
+      credentials: {username: cisco, password: cisco}
+      config: |
+        # this is a shell script which will be sourced at boot
+        hostname inside-host
+        USERNAME=cisco
+        PASSWORD=cisco
+        ip link set eth0 up
+        ip addr add 10.20.0.10/24 dev eth0
+        ip route add default via 10.20.0.1
+  links:
+    - ext-mgmt mgmt-sw
+    - ftd-a:Management0/0 mgmt-sw
+    - ftd-b:Management0/0 mgmt-sw
+    - ext-outside outside-sw
+    - ftd-a:GigabitEthernet0/0 outside-sw
+    - ftd-b:GigabitEthernet0/0 outside-sw
+    - ftd-a:GigabitEthernet0/1 inside-sw
+    - ftd-b:GigabitEthernet0/1 inside-sw
+    - inside-host:eth0 inside-sw
+    - ftd-a:GigabitEthernet0/2 ftd-b:GigabitEthernet0/2
+    - ftd-a:GigabitEthernet0/3 ftd-b:GigabitEthernet0/3

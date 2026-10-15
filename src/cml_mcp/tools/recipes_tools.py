@@ -221,7 +221,8 @@ def register(reg: ToolRegistrar) -> None:
         recipe: Annotated[
             str,
             Field(
-                description="Recipe name: ftd-fmc (for FMC), catc-routers (Catalyst Center), ise-access (ISE)"
+                description="Recipe name: ftd-fmc (for FMC), ftd-ha (FMC HA pair), catc-routers (Catalyst "
+                "Center), ise-access (ISE)"
             ),
         ],
         reuse: Annotated[
