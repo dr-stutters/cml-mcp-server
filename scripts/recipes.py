@@ -7,6 +7,8 @@
     uv run python scripts/recipes.py stop catc-routers            # stop (keep the lab defined)
     uv run python scripts/recipes.py plan ise-access              # which labs would have to stop
     uv run python scripts/recipes.py swap ise-access [--yes]      # stop those (asks first), start/build it
+    uv run python scripts/recipes.py ci [recipe ...] [--summary FILE] [--build-missing]
+                                    # verify each recipe in turn; stops only the labs it started
 
 Each recipe's `build:` section is exactly the argument set of the cml_build_lab tool, so a model can
 also build it with that one tool call. The script drives the tools the same way a model would
@@ -18,7 +20,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import signal
 import sys
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -87,27 +91,153 @@ async def swap(
         stopped.append(lab["title"])
     if plan["lab"].get("exists") is False:
         print(f"building {title!r}", file=sys.stderr)
-        build = {**recipe["build"], "start": True, "wait": wait, "timeout": limit}
-        started = await call(c, "cml_build_lab", build, write=True)
+        build = {"recipe": name, "start": True, "wait": wait, "timeout": limit}
+        started = await call(c, "cml_build_recipe", build, write=True)
     else:
         print(f"starting {title!r}", file=sys.stderr)
         started = await call(c, "cml_start_lab", {"lab": title, "wait": wait, "timeout": limit}, write=True)
     return {"stopped": stopped, "started": title, "result": started}
 
 
+async def lab_state(c: Client, title: str) -> str | None:
+    data = await call(c, "cml_list_labs", {"response_format": "json", "limit": 500})
+    for row in data.get("results", []):
+        if title in (row.get("title"), row.get("lab_title")):
+            return str(row.get("state"))
+    return None
+
+
+async def ci_one(c: Client, name: str, *, limit: float, build_missing: bool) -> dict[str, Any]:
+    """Verify one recipe, leaving the controller as it was: a lab that was already running is verified
+    as it is; a stopped one is started, verified and stopped again; a missing one is built (with
+    --build-missing), verified, stopped and kept. Never stops another lab to free licences."""
+    recipe = load(name)
+    title = recipe["build"]["title"]
+    row: dict[str, Any] = {
+        "recipe": name,
+        "lab": title,
+        "before": None,
+        "action": "",
+        "result": "",
+        "secs": 0,
+    }
+    t0 = asyncio.get_running_loop().time()
+    started_here = False
+    try:
+        state = row["before"] = await lab_state(c, title)
+        if state == "STARTED":
+            row["action"] = "already running"
+        elif state not in (None, "STOPPED", "DEFINED_ON_CORE"):
+            # QUEUED/BOOTED/...: someone is starting or changing it right now; leave it alone
+            row.update(action="skipped", result=f"lab is {state}; left alone")
+            return row
+        else:
+            plan = await call(c, "cml_plan_licences", {"target": name})
+            if plan["plan"].get("stop"):
+                summary = plan["plan"]["summary"]
+                row.update(action="skipped", result=f"needs licences held by other labs: {summary}")
+                return row
+            if state is None and not build_missing:
+                row.update(action="skipped", result="lab not built (use --build-missing)")
+                return row
+            started_here = True  # before the call: a call that fails half way may still start nodes
+            if state is None:
+                await call(c, "cml_build_recipe", {"recipe": name, "start": True, "wait": False}, write=True)
+                row["action"] = "built+started"
+            else:
+                await call(c, "cml_start_lab", {"lab": title, "wait": False}, write=True)
+                row["action"] = "started"
+            await call(c, "cml_wait_for_converged", {"lab": title, "timeout": limit})
+        out = await call(c, "cml_verify_recipe", {"recipe": name})
+        if not out["passed"]:  # slow data planes (cat9000v): one retry after a pause
+            await asyncio.sleep(180)
+            out = await call(c, "cml_verify_recipe", {"recipe": name})
+        failed = [chk["check"] for chk in out["checks"] if not chk["ok"]]
+        row["result"] = ("PASS " if out["passed"] else "FAIL ") + out["summary"]
+        if failed:
+            row["failed"] = failed
+    except (SystemExit, Exception) as e:  # record it and carry on with the next recipe
+        row["result"] = f"ERROR {type(e).__name__}: {str(e)[:300]}"
+    finally:
+        if started_here:
+            try:
+                if await lab_state(c, title) is not None:
+                    await call(c, "cml_stop_lab", {"lab": title}, write=True)
+                row["action"] += ", stopped again"
+            except (SystemExit, Exception) as e:
+                row["stop_failed"] = True
+                row["action"] += f", STOP FAILED: {str(e)[:200]}"
+        row["secs"] = round(asyncio.get_running_loop().time() - t0)
+    return row
+
+
+def append_text(path: Path, text: str) -> None:
+    with path.open("a") as fh:
+        fh.write(text)
+
+
+def ci_markdown(rows: list[dict[str, Any]]) -> str:
+    lines = [
+        "## Recipe verification",
+        "",
+        "| Recipe | Lab | Before | Action | Result | Seconds |",
+        "|---|---|---|---|---|---:|",
+    ]
+    for r in rows:
+        result = r["result"] + (f" (failed: {', '.join(r['failed'])})" if r.get("failed") else "")
+        result, action = result.replace("|", "\\|"), r["action"].replace("|", "\\|")
+        lines.append(
+            f"| {r['recipe']} | {r['lab']} | {r['before'] or 'not built'} | {action} | {result} "
+            f"| {r['secs']} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 async def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
-        "action", choices=["list", "show", "build", "start", "wait", "verify", "stop", "plan", "swap"]
+        "action", choices=["list", "show", "build", "start", "wait", "verify", "stop", "plan", "swap", "ci"]
     )
-    ap.add_argument("recipe", nargs="?")
+    ap.add_argument("recipe", nargs="*")
     ap.add_argument("--start", action="store_true", help="build: start the lab after building it")
     ap.add_argument("--no-wait", action="store_true", help="build/start: don't wait for the boot")
     ap.add_argument("--recreate", action="store_true", help="build: delete an existing lab first")
     ap.add_argument("--json", action="store_true", help="verify: print the full JSON result")
     ap.add_argument("--yes", action="store_true", help="swap: stop the planned labs without asking")
     ap.add_argument("--timeout", type=float, default=2400, help="seconds to wait for boots")
+    ap.add_argument("--summary", help="ci: append the Markdown result table to this file")
+    ap.add_argument("--build-missing", action="store_true", help="ci: build recipes whose lab doesn't exist")
     args = ap.parse_args()
+    if args.action == "ci":
+        names = args.recipe or recipe_names()
+        for n in names:
+            load(n)
+        settings = live_settings(Settings, "CML_", mcp_enable_writes=True)
+        rows = []
+        # a cancelled CI job sends SIGTERM: cancel, so ci_one's finally stops the lab it started
+        me = asyncio.current_task()
+        if me is not None:
+            asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, me.cancel)
+        async with Client(create_server(settings), timeout=args.timeout + 600) as c:
+            for n in names:
+                print(f"== {n}", file=sys.stderr)
+                rows.append(await ci_one(c, n, limit=args.timeout, build_missing=args.build_missing))
+                print(json.dumps(rows[-1]), file=sys.stderr)
+        md = ci_markdown(rows)
+        print(md)
+        if args.summary:
+            await asyncio.to_thread(append_text, Path(args.summary), md)
+        raise SystemExit(
+            0
+            if all(
+                (r["result"].startswith("PASS") or r["action"] == "skipped") and not r.get("stop_failed")
+                for r in rows
+            )
+            else 1
+        )
+    if len(args.recipe) > 1:
+        sys.exit("give one recipe name")
+    args.recipe = args.recipe[0] if args.recipe else None
     if args.action == "list":
         for name in recipe_names():
             r = get_recipe(name)
@@ -127,9 +257,9 @@ async def main() -> None:
                 if not args.recreate:
                     sys.exit(f"Lab {title!r} exists; use --recreate to rebuild it, or 'start'")
                 await call(c, "cml_delete_lab", {"lab": title, "force": True}, write=True)
-            build = {**recipe["build"], "start": args.start, "wait": not args.no_wait}
+            build = {"recipe": args.recipe, "start": args.start, "wait": not args.no_wait}
             build["timeout"] = args.timeout
-            out = await call(c, "cml_build_lab", build, write=True)
+            out = await call(c, "cml_build_recipe", build, write=True)
         elif args.action == "plan":
             out = await call(c, "cml_plan_licences", {"target": args.recipe})
         elif args.action == "swap":
