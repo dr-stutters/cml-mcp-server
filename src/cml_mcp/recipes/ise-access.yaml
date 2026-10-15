@@ -10,12 +10,12 @@ address_plan:
   eaptls-client ens2 (sw1 Gi1/0/3, access VLAN 10): 10.10.10.50/24 static (802.1X EAP-TLS, identity mcp-eaptls-client)
   eaptls-client ens3: DHCP from the controller's NAT connector (ext-nat), only to install wpasupplicant at first boot
 credentials:
-  cli: netadmin / ***REDACTED*** (enable secret ***REDACTED***), SSH + SNMP v2c mcp-ro / mcp-rw like catc-routers
-  radius_shared_secret: ***REDACTED*** (ISE network device 198.18.128.154, CoA port 1700)
+  cli: netadmin / ${LAB_CLI_PASSWORD} (enable secret ${LAB_CLI_PASSWORD}), SSH + SNMP v2c ${LAB_SNMP_RO} / ${LAB_SNMP_RW} like catc-routers
+  radius_shared_secret: ${LAB_RADIUS_SECRET} (ISE network device 198.18.128.154, CoA port 1700)
   client: Alpine, login cisco / cisco
   eaptls_client: Ubuntu, login cisco / cisco; lab CA + client certificate generated on first boot in /etc/eaptls (no keys in git)
 ise_side: >-
-  Add a network device for sw1 (198.18.128.154, RADIUS secret ***REDACTED***, CoA 1700). MAB: the Alpine client's MAC (cml_list_interfaces).
+  Add a network device for sw1 (198.18.128.154, RADIUS secret ${LAB_RADIUS_SECRET}, CoA 1700). MAB: the Alpine client's MAC (cml_list_interfaces).
   EAP-TLS: the client makes its own lab CA at first boot (CN mcp-test-cml-lab-ca); read it with
   cml_configure_node(node='eaptls-client', mode='exec', lines=['cat /etc/eaptls/ca.pem']) and import it into ISE's trusted
   certificates as mcp-test-cml-lab-ca with 'trust for client authentication'. ISE's Default Network Access allowed
@@ -58,13 +58,13 @@ build:
       definition: cat9000v-uadp
       x: 0
       y: 160
-      credentials: {username: netadmin, password: ***REDACTED***, enable_password: ***REDACTED***}
+      credentials: {username: netadmin, password: "${LAB_CLI_PASSWORD}", enable_password: "${LAB_CLI_PASSWORD}"}
       config: |
         hostname mcp-sw1
         ip domain name mcp.lab
         no ip domain lookup
-        username netadmin privilege 15 secret ***REDACTED***
-        enable secret ***REDACTED***
+        username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+        enable secret ${LAB_CLI_PASSWORD}
         aaa new-model
         aaa authentication login default local
         aaa authentication login CONSOLE local
@@ -74,10 +74,10 @@ build:
         aaa accounting dot1x default start-stop group radius
         aaa accounting update newinfo periodic 2880
         aaa server radius dynamic-author
-         client 198.18.134.35 server-key ***REDACTED***
+         client 198.18.134.35 server-key ${LAB_RADIUS_SECRET}
         radius server ISE
          address ipv4 198.18.134.35 auth-port 1812 acct-port 1813
-         key ***REDACTED***
+         key ${LAB_RADIUS_SECRET}
         radius-server attribute 6 on-for-login-auth
         radius-server attribute 8 include-in-access-req
         radius-server attribute 25 access-request include
@@ -156,8 +156,8 @@ build:
         ip route 0.0.0.0 0.0.0.0 198.18.128.1
         crypto key generate rsa modulus 2048
         ip ssh version 2
-        snmp-server community mcp-ro RO
-        snmp-server community mcp-rw RW
+        snmp-server community ${LAB_SNMP_RO} RO
+        snmp-server community ${LAB_SNMP_RW} RW
         line con 0
          exec-timeout 0 0
          logging synchronous

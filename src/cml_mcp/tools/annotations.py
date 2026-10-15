@@ -16,7 +16,6 @@ from stutters_mcp_core import (
     ToolRegistrar,
     get_client,
     list_result,
-    preview_or_apply,
 )
 from stutters_mcp_core.http import page_of
 
@@ -24,6 +23,7 @@ from cml_mcp.client import CmlApp
 from cml_mcp.licence import licensed
 from cml_mcp.netops import address_commands, console_batch, parse_addresses
 from cml_mcp.recipes import recipe_for_lab
+from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, config_text, load_topo
 from cml_mcp.tools.recipes_tools import recipe_notes
 from cml_mcp.topology import (

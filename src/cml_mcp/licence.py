@@ -7,12 +7,13 @@ so CML_NODE_LICENSE_LIMIT can tell the server what it is.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from collections import Counter
 from typing import Any
 
-from stutters_mcp_core import InvalidRequest, UpstreamError
+from stutters_mcp_core import AuthError, InvalidRequest, NotFound, UpstreamError
 
 from cml_mcp.build import UNLICENSED_DEFINITIONS
 from cml_mcp.client import CmlApp
@@ -104,28 +105,105 @@ def licensed(node: dict[str, Any]) -> bool:
     return str(node.get("node_definition")) not in UNLICENSED_DEFINITIONS
 
 
+NOT_RUNNING_LAB_STATES = ("STOPPED", "DEFINED_ON_CORE")
+NON_ADMIN_SCOPE = (
+    "labs visible to this account only: it is not a CML admin, so other users' running nodes are not "
+    "counted (CML still enforces the controller limit and the account's resource pool)"
+)
+
+
+async def running_nodes(app: CmlApp) -> tuple[list[dict[str, Any]], str | None]:
+    """Every node on the controller (GET /nodes, admin only), or, for a non-admin account, the nodes of
+    the labs it can see, with a note saying the count is partial."""
+    try:
+        nodes: list[dict[str, Any]] = await app.api.get("/nodes", {"operational": "false"})
+        return nodes, None
+    except AuthError:
+        pass
+    labs = [lab for lab in await app.list_labs() if lab.get("state") not in NOT_RUNNING_LAB_STATES]
+    results = await asyncio.gather(*(app.list_nodes(str(lab["id"])) for lab in labs), return_exceptions=True)
+    out: list[dict[str, Any]] = []
+    skipped = 0
+    for lab, res in zip(labs, results, strict=True):
+        if isinstance(res, (AuthError, NotFound)):
+            skipped += 1  # shared without node access, or deleted meanwhile
+            continue
+        if isinstance(res, BaseException):
+            raise res
+        out.extend({**n, "lab_id": n.get("lab_id") or lab["id"]} for n in res)
+    note = NON_ADMIN_SCOPE + (f"; {skipped} lab(s) could not be read" if skipped else "")
+    return out, note
+
+
+async def resource_pool(app: CmlApp) -> dict[str, Any] | None:
+    """The account's resource pool (licence/CPU/RAM limits CML enforces for this user), or None."""
+    try:
+        user = await app.current_user()
+        if not user.get("id") or user.get("admin") is True:
+            return None  # admins aren't limited by a pool in practice; saves two calls per preview
+        me = await app.api.get(f"/users/{user['id']}")
+        pool_id = me.get("resource_pool") if isinstance(me, dict) else None
+        if not pool_id:
+            return None
+        usage = await app.api.get(f"/resource_pool_usage/{pool_id}")
+    except UpstreamError:  # the pool is extra information: never break licence planning over it
+        return None
+    if not isinstance(usage, dict):
+        return None
+    limit = usage.get("limit") or {}
+    used = usage.get("usage") or {}
+    return {
+        "id": pool_id,
+        "label": usage.get("label"),
+        "licenses_limit": limit.get("licenses"),
+        "licenses_used": used.get("licenses"),
+        "ram_mb_limit": limit.get("ram"),
+        "ram_mb_used": used.get("ram"),
+    }
+
+
 async def licence_usage(app: CmlApp) -> dict[str, Any]:
-    """{running_licensed_nodes, by_lab: {title: n}, labs: [{id, title, running, preferred}], limit, free}
-    across every lab on the controller."""
-    nodes: list[dict[str, Any]] = await app.api.get("/nodes", {"operational": "false"})
+    """{running_licensed_nodes, by_lab: {title: n}, labs: [{id, title, running, preferred, own}], limit,
+    free} across every lab on the controller (or every lab the account can see, see `scope`).
+    `free` is the tighter of the controller licence and the account's resource pool."""
+    nodes, scope = await running_nodes(app)
     labs = {lab["id"]: lab for lab in await app.list_labs()}
+    me = (await app.current_user()).get("id")
     running = [n for n in nodes if n.get("state") in RUNNING_STATES and licensed(n)]
     per_lab = Counter(str(n.get("lab_id")) for n in running)
     rows = []
     for lab_id, count in per_lab.most_common():
         lab = labs.get(lab_id, {})
         title = str(lab.get("lab_title") or lab_id)
-        rows.append({"id": lab_id, "title": title, "running": count, "preferred": preferred_to_stop(lab)})
+        row = {"id": lab_id, "title": title, "running": count, "preferred": preferred_to_stop(lab)}
+        if me and lab.get("owner"):
+            row["own"] = lab.get("owner") == me
+        rows.append(row)
     limit, limit_source = await node_limit(app)
     out: dict[str, Any] = {
         "running_licensed_nodes": len(running),
         "by_lab": {r["title"]: r["running"] for r in rows},
         "labs": rows,
     }
+    if scope:
+        out["scope"] = scope
     out["limit_source"] = limit_source
     if limit:
         out["limit"] = limit
         out["free"] = max(0, limit - len(running))
+    pool = await resource_pool(app)
+    if pool:
+        out["resource_pool"] = pool
+        plimit, pused = pool.get("licenses_limit"), pool.get("licenses_used")
+        if isinstance(plimit, int):
+            pfree = max(0, plimit - int(pused or 0))
+            if "free" not in out or pfree < out["free"]:
+                # the pool binds: only this account's own labs free pool licences when stopped
+                out["limit"] = plimit
+                out["free"] = pfree
+                out["running_licensed_nodes"] = int(pused or 0)
+                out["limit_source"] = f"resource pool {pool.get('label')!r} of this account"
+                out["pool_binds"] = True
     return out
 
 
@@ -183,14 +261,28 @@ def licence_blocker(usage: dict[str, Any], needed: int, *, exclude: str | None =
     """A preview blocker when starting `needed` more licensed nodes would exceed the known limit; it
     names the smallest set of labs to stop (see plan_stops)."""
     limit = usage.get("limit")
-    if not limit or needed <= 0 or usage["running_licensed_nodes"] + needed <= limit:
+    if limit is None or needed <= 0 or needed <= usage.get("free", 0):
         return None
     running = ", ".join(f"{t!r} ({n})" for t, n in usage["by_lab"].items()) or "none"
-    stops = plan_stops(usage.get("labs") or [], needed, usage.get("free", 0), exclude=exclude)
+    stops = plan_stops(stop_candidates(usage), needed, usage.get("free", 0), exclude=exclude)
+    where = f"the resource pool ({usage['limit_source']})" if usage.get("pool_binds") else "the licence"
     return (
-        f"Starting needs {needed} node licence(s) but only {usage.get('free', 0)} of {limit} are free "
-        f"(running: {running}). {plan_text(stops)} External connectors and unmanaged switches don't count."
+        f"Starting needs {needed} node licence(s) but only {usage.get('free', 0)} of {limit} in {where} "
+        f"are free (running: {running}). {plan_text(stops)} External connectors and unmanaged switches "
+        "don't count." + (" Only labs visible to this account are counted." if usage.get("scope") else "")
     )
+
+
+def stop_candidates(usage: dict[str, Any]) -> list[dict[str, Any]]:
+    """Labs whose stopping frees licences for this account: all of them, except when the account's
+    resource pool is the limit (then only its own labs count against it)."""
+    labs: list[dict[str, Any]] = usage.get("labs") or []
+    if not (usage.get("pool_binds") or usage.get("scope")):
+        return labs
+    if any("own" in lab for lab in labs):
+        # a non-admin account can only stop its own labs (and the pool only counts those)
+        return [lab for lab in labs if lab.get("own")]
+    return labs  # ownership unknown: don't claim it's impossible
 
 
 async def explain_licence_error(app: CmlApp, err: UpstreamError, what: str) -> Exception:

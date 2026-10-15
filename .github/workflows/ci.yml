@@ -1,6 +1,25 @@
 name: ci
 on: {push: {branches: [main]}, pull_request: {}}
+permissions:
+  contents: read
 jobs:
   ci:
     uses: dr-stutters/stutters-mcp-core/.github/workflows/python-ci.yml@main
     secrets: inherit
+  secrets-scan:
+    # L21: lab secrets must never be committed. The LAB_* repo secrets hold the lab values (set from
+    # ~/MCP-Suite/lab-secrets.env); the script only reports file:line and the variable name.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Lab secrets in tracked files
+        env:
+          LAB_CLI_PASSWORD: ${{ secrets.LAB_CLI_PASSWORD }}
+          LAB_SNMP_RO: ${{ secrets.LAB_SNMP_RO }}
+          LAB_SNMP_RW: ${{ secrets.LAB_SNMP_RW }}
+          LAB_RADIUS_SECRET: ${{ secrets.LAB_RADIUS_SECRET }}
+          LAB_FTD_REG_KEY: ${{ secrets.LAB_FTD_REG_KEY }}
+          LAB_FTD_ADMIN_PASSWORD: ${{ secrets.LAB_FTD_ADMIN_PASSWORD }}
+          LAB_FTD_HA_ADMIN_PASSWORD: ${{ secrets.LAB_FTD_HA_ADMIN_PASSWORD }}
+          LAB_AD_ADMIN_PASSWORD: ${{ secrets.LAB_AD_ADMIN_PASSWORD }}
+        run: python3 scripts/check_secrets.py --require-values

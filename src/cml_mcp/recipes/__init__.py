@@ -6,6 +6,7 @@ descriptive fields (summary, address plan, credentials, what to configure on the
 
 from __future__ import annotations
 
+import os
 import re
 from functools import cache
 from pathlib import Path
@@ -27,6 +28,92 @@ def _load_all() -> dict[str, dict[str, Any]]:
         if isinstance(data, dict) and isinstance(data.get("build"), dict):
             out[str(data.get("name") or path.stem)] = data
     return out
+
+
+# Secrets in recipes are references: ${LAB_CLI_PASSWORD} etc., the same names as cml-mcp-server/labs/*.yaml.
+PLACEHOLDER = re.compile(r"\$\{(LAB_[A-Z0-9_]+)\}")
+
+
+def placeholders(value: Any) -> set[str]:
+    """Every ${LAB_*} name used anywhere in `value`."""
+    if isinstance(value, dict):
+        return set().union(*(placeholders(v) for v in value.values())) if value else set()
+    if isinstance(value, list):
+        return set().union(*(placeholders(v) for v in value)) if value else set()
+    return set(PLACEHOLDER.findall(value)) if isinstance(value, str) else set()
+
+
+def lab_secrets(secrets_file: str | None) -> dict[str, str]:
+    """LAB_* values: the dotenv-style `secrets_file` (if given and present), overridden by LAB_* env vars."""
+    values: dict[str, str] = {}
+    if secrets_file:
+        path = Path(os.path.expanduser(secrets_file))
+        if path.is_file():
+            from dotenv import dotenv_values
+
+            values.update({k: v for k, v in dotenv_values(path).items() if k.startswith("LAB_") and v})
+    values.update({k: v for k, v in os.environ.items() if k.startswith("LAB_") and v})
+    return values
+
+
+# Values shorter than this are too generic to redact by value (e.g. a vendor default like 'cisco').
+MIN_REDACT_LEN = 6
+
+
+def secret_names_by_value(secrets_file: str | None) -> dict[str, str]:
+    """{value: '${LAB_NAME}'} for every LAB_* value long enough to redact by value, longest first."""
+    values = lab_secrets(secrets_file)
+    pairs = sorted(
+        ((v, f"${{{k}}}") for k, v in values.items() if len(v) >= MIN_REDACT_LEN), key=lambda p: -len(p[0])
+    )
+    return dict(pairs)
+
+
+def redact_values(value: Any, mapping: dict[str, str]) -> Any:
+    """`value` (str/dict/list) with every known lab secret value replaced by its ${LAB_*} reference."""
+    if not mapping:
+        return value
+    if isinstance(value, str):
+        for secret, ref in mapping.items():
+            if secret in value:
+                value = value.replace(secret, ref)
+        return value
+    if isinstance(value, dict):
+        return {k: redact_values(v, mapping) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact_values(v, mapping) for v in value]
+    return value
+
+
+def resolve_secrets(value: Any, secrets_file: str | None, *, what: str = "this recipe") -> Any:
+    """`value` with every ${LAB_*} placeholder filled in. Raises InvalidRequest naming the missing
+    variables (never any value). Only call this on what is sent to CML or used by a probe; previews,
+    listings and annotations keep the placeholders."""
+    names = placeholders(value)
+    if not names:
+        return value
+    values = lab_secrets(secrets_file)
+    missing = sorted(n for n in names if n not in values)
+    multiline = sorted(n for n in names if n in values and ("\n" in values[n] or "\r" in values[n]))
+    if multiline:
+        raise InvalidRequest(f"Lab secret(s) {', '.join(multiline)} contain a line break; one line each.")
+    if missing:
+        raise InvalidRequest(
+            f"{what} needs the lab secret(s) {', '.join(missing)}: set them as environment variables of "
+            "the cml-mcp-server process or in the file named by CML_LAB_SECRETS_FILE (dotenv format, e.g. "
+            "~/MCP-Suite/lab-secrets.env). Recipes never store the values."
+        )
+
+    def walk(v: Any) -> Any:
+        if isinstance(v, dict):
+            return {k: walk(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        if isinstance(v, str):
+            return PLACEHOLDER.sub(lambda m: values[m.group(1)], v)
+        return v
+
+    return walk(value)
 
 
 def recipe_names() -> list[str]:
@@ -71,7 +158,7 @@ def check_substitute(mapping: dict[str, str] | None) -> None:
                     f"substitute {k!r} -> {v!r}: keys and values must be addresses or names "
                     "(letters, digits, . _ : / -; no spaces), 1-64 characters"
                 )
-            if SUBST_DENY.search(part):
+            if SUBST_DENY.search(part) or "LAB_" in part.upper():
                 raise InvalidRequest(f"substitute {k!r} -> {v!r}: credential keywords can't be substituted")
 
 

@@ -3,6 +3,7 @@
     uv run python scripts/seed_lab.py              # create 'mcp-test-seed' if missing
     uv run python scripts/seed_lab.py --start      # ... and start it, waiting until booted
     uv run python scripts/seed_lab.py --recreate   # delete and rebuild it
+    uv run python scripts/seed_lab.py --least-privilege   # only the non-admin users (docs/least-privilege.md)
 
 Topology (all fast-booting Docker/IOL images):
 
@@ -25,6 +26,7 @@ from typing import Any
 from cml_mcp.build import NodeSpec, build_topology, to_yaml
 from cml_mcp.client import CmlApp
 from cml_mcp.config import Settings
+from cml_mcp.least_privilege import seed_least_privilege
 
 TITLE = "mcp-test-seed"
 
@@ -120,6 +122,9 @@ async def delete(app: CmlApp, lab_id: str) -> None:
 async def main(args: argparse.Namespace) -> None:
     app = CmlApp(Settings())  # type: ignore[call-arg]
     try:
+        if args.least_privilege:
+            await seed_least_privilege(app)
+            return
         existing = [lab for lab in await app.list_labs() if lab.get("lab_title") == args.title]
         if existing and args.recreate:
             for lab in existing:
@@ -155,4 +160,9 @@ if __name__ == "__main__":
     parser.add_argument("--title", default=TITLE)
     parser.add_argument("--start", action="store_true", help="start the lab and wait until booted")
     parser.add_argument("--recreate", action="store_true", help="delete and rebuild if it exists")
+    parser.add_argument(
+        "--least-privilege",
+        action="store_true",
+        help="create/update only the non-admin users, groups and resource pools (docs/least-privilege.md)",
+    )
     asyncio.run(main(parser.parse_args(sys.argv[1:])))

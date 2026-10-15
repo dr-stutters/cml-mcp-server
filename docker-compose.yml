@@ -11,7 +11,12 @@ services:
     image: cml-mcp-server:latest
     container_name: cml-mcp-server
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - .env
+      # L21: LAB_* values for the recipes' ${LAB_*} references (cml_build_recipe / cml_verify_recipe);
+      # kept outside the repo. Optional: without it, recipe builds name the missing variables.
+      - path: ${LAB_SECRETS_ENV:-../lab-secrets.env}
+        required: false
     environment:
       MCP_TRANSPORT: http
       MCP_HOST: 0.0.0.0

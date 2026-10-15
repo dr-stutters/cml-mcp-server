@@ -100,7 +100,8 @@ class CmlApp:
             product="CML",
             env_prefix="CML_",
             auth=auth,
-            verify=settings.verify,
+            # TODO(core): ApiClient types verify as bool | str; httpx also takes an SSLContext (pinned cert)
+            verify=settings.tls_verify(),  # type: ignore[arg-type]
             timeout=settings.timeout,
             retries=settings.retries,
             limiter=RateLimiter(settings.rate_limit, settings.max_concurrency or 8),
@@ -183,7 +184,14 @@ class CmlApp:
             out["licensing"] = licensing_summary(lic)
         except UpstreamError as e:  # non-admin users can't read licensing
             out["licensing"] = {"error": str(e)[:200]}
+        if not user.get("admin"):
+            from cml_mcp.licence import resource_pool  # local import: licence imports this module
+
+            out["resource_pool"] = await resource_pool(self)
         labs = await self.api.get("/labs", {"show_all": "true"})
+        from cml_mcp.safety import security_status
+
+        out["security"] = security_status(self.settings)
         out["labs_visible"] = len(labs) if isinstance(labs, list) else None
         return out
 

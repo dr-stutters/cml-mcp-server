@@ -10,7 +10,7 @@ from cml_mcp.licence import capacity_from_licensing, licence_blocker, plan_stops
 from cml_mcp.recipes import get_recipe, recipe_for_lab, recipe_licensed_nodes, recipe_names
 from cml_mcp.server import create_server
 
-from .conftest import make_settings
+from .conftest import TOKEN, make_settings
 
 
 def lab(i: str, running: int, preferred: bool = True) -> dict[str, Any]:
@@ -230,3 +230,101 @@ async def test_unknown_limit_is_not_cached(api: respx.MockRouter) -> None:
     assert (await node_limit(app))[0] == 70  # cached
     app.node_limit_cache = None
     assert (await node_limit(app))[0] == 5
+
+
+# --- L17: non-admin accounts ------------------------------------------------------------------------
+
+ME = "00000000-0000-4000-a000-000000000000"
+POOL = "22222222-2222-4222-8222-222222222222"
+
+
+def _non_admin(api: respx.MockRouter, *, pool_limit: int | None, pool_used: int) -> None:
+    """A non-admin view: /nodes and /licensing are 403, two visible labs (one own, one shared)."""
+    denied = httpx.Response(
+        403, json={"code": 403, "description": "User x does not have permission: not admin."}
+    )
+    api.post("/auth_extended").mock(
+        return_value=httpx.Response(200, json={"username": "op", "id": ME, "token": TOKEN, "admin": False})
+    )
+    api.get("/nodes").mock(return_value=denied)
+    api.get("/licensing").mock(return_value=denied)
+    labs = [
+        {"id": "L-own", "lab_title": "mcp-own", "state": "STARTED", "owner": ME},
+        {"id": "L-shared", "lab_title": "shared demo", "state": "STARTED", "owner": "someone-else"},
+        {"id": "L-off", "lab_title": "mcp-off", "state": "STOPPED", "owner": ME},
+    ]
+    api.get("/labs").mock(return_value=httpx.Response(200, json=labs))
+    booted = {"state": "BOOTED", "node_definition": "iol-xe"}
+    api.get("/labs/L-own/nodes").mock(
+        return_value=httpx.Response(200, json=[{"id": "o1", **booted}, {"id": "o2", **booted}])
+    )
+    api.get("/labs/L-shared/nodes").mock(return_value=httpx.Response(200, json=[{"id": "s1", **booted}]))
+    off = api.get("/labs/L-off/nodes").mock(return_value=httpx.Response(200, json=[]))
+    api.get(f"/users/{ME}").mock(
+        return_value=httpx.Response(
+            200, json={"id": ME, "admin": False, "resource_pool": POOL if pool_limit else None}
+        )
+    )
+    api.get(f"/resource_pool_usage/{POOL}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": POOL,
+                "label": "mcp-pool",
+                "limit": {"licenses": pool_limit},
+                "usage": {"licenses": pool_used},
+            },
+        )
+    )
+    api.get("/labs/L-x/nodes").mock(return_value=httpx.Response(200, json=[]))
+    assert not off.called
+
+
+async def test_non_admin_counts_visible_labs_and_uses_the_pool(api: respx.MockRouter) -> None:
+    _non_admin(api, pool_limit=3, pool_used=2)
+    data = await call_tool(create_server(make_settings()), "cml_plan_licences", {"target": "ftd-fmc"})
+    lic = data["licences"]
+    assert "not a CML admin" in lic["scope"]
+    assert lic["limit"] == 3 and lic["free"] == 1 and "resource pool 'mcp-pool'" in lic["limit_source"]
+    assert lic["by_lab"] == {"mcp-own": 2, "shared demo": 1}
+    assert data["plan"]["feasible"] is True and not data["plan"].get("stop")
+
+
+async def test_non_admin_pool_plan_only_stops_own_labs(api: respx.MockRouter) -> None:
+    _non_admin(api, pool_limit=2, pool_used=2)
+    data = await call_tool(create_server(make_settings()), "cml_plan_licences", {"target": "ftd-fmc"})
+    # the shared lab (1 node) would be the least waste, but it doesn't free this account's pool
+    assert [s["title"] for s in data["plan"]["stop"]] == ["mcp-own"]
+
+
+async def test_non_admin_without_pool_or_licence_has_unknown_limit(api: respx.MockRouter) -> None:
+    _non_admin(api, pool_limit=None, pool_used=0)
+    data = await call_tool(create_server(make_settings()), "cml_plan_licences", {"target": "ftd-fmc"})
+    assert "feasible" not in data["plan"] and "limit is unknown" in data["plan"]["summary"]
+    assert "licensing not readable" in data["licences"]["limit_source"]
+
+
+def test_blocker_with_a_zero_licence_pool() -> None:
+    usage = {
+        "running_licensed_nodes": 0,
+        "by_lab": {},
+        "labs": [],
+        "limit": 0,
+        "free": 0,
+        "pool_binds": True,
+        "limit_source": "resource pool 'viewer' of this account",
+    }
+    text = licence_blocker(usage, 1) or ""
+    assert "only 0 of 0 in the resource pool" in text
+
+
+async def test_get_licensing_explains_admin_only(api: respx.MockRouter) -> None:
+    api.get("/licensing").mock(
+        return_value=httpx.Response(403, json={"code": 403, "description": "not admin"})
+    )
+    from fastmcp import Client
+
+    async with Client(create_server(make_settings())) as c:
+        res = await c.call_tool("cml_get_licensing", {}, raise_on_error=False)
+    text = res.content[0].text  # type: ignore[union-attr]
+    assert res.is_error and "admin-only" in text and "cml_plan_licences" in text

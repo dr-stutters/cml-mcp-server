@@ -44,8 +44,8 @@ def test_bad_contract_is_reported() -> None:
 
 
 def test_snmp_request_shape() -> None:
-    req = snmp_get_sysname_request("mcp-ro")
-    assert req[0] == 0x30 and b"mcp-ro" in req
+    req = snmp_get_sysname_request("fake-ro")
+    assert req[0] == 0x30 and b"fake-ro" in req
 
 
 async def test_tcp_probe_open_and_closed() -> None:
@@ -164,7 +164,7 @@ def _resp(rid: int = 0x4D43, err: int = 0, value: bytes = b"\x04\x06mcp-r1") -> 
 
     vb = _tlv(0x30, _tlv(0x30, _tlv(0x06, SYSNAME_OID) + value))
     pdu = _tlv(0xA2, _tlv(0x02, rid.to_bytes(2, "big")) + _tlv(0x02, bytes([err])) + b"\x02\x01\x00" + vb)
-    return _tlv(0x30, b"\x02\x01\x01" + _tlv(0x04, b"mcp-ro") + pdu)
+    return _tlv(0x30, b"\x02\x01\x01" + _tlv(0x04, b"fake-ro") + pdu)
 
 
 def test_snmp_parser_rejects_bad_replies() -> None:
@@ -191,10 +191,10 @@ async def test_snmp_probe_against_loopback_responder() -> None:
     transport, _ = await loop.create_datagram_endpoint(Responder, local_addr=("127.0.0.1", 0))
     port = transport.get_extra_info("sockname")[1]
     try:
-        ok, detail = await snmp_probe(SnmpProbe(host="127.0.0.1", community="mcp-ro", port=port), timeout=2)
+        ok, detail = await snmp_probe(SnmpProbe(host="127.0.0.1", community="fake-ro", port=port), timeout=2)
     finally:
         transport.close()
-    assert ok and "mcp-r1" in detail and "mcp-ro" not in detail
+    assert ok and "mcp-r1" in detail and "fake-ro" not in detail
     ok, _ = await snmp_probe(SnmpProbe(host="127.0.0.1", community="x", port=port), timeout=1)
     assert ok is False  # nothing listens any more
 
@@ -242,7 +242,7 @@ def test_substituted_rewrites_every_string() -> None:
     "mapping",
     [
         {"secret": "xx"},
-        {"***REDACTED***": "password1"},
+        {"Fake-Cli-Pw9": "password1"},
         {"mcp-test-probe": "x\nconfigure terminal"},
         {"a b": "c"},
         {"": "x"},

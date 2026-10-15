@@ -56,6 +56,14 @@ jobs:
           CML_USERNAME: ${{ secrets.CML_USERNAME }}
           CML_PASSWORD: ${{ secrets.CML_PASSWORD }}
           CML_VERIFY_SSL: "false"
+          # ${LAB_*} recipe secrets (verify probes such as SNMP communities; builds with --build-missing)
+          LAB_CLI_PASSWORD: ${{ secrets.LAB_CLI_PASSWORD }}
+          LAB_SNMP_RO: ${{ secrets.LAB_SNMP_RO }}
+          LAB_SNMP_RW: ${{ secrets.LAB_SNMP_RW }}
+          LAB_RADIUS_SECRET: ${{ secrets.LAB_RADIUS_SECRET }}
+          LAB_FTD_REG_KEY: ${{ secrets.LAB_FTD_REG_KEY }}
+          LAB_FTD_ADMIN_PASSWORD: ${{ secrets.LAB_FTD_ADMIN_PASSWORD }}
+          LAB_FTD_HA_ADMIN_PASSWORD: ${{ secrets.LAB_FTD_HA_ADMIN_PASSWORD }}
           RECIPES: ${{ inputs.recipes }}
           BUILD_MISSING: ${{ inputs.build_missing && '--build-missing' || '' }}
         run: |

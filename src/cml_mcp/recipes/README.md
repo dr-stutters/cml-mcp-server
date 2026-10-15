@@ -19,7 +19,7 @@ All of them attach to the lab network (198.18.128.0/18, gateway 198.18.128.1) th
 
 | Recipe | Lab | Licensed nodes | Addresses | For |
 |---|---|---:|---|---|
-| `ftd-fmc` | `mcp-cml-ftd` | 1 (ftdv, 8 GB, 4 vCPU) | ftd1 mgmt 198.18.128.151 | FMC 198.18.134.76, reg key `***REDACTED***` |
+| `ftd-fmc` | `mcp-cml-ftd` | 1 (ftdv, 8 GB, 4 vCPU) | ftd1 mgmt 198.18.128.151 | FMC 198.18.134.76, reg key `${LAB_FTD_REG_KEY}` |
 | `catc-routers` | `mcp-cml-catc` | 2 (cat8000v) | r1 198.18.128.152, r2 198.18.128.153 | Catalyst Center 198.18.128.11 discovery |
 | `ftd-ha` | `mcp-cml-ftd-ha` | 3 (2x ftdv + alpine) | ftd-a 198.18.128.190, ftd-b .191 (not registered) | FMC HA pair tests (`fmc_form_ha`); failover link Gi0/2, state link Gi0/3 |
 | `ise-access` | `mcp-cml-ise` | 3 (cat9000v-uadp 18 GB + alpine + ubuntu) | sw1 198.18.128.154 | ISE 198.18.134.35 RADIUS, IBNS 2.0 802.1X then MAB; MAB client + EAP-TLS client (self-made lab CA) |
@@ -38,7 +38,7 @@ next to the recipe's own lab (e.g. to try a recipe change while someone uses the
 
 Gotchas found while building them:
 - FTDv forces a password change at first login when the day-0 `AdminPassword` is weak or a
-  dictionary word (`***REDACTED***!` is rejected); the recipe uses a strong one. `cml_run_commands` reports
+  dictionary word (a vendor-style default such as `<Name>123!` is rejected); the recipe uses a strong one. `cml_run_commands` reports
   this case clearly.
 - FTD's `ping system <ip>` (management interface) never stops by itself; use
   `cml_check_reachability(..., vrf='management')`, which interrupts it.
@@ -51,6 +51,17 @@ Gotchas found while building them:
   (import `/etc/eaptls/ca.pem` with trust for client authentication); every rebuild makes a new CA. ISE's
   trusted-certificate import answers 400 "Security Check Failed" when the description contains parentheses.
 - FTD 10 re-types a rejected command after `Syntax error`; the console clears it (Ctrl-U) and returns the error.
+
+## Secrets
+
+Recipes never contain secret values. Device passwords, the FMC registration key, RADIUS keys and SNMP
+communities are written as `${LAB_*}` references, the same names as `labs/*.yaml`:
+`LAB_CLI_PASSWORD`, `LAB_SNMP_RO`, `LAB_SNMP_RW`, `LAB_RADIUS_SECRET`, `LAB_FTD_REG_KEY`,
+`LAB_FTD_ADMIN_PASSWORD`, `LAB_FTD_HA_ADMIN_PASSWORD`. `cml_build_recipe` and `cml_verify_recipe` fill them
+in from `LAB_*` environment variables, or from the dotenv file named by `CML_LAB_SECRETS_FILE`. A missing value
+is an error that names the variable. Previews, `cml_list_recipes` and the lab annotations show only the
+references, and every tool result or error that would contain a resolved value (e.g. reading back a
+built lab's day-0 config) shows the reference instead. `scripts/check_secrets.py` (CI) fails if a value or a literal credential is committed.
 
 ## Verify contracts
 

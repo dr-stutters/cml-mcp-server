@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Non-admin CML accounts (L17): `docs/least-privilege.md` (read account `mcp-cml-viewer`, write account
+  `mcp-cml-operator`, groups, resource pools), `scripts/seed_lab.py --least-privilege`, live test
+  `tests/live/test_least_privilege.py` (read tier as the viewer via core's `read_tier_report`, write tier as the
+  operator). `cml_status` reports the account's resource pool.
+- Recipe secrets scrub (L21): recipes reference `${LAB_*}` instead of carrying lab passwords, keys and
+  communities. They are filled at build/verify time from `LAB_*` environment variables or `CML_LAB_SECRETS_FILE`,
+  with a clear error naming any missing variable; previews, listings and annotations keep the references.
+  `scripts/check_secrets.py` (CI job `secrets-scan`) fails on known lab values (from `LAB_*` repo secrets)
+  and on literal credentials in recipe/lab data. A server middleware replaces any resolved lab secret value with
+  its `${LAB_*}` reference in every tool result and error (a recipe lab's day-0 configs hold the real values).
+
+- CML safety rails (L20, docs/safety.md): `CML_PROTECTED_LABS` (no changes to matching labs), `CML_MANAGED_LABS`
+  (dangerous tools only on matching labs), blast radius = nodes affected on every change (core
+  `MCP_MAX_BLAST_RADIUS`), a `cml_configure_node` deny-list for destructive device commands (on by default;
+  `CML_CONFIG_DENY` adds a regex), certificate pinning for self-signed controllers (`CML_TLS_CHECK_HOSTNAME=false`
+  with `CML_CA_BUNDLE`) and `scripts/pin_controller.py` (certificate + console SSH host key). `cml_status`
+  reports `security`.
+
+### Changed
+- Licence planning and start/build previews work for non-admin accounts: per-lab node counts when `/nodes`
+  is refused (`scope` says the count is partial), and the account's resource pool as the limit when it is
+  tighter or `/licensing` isn't readable (only the account's own labs are proposed for stopping then).
+- `cml_get_licensing` explains that licensing is admin-only.
+- Core pinned to v0.10.0.
+
+### Fixed
+- Consoles of labs shared with a non-admin account were "not found": the console server lists only the
+  account's own labs until `all` is toggled, which the server now does.
+
 ## 0.5.0 - 2026-10-15
 
 Roadmap "Next" (L8-L12). 59 -> 65 tools (read 35 -> 38, write 19 -> 22, dangerous 5).

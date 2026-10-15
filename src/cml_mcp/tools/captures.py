@@ -16,11 +16,11 @@ from stutters_mcp_core import (
     Plan,
     ToolRegistrar,
     get_client,
-    preview_or_apply,
 )
 
 from cml_mcp.client import CmlApp
 from cml_mcp.pcap import PcapError, matches, pcap_truncated, read_pcap, summarise
+from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, LinkRef, shaped
 
 Host = Annotated[str | None, Field(description="Only packets from or to this IP or MAC address")]

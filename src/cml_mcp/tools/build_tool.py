@@ -8,18 +8,20 @@ from fastmcp import Context
 from pydantic import Field
 from stutters_mcp_core import (
     Confirm,
+    InvalidRequest,
     Plan,
     ToolRegistrar,
     UpstreamError,
     get_client,
     get_settings,
-    preview_or_apply,
 )
 
 from cml_mcp.build import UNLICENSED_DEFINITIONS, BuildError, NodeSpec, build_topology, to_yaml
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
 from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage
+from cml_mcp.recipes import redact_values
+from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.lab_writes import Wait, known_definitions, title_taken
 from cml_mcp.tools.smart import Timeout
 
@@ -38,6 +40,7 @@ async def build_lab_flow(
     timeout: float | None,  # noqa: ASYNC109 - overall wait, handled by poll_until
     confirm: str | None,
     annotations: list[dict[str, Any]] | None = None,
+    redact: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Preview/apply a lab build (shared by cml_build_lab and cml_build_recipe)."""
     app: CmlApp = get_client(ctx)
@@ -82,10 +85,23 @@ async def build_lab_flow(
             **({"annotations": len(annotations)} if annotations else {}),
         },
         blockers=blockers,
+        blast_radius=len(nodes),
     )
     limit = timeout or get_settings(ctx).wait_timeout
 
     async def apply() -> Any:
+        """`redact` (lab secret value -> ${LAB_*}): upstream errors and warnings about the imported topology
+        may echo configs; they are cleaned before they reach the audit log or the caller."""
+        if not redact:
+            return await apply_build()
+        try:
+            return redact_values(await apply_build(), redact)
+        except UpstreamError as e:
+            raise UpstreamError(redact_values(str(e), redact), e.status_code) from None
+        except InvalidRequest as e:
+            raise InvalidRequest(redact_values(str(e), redact)) from None
+
+    async def apply_build() -> Any:
         res = await app.api.post(
             "/import",
             None,

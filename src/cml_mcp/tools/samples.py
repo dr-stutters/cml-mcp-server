@@ -14,11 +14,11 @@ from stutters_mcp_core import (
     ToolRegistrar,
     get_client,
     list_result,
-    preview_or_apply,
 )
 from stutters_mcp_core.http import page_of
 
 from cml_mcp.client import CmlApp, pick_one
+from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.lab_writes import known_definitions
 
 
