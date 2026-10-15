@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import signal
 import sys
 from pathlib import Path
 from typing import Any
@@ -124,26 +125,29 @@ async def ci_one(c: Client, name: str, *, limit: float, build_missing: bool) -> 
     started_here = False
     try:
         state = row["before"] = await lab_state(c, title)
-        if state != "STARTED":
+        if state == "STARTED":
+            row["action"] = "already running"
+        elif state not in (None, "STOPPED", "DEFINED_ON_CORE"):
+            # QUEUED/BOOTED/...: someone is starting or changing it right now; leave it alone
+            row.update(action="skipped", result=f"lab is {state}; left alone")
+            return row
+        else:
             plan = await call(c, "cml_plan_licences", {"target": name})
             if plan["plan"].get("stop"):
-                row.update(
-                    action="skipped", result=f"needs licences held by other labs: {plan['plan']['summary']}"
-                )
+                summary = plan["plan"]["summary"]
+                row.update(action="skipped", result=f"needs licences held by other labs: {summary}")
                 return row
+            if state is None and not build_missing:
+                row.update(action="skipped", result="lab not built (use --build-missing)")
+                return row
+            started_here = True  # before the call: a call that fails half way may still start nodes
             if state is None:
-                if not build_missing:
-                    row.update(action="skipped", result="lab not built (use --build-missing)")
-                    return row
                 await call(c, "cml_build_recipe", {"recipe": name, "start": True, "wait": False}, write=True)
                 row["action"] = "built+started"
             else:
                 await call(c, "cml_start_lab", {"lab": title, "wait": False}, write=True)
                 row["action"] = "started"
-            started_here = True
             await call(c, "cml_wait_for_converged", {"lab": title, "timeout": limit})
-        else:
-            row["action"] = "already running"
         out = await call(c, "cml_verify_recipe", {"recipe": name})
         if not out["passed"]:  # slow data planes (cat9000v): one retry after a pause
             await asyncio.sleep(180)
@@ -152,14 +156,16 @@ async def ci_one(c: Client, name: str, *, limit: float, build_missing: bool) -> 
         row["result"] = ("PASS " if out["passed"] else "FAIL ") + out["summary"]
         if failed:
             row["failed"] = failed
-    except SystemExit as e:  # a tool error: record it and carry on with the next recipe
-        row["result"] = f"ERROR {str(e)[:300]}"
+    except (SystemExit, Exception) as e:  # record it and carry on with the next recipe
+        row["result"] = f"ERROR {type(e).__name__}: {str(e)[:300]}"
     finally:
         if started_here:
             try:
-                await call(c, "cml_stop_lab", {"lab": title}, write=True)
+                if await lab_state(c, title) is not None:
+                    await call(c, "cml_stop_lab", {"lab": title}, write=True)
                 row["action"] += ", stopped again"
-            except SystemExit as e:
+            except (SystemExit, Exception) as e:
+                row["stop_failed"] = True
                 row["action"] += f", STOP FAILED: {str(e)[:200]}"
         row["secs"] = round(asyncio.get_running_loop().time() - t0)
     return row
@@ -179,8 +185,9 @@ def ci_markdown(rows: list[dict[str, Any]]) -> str:
     ]
     for r in rows:
         result = r["result"] + (f" (failed: {', '.join(r['failed'])})" if r.get("failed") else "")
+        result, action = result.replace("|", "\\|"), r["action"].replace("|", "\\|")
         lines.append(
-            f"| {r['recipe']} | {r['lab']} | {r['before'] or 'not built'} | {r['action']} | {result} "
+            f"| {r['recipe']} | {r['lab']} | {r['before'] or 'not built'} | {action} | {result} "
             f"| {r['secs']} |"
         )
     return "\n".join(lines) + "\n"
@@ -207,6 +214,10 @@ async def main() -> None:
             load(n)
         settings = live_settings(Settings, "CML_", mcp_enable_writes=True)
         rows = []
+        # a cancelled CI job sends SIGTERM: cancel, so ci_one's finally stops the lab it started
+        me = asyncio.current_task()
+        if me is not None:
+            asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, me.cancel)
         async with Client(create_server(settings), timeout=args.timeout + 600) as c:
             for n in names:
                 print(f"== {n}", file=sys.stderr)
@@ -217,7 +228,12 @@ async def main() -> None:
         if args.summary:
             await asyncio.to_thread(append_text, Path(args.summary), md)
         raise SystemExit(
-            0 if all(r["result"].startswith("PASS") or r["action"] == "skipped" for r in rows) else 1
+            0
+            if all(
+                (r["result"].startswith("PASS") or r["action"] == "skipped") and not r.get("stop_failed")
+                for r in rows
+            )
+            else 1
         )
     if len(args.recipe) > 1:
         sys.exit("give one recipe name")
