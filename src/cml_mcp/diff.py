@@ -501,8 +501,8 @@ def config_changes(
         "b_lines": len(lb),
     }
     if shown_hidden:
-        out["hidden"] = shown_hidden[:40] + (
-            [f"... {len(shown_hidden) - 40} more"] if len(shown_hidden) > 40 else []
+        out["hidden"] = shown_hidden[:12] + (
+            [f"... {len(shown_hidden) - 12} more"] if len(shown_hidden) > 12 else []
         )
     if changes:
         if len(text) > max_lines:

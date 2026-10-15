@@ -338,9 +338,12 @@ async def _verify_recipe(
     lid = lab_info["id"]
     # L25: a copy records its recipe and substitutions in the lab notes; without them the checks would
     # probe the recipe's own addresses (another lab's devices)
-    marker = read_recipe_marker(lab_info.get("notes"))
-    if marker is None and "notes" not in lab_info:
-        marker = read_recipe_marker((await app.api.get(f"/labs/{lid}")).get("notes"))
+    # CML returns a lab's notes as `lab_notes` (`notes` in topology YAML)
+    if "lab_notes" in lab_info:
+        notes = lab_info.get("lab_notes")
+    else:
+        notes = (await app.api.get(f"/labs/{lid}")).get("lab_notes")
+    marker = read_recipe_marker(notes)
     if marker and marker["recipe"] != name:
         checks.append(
             check(
