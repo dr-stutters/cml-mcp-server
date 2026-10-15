@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.2 - 2026-10-15
+
+### Fixed
+- `cml_set_link_condition` and `cml_apply_link_scenario`: the conditioning PATCH resets every impairment it isn't
+  given, so the preview now has a `changes` diff (core 0.12.4 `field_changes(..., replace=True)`) listing those as
+  `"removed": true` (e.g. loss when only latency is given, duplication when switching to `brownout`).
+
+### Changed
+- Core bumped to stutters-mcp-core 0.12.4. `cml_update_node` keeps its partial diff (its PATCH sends only the
+  changed fields); `cml_set_node_config` keeps its unified config diff.
+- Cross-server manifests (`tests/manifests/fmc.json`, `ise.json`, `catc.json`) refreshed from fmc 0.9.1, ise 0.7.2
+  and catc 0.8.3.
+
 ## 0.9.1 - 2026-10-15
 
 ### Changed

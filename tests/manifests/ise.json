@@ -1,5 +1,5 @@
 {
-  "core_version": "0.9.0",
+  "core_version": "0.12.4",
   "manifest": 1,
   "prefix": "ise",
   "prompts": {
@@ -485,5 +485,5 @@
       "title": "Why did authentication fail?"
     }
   },
-  "version": "0.6.1"
+  "version": "0.7.2"
 }

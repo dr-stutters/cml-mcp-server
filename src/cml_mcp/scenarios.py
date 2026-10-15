@@ -19,6 +19,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from stutters_mcp_core.writes import field_changes
+
 log = logging.getLogger(__name__)
 
 # netem fields CML accepts on PATCH /labs/{lab}/links/{link}/condition (LinkConditionConfiguration)
@@ -115,6 +117,13 @@ SCENARIOS: dict[str, Scenario] = {
 def netem_body(s: Scenario) -> dict[str, Any]:
     """Full PATCH body: every netem field set (fields the profile leaves out reset to none)."""
     return {**{k: s.netem.get(k) for k in NETEM_FIELDS}, "enabled": True}
+
+
+def condition_changes(current: dict[str, Any], new: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Preview diff for a conditioning PATCH that sends every netem field (omitted ones reset), so it acts
+    as a replace: impairments it resets are listed as removed. `new` is {} for a clear."""
+    known = {k: v for k, v in current.items() if k in (*NETEM_FIELDS, "enabled")}
+    return field_changes(known, {k: v for k, v in new.items() if v is not None}, replace=True)
 
 
 def match_scenario(cond: dict[str, Any]) -> str | None:

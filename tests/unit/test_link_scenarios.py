@@ -204,3 +204,17 @@ async def test_restore_retries_then_flags_link_down() -> None:
         mp.setattr("cml_mcp.scenarios.asyncio.sleep", lambda s: real_sleep(0))
         await mgr.cancel([job])
     assert job.error and job.error.startswith("LINK MAY STILL BE DOWN")
+
+
+async def test_apply_scenario_preview_lists_reset_impairments(lab_api: respx.MockRouter) -> None:
+    """The scenario PATCH resets what the profile leaves out (core 0.12.4 replace=True diff)."""
+    lab_api.get(f"/labs/{LID}/links/{LINK}/condition").mock(
+        return_value=httpx.Response(200, json={"latency": 600, "duplicate": 1, "enabled": True})
+    )
+    lab_api.patch(f"/labs/{LID}/links/{LINK}/condition").mock(return_value=httpx.Response(200, json={}))
+    preview, _ = await preview_apply(
+        "cml_apply_link_scenario", {"lab": LID, "link": "r1<->r2", "scenario": "brownout"}
+    )
+    changes = preview["preview"]["changes"]
+    assert changes["duplicate"] == {"from": 1, "to": None, "removed": True}
+    assert changes["latency"] == {"from": 600, "to": 150} and "enabled" not in changes

@@ -1,5 +1,5 @@
 {
-  "core_version": "0.9.0",
+  "core_version": "0.12.4",
   "manifest": 1,
   "prefix": "fmc",
   "prompts": {
@@ -62,9 +62,8 @@
       ],
       "references": [
         "fmc_rule_lookup",
-        "fmc_list_device_interfaces",
-        "fmc_list_routes",
         "fmc_packet_tracer",
+        "fmc_list_routes",
         "fmc_get_hit_counts",
         "fmc_pending_changes",
         "fmc_list_deployments",
@@ -108,9 +107,21 @@
       "tier": "write",
       "title": "Configure HA monitored interface"
     },
+    "fmc_configure_ntp": {
+      "tier": "write",
+      "title": "Configure NTP"
+    },
     "fmc_configure_ospf": {
       "tier": "write",
       "title": "Configure OSPF"
+    },
+    "fmc_configure_snmp": {
+      "tier": "write",
+      "title": "Configure SNMP"
+    },
+    "fmc_configure_ssh_access": {
+      "tier": "write",
+      "title": "Configure SSH management access"
     },
     "fmc_configure_syslog": {
       "tier": "write",
@@ -127,6 +138,18 @@
     "fmc_create_access_rule": {
       "tier": "write",
       "title": "Create access rule"
+    },
+    "fmc_create_decryption_policy": {
+      "tier": "write",
+      "title": "Create decryption policy"
+    },
+    "fmc_create_decryption_rule": {
+      "tier": "write",
+      "title": "Create decryption rule"
+    },
+    "fmc_create_dns_policy": {
+      "tier": "write",
+      "title": "Create DNS policy"
     },
     "fmc_create_dynamic_object": {
       "tier": "write",
@@ -196,6 +219,10 @@
       "tier": "write",
       "title": "Delete access rule"
     },
+    "fmc_delete_decryption_rule": {
+      "tier": "write",
+      "title": "Delete decryption rule"
+    },
     "fmc_delete_device": {
       "tier": "dangerous",
       "title": "Delete (unregister) device"
@@ -248,6 +275,10 @@
       "tier": "read",
       "title": "Device health"
     },
+    "fmc_dns_block": {
+      "tier": "write",
+      "title": "Block or unblock domains (DNS)"
+    },
     "fmc_export_access_rules": {
       "tier": "read",
       "title": "Export access rules"
@@ -268,6 +299,10 @@
       "tier": "read",
       "title": "Get access rule"
     },
+    "fmc_get_decryption_policy": {
+      "tier": "read",
+      "title": "Decryption policies"
+    },
     "fmc_get_definition": {
       "tier": "read",
       "title": "Describe a Cisco Secure Firewall Management Center API path or schema"
@@ -275,6 +310,10 @@
     "fmc_get_device": {
       "tier": "read",
       "title": "Get device"
+    },
+    "fmc_get_dns_policy": {
+      "tier": "read",
+      "title": "DNS policies"
     },
     "fmc_get_ha_status": {
       "tier": "read",
@@ -327,6 +366,10 @@
     "fmc_import_access_rules": {
       "tier": "write",
       "title": "Import access rules"
+    },
+    "fmc_import_objects": {
+      "tier": "write",
+      "title": "Import objects"
     },
     "fmc_license_status": {
       "tier": "read",
@@ -464,9 +507,17 @@
       "tier": "write",
       "title": "Set access policy logging (syslog)"
     },
+    "fmc_set_decryption_policy": {
+      "tier": "write",
+      "title": "Link decryption policy to access policy"
+    },
     "fmc_set_device_licenses": {
       "tier": "write",
       "title": "Set device licences"
+    },
+    "fmc_set_dns_policy": {
+      "tier": "write",
+      "title": "Link DNS policy to access policy"
     },
     "fmc_set_intrusion_rule_state": {
       "tier": "write",
@@ -537,5 +588,5 @@
       "title": "Where is an object used"
     }
   },
-  "version": "0.5.0"
+  "version": "0.9.1"
 }
