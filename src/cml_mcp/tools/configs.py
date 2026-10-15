@@ -11,7 +11,7 @@ from stutters_mcp_core import InvalidRequest, ToolRegistrar, get_client
 
 from cml_mcp.client import CmlApp
 from cml_mcp.console import Credentials
-from cml_mcp.diff import diff_configs, normalise_config
+from cml_mcp.diff import config_changes, diff_configs, normalise_config
 from cml_mcp.netops import console_batch
 from cml_mcp.tools.common import LabRef, NodeRef, config_text, shaped
 
@@ -79,7 +79,9 @@ def register(reg: ToolRegistrar) -> None:
         baseline_text: Annotated[
             str | None, Field(description="With against='text': the configuration to compare with")
         ] = None,
-        context: Annotated[int, Field(ge=0, le=10, description="Unchanged lines around each change")] = 2,
+        context: Annotated[
+            int, Field(ge=0, le=10, description="view='unified': unchanged lines around each change")
+        ] = 2,
         max_lines: Annotated[int, Field(ge=10, le=2000, description="Cap on diff lines returned")] = 200,
         ignore: Annotated[
             list[str] | None,
@@ -88,10 +90,23 @@ def register(reg: ToolRegistrar) -> None:
         include_running: Annotated[
             bool, Field(description="Also return the (masked) running config, e.g. as a later baseline")
         ] = False,
+        view: Annotated[
+            Literal["changes", "unified"],
+            Field(
+                description="'changes' (default): what changed, by section - block order and line "
+                "order ignored (except in ACLs, route maps, prefix lists, QoS policies). Against 'day0', "
+                "sections IOS prints by itself at their default values (version, boot markers, 'ip cef', "
+                "default line con/vty, unused interfaces, self-signed trustpoints...) and day-0 commands "
+                "it consumes ('crypto key generate', 'no shutdown' on an up interface) are hidden and "
+                "named in `hidden`. "
+                "'unified': the raw line diff"
+            ),
+        ] = "changes",
     ) -> ToolResult:
         """What changed on a lab device? Reads the node's running configuration over its console
-        ('show running-config', no IP reachability needed) and returns a unified diff against its
-        CML day-0 config, its startup-config, another node, or a saved baseline. Secrets
+        ('show running-config', no IP reachability needed) and returns what changed against its
+        CML day-0 config, its startup-config, another node, or a saved baseline - by default only
+        real changes, by section (see `view`). Secrets
         (passwords, keys, communities) are masked on both sides and volatile lines (timestamps,
         'Building configuration') are ignored. Use it as the test oracle for changes another
         server pushed (a Catalyst Center template, an ISE AAA change): take a baseline with
@@ -133,14 +148,26 @@ def register(reg: ToolRegistrar) -> None:
             "lab": info.get("lab_title"),
             "node": label,
             "against": against,
-            **diff_configs(
-                other,
-                running,
-                a_name=other_name,
-                b_name=f"{label} (running)",
-                context=context,
-                max_lines=max_lines,
-                ignore=ignore,
+            **(
+                config_changes(
+                    other,
+                    running,
+                    a_name=other_name,
+                    b_name=f"{label} (running)",
+                    day0="a" if against == "day0" else None,
+                    ignore=ignore,
+                    max_lines=max_lines,
+                )
+                if view == "changes"
+                else diff_configs(
+                    other,
+                    running,
+                    a_name=other_name,
+                    b_name=f"{label} (running)",
+                    context=context,
+                    max_lines=max_lines,
+                    ignore=ignore,
+                )
             ),
         }
         if include_running:  # normalised: masked, without volatile lines (a clean next baseline)

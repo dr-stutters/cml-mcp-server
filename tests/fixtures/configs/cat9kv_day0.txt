@@ -1,0 +1,105 @@
+hostname mcp-sw1
+ip domain name mcp.lab
+no ip domain lookup
+username netadmin privilege 15 secret ********
+enable secret ********
+aaa new-model
+aaa authentication login default local
+aaa authentication login CONSOLE local
+aaa authorization exec default local
+aaa authentication dot1x default group radius
+aaa authorization network default group radius
+aaa accounting dot1x default start-stop group radius
+aaa accounting update newinfo periodic 2880
+aaa server radius dynamic-author
+ client 198.18.134.35 server-key ********
+radius server ISE
+ address ipv4 198.18.134.35 auth-port 1812 acct-port 1813
+ key ********
+radius-server attribute 6 on-for-login-auth
+radius-server attribute 8 include-in-access-req
+radius-server attribute 25 access-request include
+radius-server dead-criteria time 5 tries 3
+ip radius source-interface GigabitEthernet1/0/1
+dot1x system-auth-control
+class-map type control subscriber match-all MCP-DOT1X-FAILED
+ match method dot1x
+ match result-type method dot1x authoritative
+class-map type control subscriber match-all MCP-DOT1X-NO-RESP
+ match method dot1x
+ match result-type method dot1x agent-not-found
+class-map type control subscriber match-all MCP-MAB-FAILED
+ match method mab
+ match result-type method mab authoritative
+policy-map type control subscriber MCP-DOT1X-THEN-MAB
+ event session-started match-all
+  10 class always do-until-failure
+   10 authenticate using dot1x priority 10
+ event authentication-failure match-first
+  10 class MCP-DOT1X-FAILED do-until-failure
+   10 terminate dot1x
+   20 authenticate using mab priority 20
+  20 class MCP-DOT1X-NO-RESP do-until-failure
+   10 terminate dot1x
+   20 authenticate using mab priority 20
+  30 class MCP-MAB-FAILED do-until-failure
+   10 terminate mab
+   20 authentication-restart 60
+  40 class always do-until-failure
+   10 terminate dot1x
+   20 terminate mab
+   30 authentication-restart 60
+ event agent-found match-all
+  10 class always do-until-failure
+   10 terminate mab
+   20 authenticate using dot1x priority 10
+vlan 10
+ name CLIENTS
+ip dhcp excluded-address 10.10.10.1 10.10.10.99
+ip dhcp pool CLIENTS
+ network 10.10.10.0 255.255.255.0
+ default-router 10.10.10.1
+interface GigabitEthernet1/0/1
+ description uplink to dCloud 198.18.128.0/18
+ no switchport
+ ip address 198.18.128.194 255.255.192.0
+ no shutdown
+interface Vlan10
+ ip address 10.10.10.1 255.255.255.0
+ no shutdown
+interface GigabitEthernet1/0/2
+ description client (MAB; 802.1X first)
+ switchport mode access
+ switchport access vlan 10
+ access-session host-mode multi-auth
+ access-session port-control auto
+ mab
+ dot1x pae authenticator
+ dot1x timeout tx-period 5
+ spanning-tree portfast
+ service-policy type control subscriber MCP-DOT1X-THEN-MAB
+ no shutdown
+interface GigabitEthernet1/0/3
+ description eaptls-client (802.1X EAP-TLS)
+ switchport mode access
+ switchport access vlan 10
+ access-session host-mode multi-auth
+ access-session port-control auto
+ mab
+ dot1x pae authenticator
+ dot1x timeout tx-period 5
+ spanning-tree portfast
+ service-policy type control subscriber MCP-DOT1X-THEN-MAB
+ no shutdown
+ip route 0.0.0.0 0.0.0.0 198.18.128.1
+crypto key generate rsa modulus 2048
+ip ssh version 2
+snmp-server community ******** RO
+snmp-server community ******** RW
+line con 0
+ exec-timeout 0 0
+ logging synchronous
+ login authentication CONSOLE
+line vty 0 15
+ transport input ssh
+end

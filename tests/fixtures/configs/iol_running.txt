@@ -1,0 +1,46 @@
+version 17.18
+service timestamps debug datetime msec
+service timestamps log datetime msec
+hostname r1
+boot-start-marker
+boot-end-marker
+no aaa new-model
+ip cef
+login on-success log
+no ipv6 cef
+memory free low-watermark processor 79866
+spanning-tree mode rapid-pvst
+username bob secret ******** ********
+interface Loopback0
+ ip address 10.255.0.1 255.255.255.255
+interface Ethernet0/0
+ ip address 10.0.12.1 255.255.255.0
+interface Ethernet0/1
+ description to-r3
+ ip address 10.0.13.1 255.255.255.0
+ ip ospf cost 50
+interface Ethernet0/2
+ no ip address
+ shutdown
+interface Ethernet0/3
+ no ip address
+ shutdown
+router ospf 1
+ router-id 10.255.0.1
+ network 10.0.0.0 0.255.255.255 area 0
+ip forward-protocol nd
+ip http server
+ip http secure-server
+ip ssh bulk-mode 131072
+no logging btrace
+snmp-server community ******** RO
+control-plane
+line con 0
+ activation-character 13
+ logging synchronous
+line aux 0
+ activation-character 13
+line vty 0 4
+ activation-character 13
+ login
+ transport input ssh

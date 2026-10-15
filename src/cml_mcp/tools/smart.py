@@ -148,7 +148,7 @@ def register(reg: ToolRegistrar) -> None:
         interfaces, unified config diff) and links only in one side, matched by node label and
         interface name. Use it to check drift from a baseline or what a rebuild changed. Config
         secrets are masked. running_configs=true diffs what the devices run now (slower: one
-        console session per node)."""
+        console session per node), by section and without the lines IOS prints by itself."""
         if (other_lab is None) == (baseline_yaml is None):
             raise InvalidRequest("Give exactly one of other_lab or baseline_yaml to compare against.")
         app: CmlApp = get_client(ctx)
@@ -172,6 +172,9 @@ def register(reg: ToolRegistrar) -> None:
             include_configs=include_configs or running_configs,
             a_name=str(info.get("lab_title")),
             b_name=b_name,
+            semantic=running_configs,
+            # the lab side runs; a baseline YAML keeps its stored day-0 configs (another lab runs too)
+            day0="b" if running_configs and other_lab is None else None,
         )
         if missing:
             result["running_config_unavailable"] = sorted(set(missing))
