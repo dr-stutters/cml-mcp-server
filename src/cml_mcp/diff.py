@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import difflib
+import re
 from typing import Any
+
+from stutters_mcp_core import InvalidRequest
+
+from cml_mcp.console import mask_secrets
 
 NODE_FIELDS = ("node_definition", "image_definition", "ram", "cpus", "cpu_limit", "boot_disk_size", "tags")
 MAX_CONFIG_DIFF_LINES = 80
@@ -68,12 +73,13 @@ def diff_topologies(
         if ia != ib:
             delta["interfaces"] = {"only_in_a": sorted(ia - ib), "only_in_b": sorted(ib - ia)}
         if include_configs:
-            ca, cb = _config(x), _config(y)
-            if ca.strip() != cb.strip():
+            # secrets masked on both sides (day-0 configs hold plain-text passwords)
+            ca, cb = normalise_config(_config(x)), normalise_config(_config(y))
+            if ca != cb:
                 lines = list(
                     difflib.unified_diff(
-                        ca.splitlines(),
-                        cb.splitlines(),
+                        ca,
+                        cb,
                         f"{label} ({a_name})",
                         f"{label} ({b_name})",
                         lineterm="",
@@ -95,4 +101,82 @@ def diff_topologies(
     out["identical"] = not (
         only_a or only_b or changed or out["links"]["only_in_a"] or out["links"]["only_in_b"]
     )
+    return out
+
+
+# --- device configuration diffs (L6) -----------------------------------------------------------
+
+# Lines that change on every 'show running-config' without a configuration change.
+CONFIG_NOISE = re.compile(
+    r"^(?:Building configuration\.\.\.|Current configuration\s*:.*|! Last configuration change at.*"
+    r"|! NVRAM config last updated at.*|! No configuration change since last restart|ntp clock-period \d+"
+    r"|!Time:.*|!Command: show running-config.*|!Running configuration last done at.*"
+    r"|Using \d+ out of \d+ bytes"
+    r"|: Saved|:\s*Written by.*|: Serial Number:.*|: Hardware:.*|Cryptochecksum:.*|\s*!\s*|end)$",
+    re.IGNORECASE,
+)
+# A masked secret keeps its keyword but loses the encryption type ('secret 9 ********' and the
+# day-0 'secret ********' are the same thing).
+MASKED_TYPE = re.compile(r"\b(secret|password|key|key-string|community|pre-shared-key) \d{1,2} (\*{8})", re.I)
+BANNER_START = re.compile(r"^banner\s+\S+\s+(\^C|\S)")
+
+
+def normalise_config(text: str) -> list[str]:
+    """Config lines ready for comparison: secrets masked, trailing space and noise lines dropped
+    (banner bodies are kept verbatim, '!' and 'end' lines included)."""
+    out = []
+    delim: str | None = None  # inside a banner until this delimiter shows up again
+    for raw in mask_secrets(text.replace("\r", "")).splitlines():
+        line = raw.rstrip()
+        if delim is not None:
+            out.append(line)
+            if delim in line:
+                delim = None
+            continue
+        if not line.strip() or CONFIG_NOISE.match(line):
+            continue
+        if (m := BANNER_START.match(line)) and m.group(1) not in line[m.end(1) :]:
+            delim = m.group(1)  # a multi-line banner: keep its body as it is
+        out.append(MASKED_TYPE.sub(r"\1 \2", line))
+    return out
+
+
+def diff_configs(
+    a: str,
+    b: str,
+    *,
+    a_name: str,
+    b_name: str,
+    context: int = 2,
+    max_lines: int = 200,
+    ignore: list[str] | None = None,
+) -> dict[str, Any]:
+    """A unified diff of two device configurations (secrets masked on both sides) with counts."""
+    if len(ignore or []) > 20:
+        raise InvalidRequest("ignore: at most 20 patterns")
+    patterns = []
+    for p in ignore or []:
+        try:
+            patterns.append(re.compile(p[:300]))
+        except re.error as e:
+            raise InvalidRequest(f"ignore: bad regular expression {p!r}: {e}") from e
+
+    def keep(lines: list[str]) -> list[str]:
+        return [ln for ln in lines if not any(p.search(ln) for p in patterns)]
+
+    la, lb = keep(normalise_config(a)), keep(normalise_config(b))
+    lines = list(difflib.unified_diff(la, lb, a_name, b_name, lineterm="", n=context))
+    added = sum(1 for ln in lines if ln.startswith("+") and not ln.startswith("+++"))
+    removed = sum(1 for ln in lines if ln.startswith("-") and not ln.startswith("---"))
+    out: dict[str, Any] = {
+        "identical": not lines,
+        "lines_added": added,
+        "lines_removed": removed,
+        "a_lines": len(la),
+        "b_lines": len(lb),
+    }
+    if lines:
+        if len(lines) > max_lines:
+            lines = lines[:max_lines] + [f"... {len(lines) - max_lines} more diff lines (raise max_lines)"]
+        out["diff"] = "\n".join(lines)
     return out

@@ -4,23 +4,48 @@
 
 import re
 import time
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import InvalidRequest, ToolRegistrar, get_client, get_settings, poll_until
+from stutters_mcp_core import (
+    InvalidRequest,
+    ToolRegistrar,
+    UpstreamError,
+    get_client,
+    get_settings,
+    poll_until,
+)
 
 from cml_mcp.client import CmlApp
 from cml_mcp.console import clean, mask_secrets
 from cml_mcp.convergence import wait_converged
 from cml_mcp.diff import diff_topologies
+from cml_mcp.licence import licensed
 from cml_mcp.tools.common import LabRef, parse_topology_yaml, shaped, strip_console_prefixes
+from cml_mcp.tools.configs import device_configs
 
 Timeout = Annotated[
     float | None,
     Field(ge=5, le=3600, description="Seconds to wait before giving up (default CML_WAIT_TIMEOUT, 600)"),
 ]
+
+
+async def use_running_configs(app: CmlApp, lab: dict[str, Any], topology: dict[str, Any]) -> list[str]:
+    """Replace each booted node's stored config in an exported topology with its running config;
+    returns '<lab>/<node>' for nodes whose running config couldn't be read (they keep day-0)."""
+    nodes = [n for n in await app.list_nodes(lab["id"]) if licensed(n)]
+    booted = [n for n in nodes if n.get("state") == "BOOTED"]
+    try:
+        got = await device_configs(app, lab["id"], booted, purpose="cml_diff_lab", strict=False)
+    except UpstreamError:
+        got = {}  # every node keeps its day-0 config and is listed as unavailable
+    for n in topology.get("nodes") or []:
+        if str(n.get("label")) in got:
+            n["configuration"] = got[str(n.get("label"))]
+    title = lab.get("lab_title")
+    return [f"{title}/{n.get('label')}" for n in nodes if str(n.get("label")) not in got]
 
 
 def register(reg: ToolRegistrar) -> None:
@@ -110,25 +135,44 @@ def register(reg: ToolRegistrar) -> None:
         include_configs: Annotated[
             bool, Field(description="Also diff the nodes' day-0 configurations")
         ] = True,
+        running_configs: Annotated[
+            bool,
+            Field(
+                description="Compare the live running configs (read from each booted node's console) "
+                "instead of the stored day-0 configs; a baseline_yaml side keeps its stored configs"
+            ),
+        ] = False,
     ) -> ToolResult:
         """Compare a lab with another lab or with a saved topology YAML (e.g. an earlier
         cml_export_lab): nodes only in one side, per-node changes (definition, image, RAM/CPU, tags,
         interfaces, unified config diff) and links only in one side, matched by node label and
-        interface name. Use it to check drift from a baseline or what a rebuild changed."""
+        interface name. Use it to check drift from a baseline or what a rebuild changed. Config
+        secrets are masked. running_configs=true diffs what the devices run now (slower: one
+        console session per node)."""
         if (other_lab is None) == (baseline_yaml is None):
             raise InvalidRequest("Give exactly one of other_lab or baseline_yaml to compare against.")
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab)
         a = parse_topology_yaml(await app.api.get(f"/labs/{info['id']}/download", expect="text"))
+        missing: list[str] = []
+        if running_configs:
+            missing += await use_running_configs(app, info, a)
         if other_lab is not None:
             other = await app.resolve_lab(other_lab)
             b = parse_topology_yaml(await app.api.get(f"/labs/{other['id']}/download", expect="text"))
             b_name = str(other.get("lab_title"))
+            if running_configs:
+                missing += await use_running_configs(app, other, b)
         else:
             b = parse_topology_yaml(baseline_yaml or "")
             b_name = "baseline"
-        return shaped(
-            diff_topologies(
-                a, b, include_configs=include_configs, a_name=str(info.get("lab_title")), b_name=b_name
-            )
+        result = diff_topologies(
+            a,
+            b,
+            include_configs=include_configs or running_configs,
+            a_name=str(info.get("lab_title")),
+            b_name=b_name,
         )
+        if missing:
+            result["running_config_unavailable"] = sorted(set(missing))
+        return shaped(result)

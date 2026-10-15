@@ -13,6 +13,7 @@ from cml_mcp.config import Settings
 from cml_mcp.tools import (
     build_tool,
     cli,
+    configs,
     dangerous,
     definitions,
     lab_writes,
@@ -39,6 +40,7 @@ What can be built: cml_list_node_definitions (iol-xe / ioll2-xe boot in under a 
 Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the CML console server
 (no IP reachability needed; IOS/IOS-XE, NX-OS, FTD, Linux); config changes go through
 cml_configure_node (write tier; mode='exec' for FTD 'configure manager add ...').
+What changed on a device: cml_diff_node_config (running config vs day-0, startup, another node, a baseline).
 Outside networks: cml_list_external_connectors, then an external_connector node in cml_build_lab.
 Proving connectivity: cml_check_reachability; addresses: cml_get_layer3_addresses(source='cli').
 Slow images (FTDv 15-30 min, cat9000v ~10): build/start with wait=false, then cml_wait_for_converged.
@@ -97,6 +99,7 @@ def create_server(
             topology_writes.register,
             build_tool.register,
             cli.register,
+            configs.register,
             network.register,
             samples.register,
             planning.register,
