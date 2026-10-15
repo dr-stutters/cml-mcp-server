@@ -12,7 +12,7 @@ address_plan:
   GigabitEthernet0/2: failover link, direct cable ftd-a <-> ftd-b; suggested 10.255.0.1/30 / .2
   GigabitEthernet0/3: stateful failover link, direct cable ftd-a <-> ftd-b; suggested 10.255.0.5/30 / .6
 credentials:
-  cli: 'admin / ***REDACTED*** on both FTDs (strong - FTD forces a change of weak day-0 passwords)'
+  cli: 'admin / ${LAB_FTD_HA_ADMIN_PASSWORD} on both FTDs (strong - FTD forces a change of weak day-0 passwords)'
   inside_host: 'Alpine, login cisco / cisco'
 fmc_side: >-
   Not registered on purpose. To use it with FMC: on each FTD run 'configure manager add 198.18.134.76 <regkey>'
@@ -71,12 +71,12 @@ build:
       definition: ftdv
       x: -200
       y: 80
-      credentials: {username: admin, password: ***REDACTED***}
+      credentials: {username: admin, password: "${LAB_FTD_HA_ADMIN_PASSWORD}"}
       config: |
         {
           "EULA": "accept",
           "Hostname": "mcp-ftd-a",
-          "AdminPassword": "***REDACTED***",
+          "AdminPassword": "${LAB_FTD_HA_ADMIN_PASSWORD}",
           "FirewallMode": "routed",
           "DNS1": "198.18.133.1",
           "DNS2": "",
@@ -98,12 +98,12 @@ build:
       definition: ftdv
       x: 200
       y: 80
-      credentials: {username: admin, password: ***REDACTED***}
+      credentials: {username: admin, password: "${LAB_FTD_HA_ADMIN_PASSWORD}"}
       config: |
         {
           "EULA": "accept",
           "Hostname": "mcp-ftd-b",
-          "AdminPassword": "***REDACTED***",
+          "AdminPassword": "${LAB_FTD_HA_ADMIN_PASSWORD}",
           "FirewallMode": "routed",
           "DNS1": "198.18.133.1",
           "DNS2": "",

@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -43,6 +44,27 @@ def make_settings(**kw: Any) -> Settings:
     return Settings(_env_file=None, **base)  # type: ignore[call-arg]
 
 
+# Fake lab secrets for the recipes' ${LAB_*} placeholders (never the real lab values).
+FAKE_LAB_SECRETS = {
+    "LAB_CLI_PASSWORD": "Fake-Cli-Pw9",
+    "LAB_SNMP_RO": "fake-ro",
+    "LAB_SNMP_RW": "fake-rw",
+    "LAB_RADIUS_SECRET": "fake-radius-key",
+    "LAB_FTD_REG_KEY": "fake-reg-key",
+    "LAB_FTD_ADMIN_PASSWORD": "Fake-Ftd-Pw9!",
+    "LAB_FTD_HA_ADMIN_PASSWORD": "Fake-FtdHa-Pw9!",
+}
+
+
+@pytest.fixture(autouse=True)
+def fake_lab_secrets(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    for k in [k for k in os.environ if k.startswith("LAB_")]:
+        monkeypatch.delenv(k)
+    for k, v in FAKE_LAB_SECRETS.items():
+        monkeypatch.setenv(k, v)
+    return FAKE_LAB_SECRETS
+
+
 @pytest.fixture
 def api() -> Iterator[respx.MockRouter]:
     with respx.mock(base_url=API, assert_all_called=False) as mock:
@@ -63,6 +85,17 @@ def api() -> Iterator[respx.MockRouter]:
         mock.get("/system_health").mock(return_value=httpx.Response(200, json=fixture("system_health.json")))
         mock.get("/licensing").mock(return_value=httpx.Response(200, json=fixture("licensing.json")))
         mock.get("/labs").mock(return_value=httpx.Response(200, json=[]))
+        mock.get("/users/00000000-0000-4000-a000-000000000000").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "id": "00000000-0000-4000-a000-000000000000",
+                    "username": "admin",
+                    "admin": True,
+                    "resource_pool": None,
+                },
+            )
+        )
         yield mock
 
 

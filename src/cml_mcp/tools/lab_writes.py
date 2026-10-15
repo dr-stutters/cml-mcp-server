@@ -14,12 +14,12 @@ from stutters_mcp_core import (
     get_client,
     get_settings,
     poll_until,
-    preview_or_apply,
 )
 
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
 from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed
+from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, parse_topology_yaml, state_counts
 from cml_mcp.tools.smart import Timeout
 

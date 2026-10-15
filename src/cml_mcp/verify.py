@@ -10,7 +10,7 @@ A contract (in the recipe YAML) lists what a known-good lab looks like:
       probes:
         - {name: radius-server-up, node: sw1, command: "show aaa servers", expect: "current UP"}
         - {name: netconf, tcp: "198.18.128.152:830"}
-        - {name: snmp, snmp: {host: 198.18.128.152, community: mcp-ro}}
+        - {name: snmp, snmp: {host: 198.18.128.152, community: ${LAB_SNMP_RO}}}
 
 Console probes run commands written in the packaged recipe (never caller input) over the node's
 console; tcp and snmp probes run from the MCP server's host, like the product server would.
@@ -26,6 +26,7 @@ import time
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
+from stutters_mcp_core import InvalidRequest, UpstreamError
 
 from cml_mcp.client import CmlApp
 from cml_mcp.console import FORBIDDEN_CHARS, Credentials, mask_secrets, read_only_problem
@@ -37,7 +38,7 @@ from cml_mcp.netops import (
     ping_command,
     ping_result,
 )
-from cml_mcp.recipes import get_recipe, substituted
+from cml_mcp.recipes import get_recipe, redact_values, resolve_secrets, secret_names_by_value, substituted
 
 TCP_TARGET = re.compile(r"^(?P<host>[A-Za-z0-9.:-]+):(?P<port>\d{1,5})$")
 
@@ -244,10 +245,28 @@ async def snmp_probe(p: SnmpProbe, timeout: float = 4.0) -> tuple[bool, str]:  #
 async def verify_recipe(
     app: CmlApp, name: str, *, lab: str | None = None, substitute: dict[str, str] | None = None
 ) -> dict[str, Any]:
+    """Run recipe `name`'s verify contract (see _verify_recipe); results and errors never carry the
+    resolved lab secrets."""
+    mapping = secret_names_by_value(app.settings.lab_secrets_file)
+    try:
+        return dict(redact_values(await _verify_recipe(app, name, lab=lab, substitute=substitute), mapping))
+    except UpstreamError as e:
+        raise UpstreamError(redact_values(str(e), mapping), e.status_code) from None
+    except InvalidRequest as e:
+        raise InvalidRequest(redact_values(str(e), mapping)) from None
+
+
+async def _verify_recipe(
+    app: CmlApp, name: str, *, lab: str | None = None, substitute: dict[str, str] | None = None
+) -> dict[str, Any]:
     """Run recipe `name`'s verify contract against its lab, or against `lab` (a copy built with
     cml_build_recipe(title=..., substitute=...)), with the same substitutions applied."""
     recipe = substituted(get_recipe(name), substitute)
-    contract = contract_of(recipe)
+    # probes may carry ${LAB_*} references (SNMP communities): filled here, never echoed in results
+    verify = resolve_secrets(
+        recipe.get("verify") or {}, app.settings.lab_secrets_file, what=f"recipe {name!r}"
+    )
+    contract = contract_of({"verify": verify})
     title = lab or recipe["build"]["title"]
     started = time.monotonic()
     checks: list[dict[str, Any]] = []

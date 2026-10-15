@@ -37,9 +37,28 @@ async def test_status_with_static_token(api: respx.MockRouter) -> None:
     api.get("/users/00000000-0000-4000-a000-000000000000").mock(
         return_value=httpx.Response(200, json={"username": "svc", "id": "x", "admin": False})
     )
+    pool = "11111111-1111-4111-8111-111111111111"
+    api.get("/users/x").mock(
+        return_value=httpx.Response(
+            200, json={"username": "svc", "id": "x", "admin": False, "resource_pool": pool}
+        )
+    )
+    api.get(f"/resource_pool_usage/{pool}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": pool,
+                "label": "svc-pool",
+                "limit": {"licenses": 12, "ram": 65536},
+                "usage": {"licenses": 2, "ram": 2048},
+            },
+        )
+    )
     settings = make_settings(username=None, password=None, token=f"Bearer {TOKEN}")
     data = await call_tool(create_server(settings), "cml_status")
     assert data["cml"]["user"] == "svc"
+    assert data["cml"]["resource_pool"]["label"] == "svc-pool"
+    assert data["cml"]["resource_pool"]["licenses_used"] == 2
     assert not api.routes[0].called  # no login with a static token
 
 

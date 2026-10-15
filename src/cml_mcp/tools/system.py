@@ -84,7 +84,14 @@ def register(reg: ToolRegistrar) -> None:
         AUTHORIZED, OUT_OF_COMPLIANCE...), expiry, licensed features with how many are in use (node
         capacity), product tier and reservation mode. Needs an admin account."""
         app: CmlApp = get_client(ctx)
-        lic = await app.api.get("/licensing")
+        try:
+            lic = await app.api.get("/licensing")
+        except AuthError as e:
+            raise AuthError(
+                f"{e} Licensing is admin-only in CML. A non-admin account can see its own limits with "
+                "cml_plan_licences (resource pool) and cml_status.",
+                e.status_code,
+            ) from e
         reg_ = lic.get("registration") or {}
         return shaped(
             {

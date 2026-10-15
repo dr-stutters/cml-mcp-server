@@ -10,6 +10,7 @@ from stutters_mcp_core.spec import SpecSource
 
 from cml_mcp.client import CmlApp
 from cml_mcp.config import Settings
+from cml_mcp.redaction import LabSecretRedactor
 from cml_mcp.tools import (
     annotations,
     build_tool,
@@ -97,7 +98,7 @@ def create_server(
     auth: AuthProvider | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastMCP[Any]:
-    return build_server(
+    mcp = build_server(
         SPEC,
         settings,
         client_factory=lambda s: CmlApp(s, transport=transport),
@@ -126,3 +127,5 @@ def create_server(
         spec_sources=spec_sources,
         auth=auth,
     )
+    mcp.add_middleware(LabSecretRedactor(settings.lab_secrets_file))
+    return mcp

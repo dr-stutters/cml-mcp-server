@@ -273,3 +273,44 @@ async def test_errors_redact_passwords() -> None:
     with pytest.raises(UpstreamTimeout) as e:
         await s.read_until(lambda t: False, 1)
     assert "hunter2" not in str(e.value)
+
+
+async def test_open_toggles_all_labs_for_shared_consoles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """L17: the console server lists only the account's own labs; a shared lab needs 'all' first."""
+    import asyncssh
+
+    from cml_mcp.console import ConsoleServer
+
+    state = {"all": False}
+
+    def reply(text: str) -> str:
+        cmd = text.rstrip("\r\n")
+        if cmd == "all":
+            state["all"] = True
+            return "all\r\nshowing all labs\r\nconsoles> "
+        if cmd.startswith("open "):
+            if not state["all"]:
+                return f'{cmd}\r\nconsole "{cmd[5:]}" not found!\r\n\r\nconsoles> '
+            return f"{cmd}\r\nConnected to CML terminalserver.\r\nEscape character is '^]'.\r\n"
+        return ios()(text)
+
+    device = FakeDevice(reply, banner="consoles> ")
+    device.close = lambda: None  # type: ignore[attr-defined]
+
+    class Conn:
+        async def create_process(self, **kw: object) -> FakeDevice:
+            return device
+
+        def close(self) -> None: ...
+
+        async def wait_closed(self) -> None: ...
+
+    async def connect(*a: object, **kw: object) -> Conn:
+        return Conn()
+
+    monkeypatch.setattr(asyncssh, "connect", connect)
+    srv = ConsoleServer("https://cml.test", "viewer", "pw", timeout=3)
+    async with srv.open("lab", "node", Credentials(username="cisco", password="cisco")) as session:
+        assert session.prompt.endswith("#")
+    assert any(w.startswith("all") for w in device.written)
+    assert sum(w.startswith("open ") for w in device.written) == 2

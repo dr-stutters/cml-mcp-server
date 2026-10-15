@@ -271,6 +271,7 @@ version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "asyncssh" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "stutters-mcp-core" },
 ]
@@ -288,8 +289,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "asyncssh", specifier = ">=2.21" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "stutters-mcp-core", git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.6.0" },
+    { name = "stutters-mcp-core", git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.10.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -1469,13 +1471,14 @@ wheels = [
 
 [[package]]
 name = "stutters-mcp-core"
-version = "0.6.0"
-source = { git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.6.0#c2d6acddffb1d4d09eb9df8ce562278e25439087" }
+version = "0.10.0"
+source = { git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.10.0#a2adc74b376c789861933ca1e8d7cac52032d5a0" }
 dependencies = [
     { name = "fastmcp" },
     { name = "httpx" },
     { name = "pydantic-settings" },
     { name = "tzdata" },
+    { name = "uvicorn" },
 ]
 
 [[package]]

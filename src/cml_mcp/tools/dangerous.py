@@ -13,10 +13,10 @@ from stutters_mcp_core import (
     get_client,
     get_settings,
     poll_until,
-    preview_or_apply,
 )
 
 from cml_mcp.client import CmlApp
+from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, LinkRef, NodeRef, load_topo, state_counts
 from cml_mcp.tools.lab_writes import lab_fingerprint, wait_for_lab_state
 from cml_mcp.tools.topology_writes import RUNNING, node_fingerprint

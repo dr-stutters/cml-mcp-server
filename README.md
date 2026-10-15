@@ -166,6 +166,10 @@ tool that fixes it.
 | `CML_NODE_LICENSE_LIMIT` | detected | Running licensed-node cap. Detected from `/licensing` when unset (base licence nodes + `CML_NODE_COUNT` expansion; 5 in evaluation mode). Start/build previews refuse to exceed it; `cml_plan_licences` says which labs to stop |
 | `CML_CONSOLE_PORT` | `22` | SSH port of the CML console server (used for device CLI) |
 | `CML_CONSOLE_LOCK_WAIT` | `60` | Seconds a console call waits for another call on the same node before reporting it busy |
+| `CML_LAB_SECRETS_FILE` | | dotenv file with the `LAB_*` values that recipes reference as `${LAB_*}` (device passwords, keys, communities). `LAB_*` environment variables override it. Recipe builds name any missing variable |
+| `CML_PROTECTED_LABS` / `CML_MANAGED_LABS` | | Safety rails ([docs/safety.md](docs/safety.md)): labs no change may touch; labs the dangerous tools may wipe/delete (title globs or ids) |
+| `CML_CONFIG_DENY_DEFAULTS` / `CML_CONFIG_DENY` | `true` / | `cml_configure_node` refuses destructive device commands (write erase, reload, format, delete, ...); one extra regex |
+| `CML_TLS_CHECK_HOSTNAME` | `true` | `false` only with `CML_CA_BUNDLE` = the controller's own certificate (pinned; `scripts/pin_controller.py`) |
 | `CML_CONSOLE_KNOWN_HOSTS` | | known_hosts file for the console server's host key. When unset, the key is checked against `~/.ssh/known_hosts` if `CML_VERIFY_SSL=true`, and not checked otherwise |
 | `MCP_TRANSPORT` | `stdio` | `http` for a network server |
 | `MCP_HOST` / `MCP_PORT` / `MCP_PATH` | `0.0.0.0` / `8000` / `/mcp` | HTTP listener |
@@ -178,16 +182,16 @@ tool that fixes it.
 
 ## Least-privilege account
 
-Create a dedicated CML user (e.g. `mcp`) instead of using `admin`:
+Run the server as a regular (non-admin) CML user, never `admin`. Tested on CML 2.10 with two accounts, both
+created by `scripts/seed_lab.py --least-privilege`. Full guide: [docs/least-privilege.md](docs/least-privilege.md).
 
-1. **Tools → User Management → Add user** with a long random password. Leave **Admin** unchecked.
-2. A normal user sees and manages **its own labs**. To work on other people's labs, add the user to a
-   **group** that has those labs with *read* (view only) or *read/write* permission.
-3. For a read-only assistant, don't enable writes, and share labs with the group as *read*.
-4. The system tools (`cml_get_licensing`, `cml_get_system_health`, `cml_get_resource_usage`) may
-   need an admin account. `cml_status` and `cml_get_resource_usage` report the licensing part as
-   unavailable instead of failing. This hasn't been tested with a non-admin user yet: the CML
-   Personal licence on the test lab doesn't allow extra users.
+- **Read tier:** `mcp-cml-viewer`, labs shared with its group as `lab_view` + `lab_exec` (consoles need
+  `lab_exec`), and a resource pool with 0 node licences. Every read tool works except `cml_get_licensing`
+  (admin-only in CML).
+- **Write tier:** `mcp-cml-operator` owns the labs it builds; its resource pool caps licences, CPU and RAM,
+  and the start previews respect the pool.
+- As a non-admin, licence planning counts only the labs the account can see (`scope` says so), and consoles of
+  shared labs work.
 
 ## Docker (HTTP)
 

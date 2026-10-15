@@ -15,12 +15,14 @@ from stutters_mcp_core import (
     ToolRegistrar,
     UpstreamError,
     get_client,
-    preview_or_apply,
+    get_settings,
 )
 
 from cml_mcp.client import CmlApp
 from cml_mcp.console import Credentials, mask_secrets, read_only_problem
 from cml_mcp.netops import console_batch, lab_credentials, prepare
+from cml_mcp.safety import denied_lines
+from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, NodeRef, shaped
 
 IOS_ERROR_MARKERS = (
@@ -97,7 +99,7 @@ def register(reg: ToolRegistrar) -> None:
             Field(
                 description="'config' (default): wrap the lines in 'configure terminal' ... 'end' "
                 "(IOS/IOS-XE/NX-OS). 'exec': send each line as-is at the top-level prompt, e.g. FTD "
-                "'configure manager add 198.18.134.76 ***REDACTED***' or IOS 'clear ip ospf process'"
+                "'configure manager add 198.18.134.76 <reg-key>' or IOS 'clear ip ospf process'"
             ),
         ] = "config",
         answer_questions: Annotated[
@@ -128,12 +130,23 @@ def register(reg: ToolRegistrar) -> None:
             blockers.append("save only applies to mode='config' (FTD saves its configuration itself)")
         if n.get("state") != "BOOTED":
             blockers.append(f"Node is {n.get('state')}; it must be BOOTED")
-        if any("\n" in line for line in lines):
-            blockers.append("One configuration line per list entry (no embedded newlines)")
+        if any(ch < " " and ch != "\t" for line in lines for ch in line):
+            blockers.append("One configuration line per list entry (no newlines or other control characters)")
+        if denied := denied_lines(lines, get_settings(ctx)):
+            blockers.append(
+                f"Destructive device command(s) on the deny-list: {denied}. This server doesn't erase, "
+                "reload, format or delete on devices (CML_CONFIG_DENY_DEFAULTS / CML_CONFIG_DENY); use the "
+                "CML UI or cml_set_node_state / cml_wipe_node instead."
+            )
         plan = Plan(
             f"Configure {n.get('label')!r} via its console ({len(lines)} {mode} lines)"
             + (" and save" if save and mode == "config" else ""),
-            details={"lines": lines, "save": save, "mode": mode, "answer_questions": answer_questions},
+            details={
+                "lines": [mask_secrets(line) for line in lines],
+                "save": save,
+                "mode": mode,
+                "answer_questions": answer_questions,
+            },
             fingerprint=n.get("state"),
             blockers=blockers,
         )

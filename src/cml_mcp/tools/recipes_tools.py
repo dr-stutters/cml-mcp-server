@@ -8,13 +8,31 @@ from typing import Annotated, Any
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import Confirm, ResponseFormat, Tier, ToolRegistrar, get_client, list_result, tool_ref
+from stutters_mcp_core import (
+    Confirm,
+    ResponseFormat,
+    Tier,
+    ToolRegistrar,
+    get_client,
+    get_settings,
+    list_result,
+    tool_ref,
+)
 from stutters_mcp_core.http import page_of
 
 from cml_mcp.build import NodeSpec
 from cml_mcp.client import CmlApp
 from cml_mcp.console import mask_secrets
-from cml_mcp.recipes import get_recipe, recipe_licensed_nodes, recipe_names, substituted
+from cml_mcp.recipes import (
+    PLACEHOLDER,
+    get_recipe,
+    placeholders,
+    recipe_licensed_nodes,
+    recipe_names,
+    resolve_secrets,
+    secret_names_by_value,
+    substituted,
+)
 from cml_mcp.tools.build_tool import build_lab_flow
 from cml_mcp.tools.common import shaped
 from cml_mcp.tools.lab_writes import Wait
@@ -55,7 +73,11 @@ def recipe_secrets(recipe: dict[str, Any]) -> set[str]:
         r"(?i)\b(?:\w+\s*/\s*)(\S+?)(?:\s*/\s*(\S+?))?(?=[\s,)]|$)", str(recipe.get("credentials"))
     ):
         found.update(t for t in text if t)
-    return {s for s in found if len(s) >= 4 and s.lower() not in {"none", "same", "true", "false"}}
+    return {
+        s
+        for s in found
+        if len(s) >= 4 and s.lower() not in {"none", "same", "true", "false"} and not PLACEHOLDER.search(s)
+    }
 
 
 def scrub(value: Any, secrets: set[str]) -> Any:
@@ -86,8 +108,9 @@ def recipe_detail(name: str) -> Any:
             "address_plan": r.get("address_plan"),
             "product_side": product,
             "credentials": {
-                "where": f"cml_mcp/recipes/{name}.yaml on the cml-mcp-server host, section 'credentials' "
-                "(lab-only values; never returned by tools)",
+                "where": "${LAB_*} references in the recipe, filled at build time from the server's LAB_* "
+                "environment variables or the file named by CML_LAB_SECRETS_FILE (never returned by tools)",
+                "references": sorted(placeholders(r)),
                 "keys": sorted((r.get("credentials") or {}).keys()),
             },
             "verify": {
@@ -210,7 +233,14 @@ def register(reg: ToolRegistrar) -> None:
         Preview-first; the preview shows wiring and licence use."""
         r = substituted(get_recipe(recipe), substitute)
         b = r["build"]
-        nodes = [NodeSpec.model_validate(n) for n in b.get("nodes") or []]
+        # ${LAB_*} secrets are filled only in what goes to CML (configs, files, logins); the preview shows
+        # node names and wiring, and the annotations come from the unresolved recipe
+        raw_nodes = b.get("nodes") or []
+        for n in raw_nodes:  # validation errors can echo input: check the unresolved spec first
+            NodeSpec.model_validate(n)
+        secrets_file = get_settings(ctx).lab_secrets_file
+        resolved = resolve_secrets(raw_nodes, secrets_file, what=f"recipe {recipe!r}")
+        nodes = [NodeSpec.model_validate(n) for n in resolved]
         return await build_lab_flow(
             ctx,
             tool="cml_build_recipe",
@@ -231,6 +261,7 @@ def register(reg: ToolRegistrar) -> None:
             wait=wait,
             timeout=timeout,
             confirm=confirm,
+            redact=secret_names_by_value(secrets_file),
         )
 
     @reg.prompt(title="Build a test lab from a recipe", uses=["cml"], tier=Tier.WRITE)

@@ -13,13 +13,14 @@ dependencies = [
     "stutters-mcp-core",
     "pyyaml>=6.0.2",
     "asyncssh>=2.21",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]
 cml-mcp-server = "cml_mcp:main"
 
 [tool.uv.sources]
-stutters-mcp-core = { git = "https://github.com/dr-stutters/stutters-mcp-core", tag = "v0.6.0" }
+stutters-mcp-core = { git = "https://github.com/dr-stutters/stutters-mcp-core", tag = "v0.10.0" }
 
 [build-system]
 requires = ["uv_build>=0.10.9,<0.11.0"]

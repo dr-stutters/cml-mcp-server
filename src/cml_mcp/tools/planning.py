@@ -10,7 +10,7 @@ from pydantic import Field
 from stutters_mcp_core import NotFound, ToolRegistrar, get_client
 
 from cml_mcp.client import CmlApp
-from cml_mcp.licence import RUNNING_STATES, licence_usage, licensed, plan_stops, plan_text
+from cml_mcp.licence import RUNNING_STATES, licence_usage, licensed, plan_stops, plan_text, stop_candidates
 from cml_mcp.recipes import get_recipe, recipe_licensed_nodes, recipe_names
 from cml_mcp.tools.common import shaped
 from cml_mcp.verify import verify_recipe
@@ -45,7 +45,15 @@ async def plan_for(app: CmlApp, target: str) -> dict[str, Any]:
         "needed_to_start": needed,
         "licences": {
             k: usage[k]
-            for k in ("limit", "limit_source", "running_licensed_nodes", "free", "by_lab")
+            for k in (
+                "limit",
+                "limit_source",
+                "running_licensed_nodes",
+                "free",
+                "by_lab",
+                "scope",
+                "resource_pool",
+            )
             if k in usage
         },
     }
@@ -59,7 +67,7 @@ async def plan_for(app: CmlApp, target: str) -> dict[str, Any]:
     if total > usage["limit"]:
         out["plan"] = {"feasible": False, "stop": None, "summary": plan_text(None)}
         return out
-    stops = plan_stops(usage["labs"], needed, usage["free"], exclude=lab["id"] if lab else None)
+    stops = plan_stops(stop_candidates(usage), needed, usage["free"], exclude=lab["id"] if lab else None)
     out["plan"] = {
         "feasible": stops is not None,
         "stop": [{"title": s["title"], "id": s["id"], "running": s["running"]} for s in stops or []],
@@ -85,7 +93,9 @@ def register(reg: ToolRegistrar) -> None:
         nodes running per lab, what the target still needs, and the smallest set of labs to stop
         (fewest labs, preferring test labs: recipes and mcp-* titles). The limit is read from the
         licensing API (base licence plus expansion nodes; 5 in evaluation mode) unless
-        CML_NODE_LICENSE_LIMIT overrides it; external connectors and unmanaged switches don't count.
+        CML_NODE_LICENSE_LIMIT overrides it, or from the account's resource pool when that is tighter
+        (or when a non-admin account can't read the licence); external connectors and unmanaged
+        switches don't count. A non-admin account only sees its own and shared labs (`scope`).
         Changes nothing: stop the listed labs with cml_stop_lab."""
         return shaped(await plan_for(get_client(ctx), target))
 

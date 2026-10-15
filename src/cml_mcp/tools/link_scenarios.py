@@ -6,9 +6,10 @@ from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from pydantic import Field
-from stutters_mcp_core import Confirm, Plan, ToolRegistrar, get_client, preview_or_apply
+from stutters_mcp_core import Confirm, Plan, ToolRegistrar, get_client
 
 from cml_mcp.client import CmlApp
+from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.scenarios import (
     FLAP_DEFAULTS,
     FLAP_MAX_TOTAL_SECONDS,

@@ -22,7 +22,7 @@ Current configuration : 1234 bytes
 hostname r1
 !
 username netadmin privilege 15 secret 9 $9$abcdefgh$XYZ
-snmp-server community mcp-ro RO
+snmp-server community fake-ro RO
 interface Loopback0
  ip address 1.1.1.1 255.255.255.255
 interface Loopback7
@@ -44,11 +44,11 @@ def test_normalise_masks_and_drops_noise() -> None:
 
 
 def test_diff_configs_counts_and_masks() -> None:
-    day0 = "hostname r1\nusername netadmin privilege 15 secret ***REDACTED***\nend\n"
+    day0 = "hostname r1\nusername netadmin privilege 15 secret Fake-Cli-Pw9\nend\n"
     running = "hostname r1\nusername netadmin privilege 15 secret 9 $9$x$y\nlogging host 10.1.1.1\n"
     d = diff_configs(day0, running, a_name="day0", b_name="running")
     assert d["lines_added"] == 1 and d["lines_removed"] == 0
-    assert "+logging host 10.1.1.1" in d["diff"] and "***REDACTED***" not in d["diff"]
+    assert "+logging host 10.1.1.1" in d["diff"] and "Fake-Cli-Pw9" not in d["diff"]
     assert diff_configs(day0, day0, a_name="a", b_name="b")["identical"] is True
     ignored = diff_configs(day0, running, a_name="a", b_name="b", ignore=[r"^logging host"])
     assert ignored["identical"] is True
@@ -154,8 +154,8 @@ SECRET_CASES = [
     (" wpa-psk ascii 7 WPAKEY", "WPAKEY"),
     ("username netadmin privilege 15 secret 9 $9$abc$def", "$9$abc$def"),
     ("tacacs-server host 1.1.1.1 key 7 TACKEY", "TACKEY"),
-    (" key ***REDACTED***", "***REDACTED***"),
-    (" client 198.18.134.35 server-key ***REDACTED***", "***REDACTED***"),
+    (" key fake-radius-key", "fake-radius-key"),
+    (" client 198.18.134.35 server-key fake-radius-key", "fake-radius-key"),
     ("  key-string 7 0822455D0A16", "0822455D0A16"),
     ("username admin password XYZPW encrypted privilege 15", "XYZPW"),
     (" ikev1 pre-shared-key ASAKEY", "ASAKEY"),
@@ -201,4 +201,4 @@ async def test_running_and_diff_never_carry_secrets(lab_api: respx.MockRouter, c
         {"lab": LID, "node": "r1", "include_running": True},
     )
     blob = data["running_config"] + data["diff"]
-    assert "$9$" not in blob and "mcp-ro" not in blob
+    assert "$9$" not in blob and "fake-ro" not in blob
