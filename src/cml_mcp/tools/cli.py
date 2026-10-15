@@ -73,7 +73,9 @@ def register(reg: ToolRegistrar) -> None:
         info = await app.resolve_lab(lab)
         lid = info["id"]
         targets = [await app.resolve_node(lid, n) for n in nodes]
-        results = await console_batch(app, lid, targets, lambda _n, _c: commands, timeout=command_timeout)
+        results = await console_batch(
+            app, lid, targets, lambda _n, _c: commands, timeout=command_timeout, purpose="cml_run_commands"
+        )
         return shaped({"lab": info.get("lab_title"), "results": list(results)})
 
     @reg.write(title="Configure node via CLI")
@@ -138,7 +140,10 @@ def register(reg: ToolRegistrar) -> None:
 
         async def apply() -> Any:
             creds = (await lab_credentials(app, lid)).get(str(n.get("label")), Credentials())
-            async with app.console.lock(n["id"]), app.console.open(lid, n["id"], creds) as session:
+            async with (
+                app.console.claim(n["id"], str(n.get("label")), "cml_configure_node"),
+                app.console.open(lid, n["id"], creds) as session,
+            ):
                 await prepare(session)
                 rejected: list[dict[str, str]] = []
                 outputs: list[dict[str, str]] = []

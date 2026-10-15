@@ -120,6 +120,7 @@ class CmlApp:
             port=settings.console_port,
             timeout=settings.timeout,
             known_hosts=known_hosts,
+            lock_wait=settings.console_lock_wait,
         )
 
     # --- auth ----------------------------------------------------------------------------

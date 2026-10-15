@@ -68,7 +68,9 @@ def register(reg: ToolRegistrar) -> None:
                     raise InvalidRequest(f"{cmd!r}: {problem}")
             return [*cmds]
 
-        batch = await console_batch(app, lid, sources, commands, timeout=15 + 3 * count)
+        batch = await console_batch(
+            app, lid, sources, commands, timeout=15 + 3 * count, purpose="cml_check_reachability"
+        )
         rows: list[dict[str, Any]] = []
         for res in batch:
             if res.get("error"):
