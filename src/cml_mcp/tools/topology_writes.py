@@ -302,7 +302,7 @@ def register(reg: ToolRegistrar) -> None:
             state == "start"
             and not noop
             and licensed(n)
-            and (problem := licence_blocker(await licence_usage(app), 1))
+            and (problem := licence_blocker(await licence_usage(app), 1, exclude=lid))
         ):
             blockers.append(problem)
         plan = Plan(

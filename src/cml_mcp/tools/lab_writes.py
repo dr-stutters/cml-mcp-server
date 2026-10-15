@@ -177,7 +177,7 @@ def register(reg: ToolRegistrar) -> None:
         blockers = [] if nodes else ["The lab has no nodes"]
         needed = sum(1 for n in stopped if licensed(n))
         usage = await licence_usage(app) if needed else None
-        if usage and (problem := licence_blocker(usage, needed)):
+        if usage and (problem := licence_blocker(usage, needed, exclude=lid)):
             blockers.append(problem)
         plan = Plan(
             f"Start lab {info.get('lab_title')!r}: {len(stopped)} of {len(nodes)} nodes to start",

@@ -382,7 +382,7 @@ async def test_build_lab_start_licence_error_is_explained(api: respx.MockRouter)
         "start": True,
         "nodes": [{"label": "r1", "definition": "iol-xe"}],
     }
-    async with Client(create_server(make_settings(mcp_enable_writes=True))) as c:
+    async with Client(create_server(make_settings(mcp_enable_writes=True, node_license_limit=50))) as c:
         preview = (await c.call_tool("cml_build_lab", args)).structured_content
         res = await c.call_tool(
             "cml_build_lab", {**args, "confirm": preview["confirm"]}, raise_on_error=False

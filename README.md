@@ -20,8 +20,8 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 - **Real platforms on the console.** IOS/IOS-XE, NX-OS (POAP skipped), FTD CLISH (no `enable`,
   `mode='exec'` for `configure manager add ...`), Linux. Questions (`[confirm]`, `[yes/no]`) are
   answered on request, runaway commands get Ctrl-C.
-- **Lab recipes.** `recipes/*.yaml` are ready-made `cml_build_lab` specs (FTDv for FMC, IOS-XE routers
-  for Catalyst Center, a Cat9kv 802.1X switch for ISE); see [recipes/README.md](recipes/README.md).
+- **Lab recipes.** `src/cml_mcp/recipes/*.yaml` are ready-made `cml_build_lab` specs (FTDv for FMC, IOS-XE routers
+  for Catalyst Center, a Cat9kv 802.1X switch for ISE); see [src/cml_mcp/recipes/README.md](src/cml_mcp/recipes/README.md).
 - **Spec escape hatch.** `cml_search_spec` and `cml_get_definition` read the controller's own
   OpenAPI document. `cml_api_call` reaches any endpoint: GET in the read tier, other methods in the
   dangerous tier.
@@ -141,7 +141,7 @@ tool that fixes it.
 | `CML_TIMEOUT` / `CML_RETRIES` | `30` / `2` | Per-request timeout (s) and retries for idempotent calls |
 | `CML_RATE_LIMIT` / `CML_MAX_CONCURRENCY` | none / `8` | Client-side throttling |
 | `CML_WAIT_TIMEOUT` | `600` | Default wait for start/stop/convergence (s) |
-| `CML_NODE_LICENSE_LIMIT` | | Node-licence cap (the API doesn't report it; EVAL Personal = 5). Start/build previews then refuse to exceed it |
+| `CML_NODE_LICENSE_LIMIT` | detected | Running licensed-node cap. Detected from `/licensing` when unset (base licence nodes + `CML_NODE_COUNT` expansion; 5 in evaluation mode). Start/build previews refuse to exceed it; `cml_plan_licences` says which labs to stop |
 | `CML_CONSOLE_PORT` | `22` | SSH port of the CML console server (used for device CLI) |
 | `CML_CONSOLE_KNOWN_HOSTS` | | known_hosts file for the console server's host key. When unset, the key is checked against `~/.ssh/known_hosts` if `CML_VERIFY_SSL=true`, and not checked otherwise |
 | `MCP_TRANSPORT` | `stdio` | `http` for a network server |
@@ -189,9 +189,9 @@ uv run python scripts/capture_fixtures.py mcp-test-probe   # refresh redacted fi
 IOL-XE routers running OSPF, an IOL-L2 switch and two Alpine hosts (h1 10.0.10.10 and h2
 10.0.20.10, which can ping each other). Device logins are cisco/cisco.
 
-Note: the CML Personal/EVAL licence on the test controller allows **5 running nodes** in total, across
-all labs. Unmanaged switches and external connectors don't count. A start beyond that fails with
-"5 of 5 node licenses are in use".
+Note: CML caps running licensed nodes across all labs (an unregistered controller in evaluation
+mode allows 5; the test controller is now Enterprise with 20 + 50 expansion = 70). Unmanaged
+switches and external connectors don't count. `cml_plan_licences` shows the cap and which labs to stop.
 
 Live tests build throwaway labs named `mcp-test-*` from fast-booting IOL nodes, run every tool,
 and always delete what they created.

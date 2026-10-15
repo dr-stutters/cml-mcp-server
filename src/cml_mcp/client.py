@@ -113,6 +113,8 @@ class CmlApp:
             known_hosts = os.path.expanduser(settings.console_known_hosts)
         elif settings.verify_ssl or settings.ca_bundle is not None:
             known_hosts = os.path.expanduser("~/.ssh/known_hosts")
+        # (monotonic time, running-node limit, how it was derived): see licence.node_limit
+        self.node_limit_cache: tuple[float, int | None, str] | None = None
         self.console = ConsoleServer(
             settings.url,
             settings.username,
