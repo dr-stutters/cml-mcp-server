@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.1 - 2026-10-15
+
+### Changed
+- Core bumped to stutters-mcp-core 0.12.2 (0.11-0.12: per-instance write rules, audit log rotation, per-caller rate
+  limit, `cml-mcp-server config`; list truncation warnings are kept next to a tool's own note).
+- `cml_status`: the server version is now reported by core as `server.server_version`; the server's own
+  `cml.server_version` (a stopgap until core had it) was removed.
+- `cml_search_spec` / `cml_get_definition` descriptions use CML examples ('lab node', '/labs/{lab_id}/nodes/{node_id}')
+  via the new `ServerSpec` options.
+
 ## 0.9.0 - 2026-10-15
 
 Operator-eyes quality pass (L25-L33): 13 realistic tasks run through the MCP tools against the live controller; the

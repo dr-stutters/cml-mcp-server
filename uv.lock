@@ -301,7 +301,7 @@ wheels = [
 
 [[package]]
 name = "cml-mcp-server"
-version = "0.9.0"
+version = "0.9.1"
 source = { editable = "." }
 dependencies = [
     { name = "asyncssh" },
@@ -325,7 +325,7 @@ requires-dist = [
     { name = "asyncssh", specifier = ">=2.21" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "stutters-mcp-core", extras = ["tasks"], git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.10.0" },
+    { name = "stutters-mcp-core", extras = ["tasks"], git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.12.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -1590,8 +1590,8 @@ wheels = [
 
 [[package]]
 name = "stutters-mcp-core"
-version = "0.10.0"
-source = { git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.10.0#a2adc74b376c789861933ca1e8d7cac52032d5a0" }
+version = "0.12.2"
+source = { git = "https://github.com/dr-stutters/stutters-mcp-core?tag=v0.12.2#2a046a9344d7f4045f155e18443ae719d5aaedea" }
 dependencies = [
     { name = "fastmcp" },
     { name = "httpx" },

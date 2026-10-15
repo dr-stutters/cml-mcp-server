@@ -78,6 +78,8 @@ SPEC = ServerSpec(
     product="Cisco Modeling Labs",
     env_prefix="CML_",
     instructions=INSTRUCTIONS,
+    spec_search_example="lab node",
+    spec_path_example="/labs/{lab_id}/nodes/{node_id}",
 )
 
 

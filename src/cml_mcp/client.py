@@ -180,12 +180,6 @@ class CmlApp:
         info = await self.api.get("/system_information")
         self._version = str(info.get("version", "unknown"))
         out: dict[str, Any] = {"version": self._version, "ready": info.get("ready")}
-        try:  # TODO(core): status has core_version but not the server's own (CORE-REQUESTS.md)
-            from importlib.metadata import version as _pkg_version
-
-            out["server_version"] = _pkg_version("cml-mcp-server")
-        except Exception:  # noqa: BLE001 - source checkout without metadata
-            pass
         user = await self.current_user()
         out["user"] = user.get("username")
         out["admin"] = user.get("admin")
