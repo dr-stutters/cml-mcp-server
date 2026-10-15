@@ -40,6 +40,7 @@ git clone https://github.com/dr-stutters/cml-mcp-server && cd cml-mcp-server
 cp .env.example .env && chmod 600 .env      # set CML_URL, CML_USERNAME, CML_PASSWORD
 uv sync
 uv run cml-mcp-server check                 # connects and prints cml_status as JSON
+uv run cml-mcp-server config                # effective settings and where each came from (no CML contact)
 ```
 
 ### Claude Code: stdio (local)

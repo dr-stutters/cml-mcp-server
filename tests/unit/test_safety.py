@@ -1,5 +1,6 @@
 """L20: CML safety rails (protected/managed labs, blast radius, device command deny-list, TLS pinning)."""
 
+import importlib.metadata
 import ssl
 from pathlib import Path
 from typing import Any
@@ -320,4 +321,6 @@ def test_console_all_toggle_only_for_non_admins() -> None:
 
 async def test_status_reports_server_version(api: respx.MockRouter) -> None:
     data = await call_tool(create_server(make_settings()), "cml_status")
-    assert data["cml"]["server_version"]
+    assert "server_version" not in data["cml"]  # core reports it under server
+    assert data["server"]["server_version"] == importlib.metadata.version("cml-mcp-server")
+    assert data["server"]["core_version"] == importlib.metadata.version("stutters-mcp-core")
