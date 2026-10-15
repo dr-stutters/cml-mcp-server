@@ -5,7 +5,7 @@ _Last updated 2026-10-15. Current release v0.3.0. Suite roadmap: [stutters-mcp-c
 - **Where it stands:** 52 tools (30 read, 17 write, 5 dangerous plus `cml_api_call`) against CML 2.10. About 70 % of the
   day-to-day lab operations have curated tools. Console CLI works on IOS/IOS-XE/NX-OS/FTD/Linux. Three recipes
   (`ftd-fmc`, `catc-routers`, `ise-access`) are the **test bed for the FMC, Catalyst Center and ISE servers**.
-- **Biggest gaps:** no MCP prompts yet; no real-time view (lab state is polled); recipes are checked by hand;
+- **Biggest gaps:** no MCP prompts yet; recipes are checked by hand;
   capture and config data come back raw, with no analysis; the lab can't test non-admin accounts or older CML versions.
 - **The main lab constraint:** the controller runs the Personal licence in EVAL mode, which caps it at **5 running licensed nodes**
   across all labs. The three recipes together need exactly 5. Bigger recipes (FTD HA, wireless, fabric) can't run
@@ -26,8 +26,7 @@ _Last updated 2026-10-15. Current release v0.3.0. Suite roadmap: [stutters-mcp-c
 ## Next
 | # | Item | Why (operator value) | External needs | Test plan | Size | Issue |
 |---|---|---|---|---|---|---|
-| L7 | **CML event stream**: an `EventSource` on the controller's websocket (`wss://<cml>/ws/sub`, the pub/sub feed the UI uses; it isn't in the OpenAPI, so the first task is to confirm the message format on 2.10), with a poll fallback on `GET /labs/{id}/events`. Normalised events: lab/node/link/interface state changes, boot, capture started/stopped, licence refusals. Tools from core: `cml_list_events`, `cml_event_sources`, resource `events://cml/recent`. `cml_wait_for_converged` waits on events instead of polling. Depends on core [C3](https://github.com/dr-stutters/stutters-mcp-core/issues/8) (C6/C7 optional). | "Did the FTD reboot during the deploy?" and "which node went down?" get answered from history, not from a poll at the right moment. Less API load while waiting on boots. | Server → CML :443 (wss, outbound, same JWT; refresh before the 24 h expiry). No appliance-side setup. | Live: start/stop `mcp-test-seed` nodes and check the events and order; kill the websocket to test reconnect and backoff. Unit: recorded message fixtures. | M | [#16](https://github.com/dr-stutters/cml-mcp-server/issues/16) |
-| L8 | **Link conditioning scenarios**: `cml_apply_link_scenario(link, scenario)` with named profiles (`wan-good`, `wan-satellite`, `lossy-wifi`, `brownout`, `flap` = timed up/down cycles, run as a background task and cancellable) and `cml_clear_link_scenarios(lab)`. Each scenario also returns its expected ping matrix deltas. | Repeatable degraded-network tests: FMC/FTD HA failover, ISE RADIUS timeouts and CatC assurance health scores, all without hand-typing netem values. | none | Live: `mcp-test-seed` r1–r2 with each profile, checking loss/latency through `cml_check_reachability`; the flap scenario raises OSPF events (L7). | M | [#17](https://github.com/dr-stutters/cml-mcp-server/issues/17) |
+| L8 | **Link conditioning scenarios**: `cml_apply_link_scenario(link, scenario)` with named profiles (`wan-good`, `wan-satellite`, `lossy-wifi`, `brownout`, `flap` = timed up/down cycles, run as a background task and cancellable) and `cml_clear_link_scenarios(lab)`. Each scenario also returns its expected ping matrix deltas. | Repeatable degraded-network tests: FMC/FTD HA failover, ISE RADIUS timeouts and CatC assurance health scores, all without hand-typing netem values. | none | Live: `mcp-test-seed` r1–r2 with each profile, checking loss/latency through `cml_check_reachability`; the flap scenario's OSPF adjacency changes show in `cml_get_node_console_log(grep=...)`. | M | [#17](https://github.com/dr-stutters/cml-mcp-server/issues/17) |
 | L9 | **Topology export and annotations**: `cml_export_topology(lab, format='mermaid'\|'drawio'\|'json')` with addresses from L3 discovery; `cml_list_annotations` (read); `cml_annotate_lab` (write: text boxes for addresses, credentials *references* and the recipe purpose). The recipes annotate their own labs. Reverses the gap-analysis "cosmetic" call for PoC use. | PoC write-ups and customer demos need a diagram and a self-describing lab. | none | Live: export and annotate `mcp-cml-catc`, render the Mermaid. Unit: format snapshot tests. | S | [#18](https://github.com/dr-stutters/cml-mcp-server/issues/18) |
 | L10 | **`ftd-ha` recipe**: 2 FTDv (failover and state links over an unmanaged switch, inside/outside data links), an Alpine inside host, outside on the System Bridge (198.18.128.155–.157). Built for the fmc server's `fmc_form_ha` / `fmc_ha_action` / `fmc_break_ha` live tests. | FMC HA tools are mock-only without two FTDs. | 3 node licences (needs L2 to stop other recipes). FMC device and eval licence for 2 more FTDs. IPs .155–.157 free. | Live: build, register both to FMC, form HA, fail over via L8 `flap` on the failover link, break HA, delete. | M | [#19](https://github.com/dr-stutters/cml-mcp-server/issues/19) |
 | L11 | **EAP-TLS wired client in `ise-access`**: add an Ubuntu client with `wpa_supplicant` (802.1X EAP-TLS) next to the Alpine MAB client. Day-0 `files` carry the client cert and key, issued by the Windows CA. Change sw1 to IBNS 2.0 with dot1x before MAB. | ISE certificate-based auth (the real enterprise case) can't be tested with MAB-only clients. | Windows lab CA (`Windows_Server` MCP: `win_sign_csr`). ISE trusts that CA (`ise_import_trusted_cert`) and has an EAP-TLS allowed-protocols entry. 1 more licence (ise-access becomes 3). | Live: client authenticates, ISE `ise_session_by_mac` shows EAP-TLS, L5 capture shows the EAPOL/RADIUS exchange. | M | [#20](https://github.com/dr-stutters/cml-mcp-server/issues/20) |
@@ -41,14 +40,18 @@ _Last updated 2026-10-15. Current release v0.3.0. Suite roadmap: [stutters-mcp-c
 | L15 | **`fabric` recipe (SD-Access-style)**: 3× cat9000v (border/control plane plus 2 edges), a fusion router and a client, for CatC fabric provisioning tests. | CatC SDA workflows are the largest untested area in the catc server. | **Blocked by the licence:** 5–6 licensed nodes and about 60 GB RAM. Takes the whole EVAL budget or exceeds it. Unblocked by a registered licence (20+ nodes) or a second CML. Needs a check that CatC supports cat9000v as a fabric node. | Live: CatC discovers the 3 switches, a fabric site is provisioned, and a client authenticates via ISE. | L | [#24](https://github.com/dr-stutters/cml-mcp-server/issues/24) |
 | L16 | **`cml_replicate_site` prompt**: reads a site from CatC (devices, links, roles), ISE (NADs, RADIUS) and FMC (FTDs, interfaces), maps them to CML node definitions within the licence budget (L2) and builds a scaled-down replica with `cml_build_lab`, with the gaps listed explicitly. Depends on core [C2](https://github.com/dr-stutters/stutters-mcp-core/issues/7), [C9](https://github.com/dr-stutters/stutters-mcp-core/issues/14). | Reproduce a customer's site in a lab before a change. | The catc, ise and fmc servers (read tools only). Enough licences for the replica. | Live: replicate the dCloud CatC site plus FMC/ISE into a 5-node lab; unit: mapping table. | L | [#25](https://github.com/dr-stutters/cml-mcp-server/issues/25) |
 
-## Event sources
-| Source | What it gives | Appliance-side setup | Certs/accounts | Network path (direction, port) | Bucket |
-|---|---|---|---|---|---|
-| CML websocket `/ws/sub` (L7) | Lab, node, link and interface state changes; boot progress; capture start/stop | None | The existing CML account (JWT, 24 h). A non-admin account sees only its own labs (L17). CML's self-signed cert (verified once L20 lands). | **server → CML** 198.18.128.10:443, wss, outbound | Next |
-| CML lab events poll `GET /labs/{id}/events` (L7 fallback) | The same state history, per lab, at poll granularity | None | Same account | server → CML :443, HTTPS | Next |
+## Events (pull-only)
+The suite's servers are **pull-only** ([core ADR-003](https://github.com/dr-stutters/stutters-mcp-core/blob/main/docs/adr/003-no-event-ingestion.md)):
+they query the platform's own history on demand and never receive pushed data. For CML that means:
 
-The lab devices' own syslog (CML nodes → server via core C4) is not planned. Console logs (`cml_get_node_console_log`)
-already cover it for test labs.
+| On-demand lookup | What it gives | Tool |
+|---|---|---|
+| Lab events `GET /labs/{id}/events` | Lab, node and link state changes per lab (start, stop, boot, wipe) | `cml_list_lab_events` (exists) |
+| Node console logs | Device-side messages (syslog lines on the console, boot progress, OSPF/interface changes) | `cml_get_node_console_log(grep=...)` (exists) |
+
+Not planned: the CML websocket stream (former L7, [#16](https://github.com/dr-stutters/cml-mcp-server/issues/16))
+and the push-event relay (former L22, [#31](https://github.com/dr-stutters/cml-mcp-server/issues/31)); both were
+event ingestion, dropped with core 0.3.0.
 
 ## Workflow prompts owned by this server
 | Prompt | What it does | Other servers used | Bucket |
@@ -94,6 +97,7 @@ Core gate items that also apply to this server: [G1](https://github.com/dr-stutt
 | Image files for upload | L19 | cisco.com downloads | onto the server host | ⏳ when needed |
 
 ## Not planned
+- **Event ingestion** (CML websocket stream L7, push-event relay L22, receivers): servers are pull-only (core ADR-003). Use `cml_list_lab_events` and console logs on demand.
 - **Licensing registration/reservation, users/groups/resource pools writes, maintenance mode, notices, lab repos,
   telemetry, compute host admin:** one-off admin work, often dangerous. Left to `cml_api_call` (GET at the read tier,
   other methods at the dangerous tier).

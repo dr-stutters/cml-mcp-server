@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Changed
-- Core pinned to stutters-mcp-core v0.2.0 (prompts, events, receivers; no behaviour change on its own).
+- Core pinned to stutters-mcp-core v0.3.0 (MCP prompts; the 0.2.0 event framework is gone, servers are pull-only).
 
 ## 0.3.0 - 2026-10-15
 
