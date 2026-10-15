@@ -1,0 +1,13 @@
+hostname r1
+interface Ethernet0/0
+ ip address 10.0.12.1 255.255.255.0
+ no shutdown
+interface Ethernet0/1
+ ip address 10.0.13.1 255.255.255.0
+ no shutdown
+interface Loopback0
+ ip address 10.255.0.1 255.255.255.255
+router ospf 1
+ router-id 10.255.0.1
+ network 10.0.0.0 0.255.255.255 area 0
+end
