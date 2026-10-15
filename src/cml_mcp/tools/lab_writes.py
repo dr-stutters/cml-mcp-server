@@ -35,7 +35,7 @@ from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, parse_topology_yaml, state_counts
 from cml_mcp.tools.smart import Timeout
 
-Wait = Annotated[bool, Field(description="Wait until the operation has finished (default true)")]
+Wait = Annotated[bool, Field(description="Wait until the operation has finished")]
 
 
 async def known_definitions(app: CmlApp) -> dict[str, dict[str, Any]]:

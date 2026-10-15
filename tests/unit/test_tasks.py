@@ -17,6 +17,7 @@ LONG = {
     "cml_verify_recipe",
     "cml_capture",
     "cml_capture_wireless",
+    "cml_check_reachability",
 }
 
 
