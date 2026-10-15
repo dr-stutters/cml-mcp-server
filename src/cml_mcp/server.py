@@ -12,6 +12,7 @@ from cml_mcp.client import CmlApp
 from cml_mcp.config import Settings
 from cml_mcp.tools import (
     build_tool,
+    captures,
     cli,
     configs,
     dangerous,
@@ -36,6 +37,8 @@ two interfaces. Labs and nodes can be given by title/label or by UUID; links by 
 Start with cml_list_labs, then cml_get_lab_topology (compact summary; detail='full' for everything).
 Nodes: cml_list_nodes / cml_get_node / cml_get_node_console_log; wiring: cml_list_interfaces,
 cml_list_links / cml_get_link (conditioning, capture status), cml_list_capture_packets.
+Captures: cml_capture (capture + decoded summary in one call), cml_summarize_capture (RADIUS, EAPOL,
+OSPF, DHCP, ARP, ICMP decoded; secrets never shown).
 What can be built: cml_list_node_definitions (iol-xe / ioll2-xe boot in under a minute).
 Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the CML console server
 (no IP reachability needed; IOS/IOS-XE, NX-OS, FTD, Linux); config changes go through
@@ -93,6 +96,7 @@ def create_server(
             labs.register,
             nodes.register,
             links.register,
+            captures.register,
             definitions.register,
             smart.register,
             lab_writes.register,
