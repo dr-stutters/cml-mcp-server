@@ -2,12 +2,15 @@
 
 # No `from __future__ import annotations` in tool modules: FastMCP inspects signatures at runtime.
 
+import asyncio
+import contextlib
 from typing import Annotated, Any
 
 from fastmcp import Context
 from pydantic import Field
 from stutters_mcp_core import (
     Confirm,
+    InvalidRequest,
     Plan,
     ToolRegistrar,
     UpstreamError,
@@ -18,7 +21,16 @@ from stutters_mcp_core import (
 
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
-from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed
+from cml_mcp.licence import (
+    compact_usage,
+    explain_licence_error,
+    licence_blocker,
+    licence_usage,
+    licensed,
+    nodes_ram_mb,
+    ram_check,
+    ram_headroom,
+)
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, parse_topology_yaml, state_counts
 from cml_mcp.tools.smart import Timeout
@@ -33,6 +45,9 @@ async def known_definitions(app: CmlApp) -> dict[str, dict[str, Any]]:
 
 async def title_taken(app: CmlApp, title: str) -> list[str]:
     return [lab["id"] for lab in await app.list_labs() if lab.get("lab_title") == title]
+
+
+LAB_RUNNING = ("STARTED", "QUEUED", "BOOTED")
 
 
 def lab_fingerprint(lab: dict[str, Any]) -> Any:
@@ -168,26 +183,25 @@ def register(reg: ToolRegistrar) -> None:
         nodes = await app.list_nodes(lid)
         defs = await known_definitions(app)
         stopped = [n for n in nodes if n.get("state") not in ("BOOTED", "STARTED", "QUEUED")]
-        ram = sum(
-            int(
-                n.get("ram") or (defs.get(str(n.get("node_definition"))) or {}).get("sim", {}).get("ram") or 0
-            )
-            for n in stopped
-        )
+        ram = nodes_ram_mb(stopped, defs)
         blockers = [] if nodes else ["The lab has no nodes"]
         needed = sum(1 for n in stopped if licensed(n))
         usage = await licence_usage(app) if needed else None
-        if usage and (problem := licence_blocker(usage, needed, exclude=lid)):
+        problem = licence_blocker(usage, needed, exclude=lid) if usage else None
+        if problem:
             blockers.append(problem)
+        memory = ram_check(await ram_headroom(app), ram) if ram else None
         plan = Plan(
             f"Start lab {info.get('lab_title')!r}: {len(stopped)} of {len(nodes)} nodes to start",
             details={
                 "node_states": state_counts(nodes),
                 "ram_needed_mb": ram,
+                **({"ram": memory} if memory else {}),
                 "licensed_nodes_to_start": needed,
-                **({"licences": usage} if usage else {}),
+                **({"licences": usage if problem else compact_usage(usage)} if usage else {}),
                 "wait": wait,
             },
+            side_effects=[memory["warning"]] if memory and memory.get("warning") else [],
             fingerprint=lab_fingerprint(info),
             blockers=blockers,
         )
@@ -249,6 +263,136 @@ def register(reg: ToolRegistrar) -> None:
             ctx,
             tool="cml_stop_lab",
             args={"lab": lab, "wait": wait, "timeout": timeout},
+            confirm=confirm,
+            plan=plan,
+            apply=apply,
+        )
+
+    @reg.write(title="Stop several labs", idempotent=True)
+    async def cml_stop_labs(
+        ctx: Context,
+        labs: Annotated[
+            list[str] | None,
+            Field(max_length=50, description="Labs to stop (titles or ids); or use all_running=true"),
+        ] = None,
+        all_running: Annotated[
+            bool, Field(description="Stop every running lab this account can see (except `keep`)")
+        ] = False,
+        keep: Annotated[
+            list[str] | None, Field(max_length=50, description="With all_running: labs to leave running")
+        ] = None,
+        wait: Wait = True,
+        timeout: Timeout = None,  # noqa: ASYNC109 - overall wait, handled by poll_until
+        confirm: Confirm = None,
+    ) -> dict[str, Any]:
+        """Stop several labs with one preview and one confirm ('stop everything I'm not using'). The
+        preview lists each lab with its running nodes, owner, and the licences and RAM stopping it
+        frees; labs that are already stopped are skipped and protected labs (CML_PROTECTED_LABS)
+        refused. Running state is lost, as with cml_stop_lab; other people's labs are listed with
+        their owner, so check with the user before including them. cml_get_resource_usage shows which
+        labs hold the most RAM."""
+        from cml_mcp.safety import _patterns, lab_matches
+
+        if bool(labs) == all_running:
+            raise InvalidRequest("Give either `labs` or all_running=true.")
+        if keep and not all_running:
+            raise InvalidRequest("`keep` only applies with all_running=true.")
+        app: CmlApp = get_client(ctx)
+        visible = await app.list_labs()
+        if all_running:
+            kept = {(await app.resolve_lab(k, exact=True))["id"] for k in keep or []}
+            targets = [lab for lab in visible if lab.get("state") in LAB_RUNNING and lab["id"] not in kept]
+        else:
+            targets = []
+            for ref in dict.fromkeys(labs or []):
+                lab = await app.resolve_lab(ref, exact=True)
+                if lab["id"] not in {t["id"] for t in targets}:
+                    targets.append(lab)
+        protected = _patterns(getattr(get_settings(ctx), "protected_labs", None))
+        users: dict[str, Any] = {}
+        with contextlib.suppress(UpstreamError):  # owner names are a convenience
+            users = {str(u.get("id")): u.get("username") for u in await app.api.get("/users")}
+        defs = await known_definitions(app)
+        rows: list[dict[str, Any]] = []
+        refused: list[str] = []
+        skipped: list[str] = []
+        for lab in targets:
+            title = str(lab.get("lab_title"))
+            if lab.get("state") not in LAB_RUNNING:
+                skipped.append(title)
+                continue
+            if p := lab_matches(lab, protected):
+                refused.append(f"{title} (CML_PROTECTED_LABS {p!r})")
+                continue
+            nodes = await app.list_nodes(str(lab["id"]))
+            running = [n for n in nodes if n.get("state") in ("BOOTED", "STARTED", "QUEUED")]
+            rows.append(
+                {
+                    "id": lab["id"],
+                    "lab": title,
+                    "owner": users.get(str(lab.get("owner")), lab.get("owner")),
+                    "running_nodes": len(running),
+                    "licences_freed": sum(1 for n in running if licensed(n)),
+                    "ram_freed_mb": nodes_ram_mb(running, defs),
+                }
+            )
+        plan = Plan(
+            f"Stop {len(rows)} lab(s): " + ", ".join(r["lab"] for r in rows),
+            details={
+                "labs": [{k: v for k, v in r.items() if k != "id"} for r in rows],
+                "licences_freed": sum(r["licences_freed"] for r in rows),
+                "ram_freed_mb": sum(r["ram_freed_mb"] for r in rows),
+                **({"already_stopped": skipped} if skipped else {}),
+                **({"refused_protected": refused} if refused else {}),
+                "wait": wait,
+            },
+            fingerprint=sorted((lab["id"], lab.get("state"), lab.get("modified")) for lab in targets),
+            blockers=[] if rows else ["Nothing to stop: no running lab matched"],
+            blast_radius=sum(r["running_nodes"] for r in rows),
+            side_effects=[
+                "Running state is lost; configs not saved with cml_extract_node_configs are lost "
+                "when a lab is later wiped"
+            ],
+        )
+        limit = timeout or get_settings(ctx).wait_timeout
+
+        async def apply() -> Any:
+            """Stop each lab; one refusal (deleted meanwhile, no permission) doesn't stop the rest."""
+            stopped: list[dict[str, Any]] = []
+            failed: list[dict[str, Any]] = []
+            for r in rows:
+                try:
+                    await app.api.put(f"/labs/{r['id']}/stop")
+                    stopped.append(r)
+                except UpstreamError as e:
+                    failed.append({"lab": r["lab"], "id": r["id"], "error": str(e)})
+            out: dict[str, Any] = {}
+            if wait and stopped:
+                states = await asyncio.gather(
+                    *(
+                        wait_for_lab_state(app, str(r["id"]), ("STOPPED", "DEFINED_ON_CORE"), limit, ctx)
+                        for r in stopped
+                    ),
+                    return_exceptions=True,
+                )
+                out["stopped"] = [
+                    {
+                        "lab": r["lab"],
+                        "id": r["id"],
+                        "state": st if isinstance(st, str) else f"not confirmed: {st}",
+                    }
+                    for r, st in zip(stopped, states, strict=True)
+                ]
+            else:
+                out["stopping"] = [{"lab": r["lab"], "id": r["id"]} for r in stopped]
+            if failed:
+                out["failed"] = failed
+            return out
+
+        return await preview_or_apply(
+            ctx,
+            tool="cml_stop_labs",
+            args={"labs": labs, "all_running": all_running, "keep": keep, "wait": wait, "timeout": timeout},
             confirm=confirm,
             plan=plan,
             apply=apply,

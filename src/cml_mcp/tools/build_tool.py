@@ -30,7 +30,15 @@ from cml_mcp.build import (
 )
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
-from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage
+from cml_mcp.licence import (
+    compact_usage,
+    explain_licence_error,
+    licence_blocker,
+    licence_usage,
+    nodes_ram_mb,
+    ram_check,
+    ram_headroom,
+)
 from cml_mcp.recipes import redact_values
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.lab_writes import Wait, known_definitions, title_taken
@@ -132,10 +140,15 @@ async def build_lab_flow(
         blockers.append(f"A lab titled {title!r} already exists")
     needed = sum(1 for n in nodes if n.definition not in UNLICENSED_DEFINITIONS)
     licences: dict[str, Any] | None = None
+    memory: dict[str, Any] | None = None
     if start:
         licences = await licence_usage(app)
         if problem := licence_blocker(licences, needed):
             blockers.append(problem)
+        else:
+            licences = compact_usage(licences)
+        specs = [{"node_definition": n.definition, "ram": n.ram} for n in nodes]
+        memory = ram_check(await ram_headroom(app), nodes_ram_mb(specs, defs))
     plan = Plan(
         f"Build lab {title!r}: {len(nodes)} nodes, {len(links)} links" + (", then start it" if start else ""),
         details={
@@ -144,12 +157,14 @@ async def build_lab_flow(
             "start": start,
             "licensed_nodes": needed,
             **({"licences": licences} if licences else {}),
+            **({"ram": memory} if memory else {}),
             **({"notes": notes} if notes else {}),
             **({"annotations": len(annotations)} if annotations else {}),
             **({"cat9000v_serials": serials} if serials else {}),
         },
         blockers=blockers,
         blast_radius=len(nodes),
+        side_effects=[memory["warning"]] if memory and memory.get("warning") else [],
     )
     limit = timeout or get_settings(ctx).wait_timeout
 

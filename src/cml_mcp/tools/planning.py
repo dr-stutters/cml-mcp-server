@@ -10,7 +10,17 @@ from pydantic import Field
 from stutters_mcp_core import NotFound, ToolRegistrar, get_client
 
 from cml_mcp.client import CmlApp
-from cml_mcp.licence import RUNNING_STATES, licence_usage, licensed, plan_stops, plan_text, stop_candidates
+from cml_mcp.licence import (
+    RUNNING_STATES,
+    licence_usage,
+    licensed,
+    nodes_ram_mb,
+    plan_stops,
+    plan_text,
+    ram_check,
+    ram_headroom,
+    stop_candidates,
+)
 from cml_mcp.recipes import get_recipe, recipe_licensed_nodes, recipe_names
 from cml_mcp.tools.common import shaped
 from cml_mcp.verify import verify_recipe
@@ -28,13 +38,19 @@ async def plan_for(app: CmlApp, target: str) -> dict[str, Any]:
         if not recipe:
             raise
         lab = None
+    from cml_mcp.tools.lab_writes import known_definitions  # tools import each other lazily
+
+    defs = await known_definitions(app)
     if lab:
         nodes = await app.list_nodes(lab["id"])
         needed = sum(1 for n in nodes if licensed(n) and n.get("state") not in RUNNING_STATES)
         total = sum(1 for n in nodes if licensed(n))
+        ram_mb = nodes_ram_mb([n for n in nodes if n.get("state") not in RUNNING_STATES], defs)
     else:
         needed = total = recipe_licensed_nodes(recipe) if recipe else 0
+        ram_mb = nodes_ram_mb(recipe["build"].get("nodes") or [], defs) if recipe else 0
     usage = await licence_usage(app)
+    memory = ram_check(await ram_headroom(app), ram_mb)
     out: dict[str, Any] = {
         "target": target,
         **({"recipe": target} if recipe else {}),
@@ -73,6 +89,10 @@ async def plan_for(app: CmlApp, target: str) -> dict[str, Any]:
         "stop": [{"title": s["title"], "id": s["id"], "running": s["running"]} for s in stops or []],
         "summary": plan_text(stops),
     }
+    if memory:
+        out["ram"] = memory
+        if not memory["ok"]:
+            out["plan"]["summary"] += " " + memory["warning"]
     if stops:
         out["next"] = "cml_stop_lab on each lab in plan.stop, then " + (
             "cml_start_lab" if lab else "cml_build_lab with the recipe's build section"
@@ -96,7 +116,9 @@ def register(reg: ToolRegistrar) -> None:
         CML_NODE_LICENSE_LIMIT overrides it, or from the account's resource pool when that is tighter
         (or when a non-admin account can't read the licence); external connectors and unmanaged
         switches don't count. A non-admin account only sees its own and shared labs (`scope`).
-        Changes nothing: stop the listed labs with cml_stop_lab."""
+        `ram` compares the RAM the target needs with the controller's free memory (with 70 licences,
+        RAM is usually the real limit). Changes nothing: stop the listed labs with cml_stop_lab or
+        cml_stop_labs."""
         return shaped(await plan_for(get_client(ctx), target))
 
     @reg.read(title="Verify a lab recipe", idempotent=False, task=True)

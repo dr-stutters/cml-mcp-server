@@ -6,10 +6,47 @@ from typing import Any
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
-from stutters_mcp_core import AuthError, NotFound, ToolRegistrar, get_client
+from stutters_mcp_core import AuthError, NotFound, ToolRegistrar, UpstreamError, get_client
 
 from cml_mcp.client import CmlApp, health_summary, licensing_summary
+from cml_mcp.licence import RUNNING_STATES, licensed, running_nodes
 from cml_mcp.tools.common import gib, shaped
+
+
+async def usage_by_lab(app: CmlApp, top: int = 5) -> dict[str, Any]:
+    """Running labs sorted by the RAM their running nodes hold, and the biggest running nodes (L30)."""
+    from cml_mcp.tools.lab_writes import known_definitions  # tools import each other lazily
+
+    nodes, scope = await running_nodes(app)
+    defs = await known_definitions(app)
+    titles = {lab["id"]: str(lab.get("lab_title")) for lab in await app.list_labs()}
+    labs: dict[str, dict[str, Any]] = {}
+    rows = []
+    for n in nodes:
+        if n.get("state") not in RUNNING_STATES:
+            continue
+        sim = (defs.get(str(n.get("node_definition"))) or {}).get("sim") or {}
+        ram, cpus = int(n.get("ram") or sim.get("ram") or 0), int(n.get("cpus") or sim.get("cpus") or 0)
+        title = titles.get(str(n.get("lab_id")), str(n.get("lab_id")))
+        lab = labs.setdefault(  # by id: titles needn't be unique
+            str(n.get("lab_id")),
+            {"lab": title, "id": n.get("lab_id"), "running_nodes": 0, "licensed": 0, "ram_mb": 0, "cpus": 0},
+        )
+        lab["running_nodes"] += 1
+        lab["licensed"] += int(licensed(n))
+        lab["ram_mb"] += ram
+        lab["cpus"] += cpus
+        if ram:
+            rows.append(
+                {"lab": title, "node": n.get("label"), "definition": n.get("node_definition"), "ram_mb": ram}
+            )
+    out: dict[str, Any] = {
+        "labs": sorted(labs.values(), key=lambda r: (-r["ram_mb"], r["lab"])),
+        "top_nodes": sorted(rows, key=lambda r: -int(r["ram_mb"] or 0))[:top],
+    }
+    if scope:
+        out["labs_scope"] = scope
+    return out
 
 
 def _usage(stats: dict[str, Any]) -> dict[str, Any]:
@@ -51,7 +88,9 @@ def register(reg: ToolRegistrar) -> None:
     async def cml_get_resource_usage(ctx: Context) -> ToolResult:
         """CPU, memory and disk usage of the whole CML cluster and of each compute host, plus how many
         nodes are running and how many vCPUs/MB of RAM they have been allocated, and the licensed
-        node capacity in use. Check this before starting big labs."""
+        node capacity in use. `labs` answers "what is using the controller": every running lab with
+        its running nodes, licences, vCPUs and RAM, biggest first, and `top_nodes` the largest
+        running nodes. Check this before starting big labs."""
         app: CmlApp = get_client(ctx)
         stats = await app.api.get("/system_stats")
         computes = []
@@ -70,7 +109,14 @@ def register(reg: ToolRegistrar) -> None:
             mem_kib = dom.get("allocated_memory")
             row["allocated_memory_mb"] = round(mem_kib / 1024) if isinstance(mem_kib, int | float) else None
             computes.append(row)
-        out: dict[str, Any] = {"cluster": _usage(stats.get("all") or {}), "computes": computes}
+        out: dict[str, Any] = {
+            "cluster": _usage(stats.get("all") or {}),
+            "computes": computes,
+        }
+        try:
+            out.update(await usage_by_lab(app))
+        except UpstreamError as e:  # the per-lab view is extra: the host numbers still answer
+            out["labs"] = f"unavailable: {e}"
         try:
             lic = licensing_summary(await app.api.get("/licensing"))
             out["license_features"] = lic["features"]

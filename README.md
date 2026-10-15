@@ -119,6 +119,7 @@ or in `.mcp.json`:
 | `cml_load_sample_lab` | Create a lab from a sample lab |
 | `cml_create_lab` / `cml_import_lab` | Create an empty lab, or create one from topology YAML (node definitions are checked) |
 | `cml_start_lab` / `cml_stop_lab` | Start (waits for convergence) or stop a lab |
+| `cml_stop_labs` | Stop several labs (a list, or every running lab except `keep`) with one preview: licences and RAM freed per lab, protected labs refused |
 | `cml_add_node` / `cml_update_node` | Add a node; change its label, tags, position, resources or console login |
 | `cml_set_node_config` | Replace a node's day-0 config; the preview shows a unified diff |
 | `cml_set_node_state` | Start or stop one node |

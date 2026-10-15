@@ -10,7 +10,7 @@ from stutters_mcp_core.testing import call_tool
 
 from cml_mcp.server import create_server
 
-from .conftest import LID, LINK, R1, make_settings
+from .conftest import LAB, LID, LINK, R1, make_settings
 
 
 async def call(name: str, args: dict[str, Any] | None = None, **settings: Any) -> Any:
@@ -222,7 +222,33 @@ async def test_capture_packets_without_capture(lab_api: respx.MockRouter) -> Non
 
 
 async def test_resource_usage(lab_api: respx.MockRouter) -> None:
+    lab_api.get("/simplified_node_definitions").mock(
+        return_value=httpx.Response(
+            200, json=[{"id": "iol-xe", "sim": {"ram": 1024, "cpus": 1}}, {"id": "cat9000v-uadp", "sim": {}}]
+        )
+    )
+    lab_api.get("/nodes").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"lab_id": LID, "label": "r1", "node_definition": "iol-xe", "state": "BOOTED"},
+                {
+                    "lab_id": LID,
+                    "label": "sw1",
+                    "node_definition": "cat9000v-uadp",
+                    "state": "BOOTED",
+                    "ram": 18432,
+                    "cpus": 4,
+                },
+                {"lab_id": LID, "label": "off", "node_definition": "iol-xe", "state": "STOPPED"},
+            ],
+        )
+    )
     data = await call("cml_get_resource_usage")
+    assert data["labs"] == [
+        {"lab": LAB["lab_title"], "id": LID, "running_nodes": 2, "licensed": 2, "ram_mb": 19456, "cpus": 5}
+    ]
+    assert [n["node"] for n in data["top_nodes"]] == ["sw1", "r1"]
     assert data["cluster"]["cpu_count"] == 32
     c = data["computes"][0]
     assert c["running_nodes"] == 2 and c["allocated_memory_mb"] == 2048
