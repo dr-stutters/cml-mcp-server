@@ -1,9 +1,37 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-10-15
+
+Roadmap "Now" (L1-L6). 52 -> 59 tools (read 30 -> 35, write 17 -> 19, dangerous 5) and the first MCP prompt.
+
+### Added
+- Prompt `cml_build_test_lab(recipe, reuse)`: recipe -> licence plan -> build/start -> converge -> verify ->
+  hand-off block for the FMC / Catalyst Center / ISE server (L1).
+- `cml_list_recipes` (no secret values), `cml_build_recipe` (L1); recipes are packaged in `cml_mcp/recipes/`.
+- `cml_plan_licences`: licences per lab, what a lab or recipe needs, the smallest set of labs to stop (L2).
+  Capacity is read from `/licensing` (base licence + `CML_NODE_COUNT` expansion; 5 in evaluation mode).
+- `cml_verify_recipe` and `verify:` contracts in every recipe (booted, addresses, ping matrix, console,
+  TCP and SNMP probes); `scripts/recipes.py verify [--json]`, `pytest -m live_recipes` (L3).
+- `cml_summarize_capture` and `cml_capture`: a dependency-free pcap decoder (ARP, ICMP, TCP, UDP, OSPF,
+  DHCP, RADIUS incl. CoA and Cisco AV-pairs, EAP/EAPOL) with secrets dropped (L5).
+- `cml_diff_node_config` (running config vs day-0, startup, another node or a baseline) and
+  `cml_diff_lab(running_configs=true)` (L6).
+- `scripts/recipes.py plan|swap` (swap asks before stopping labs); `CML_CONSOLE_LOCK_WAIT`.
 
 ### Changed
-- Core pinned to stutters-mcp-core v0.3.0 (MCP prompts; the 0.2.0 event framework is gone, servers are pull-only).
+- Console sessions: one per node per process, with a "busy" error after `CML_CONSOLE_LOCK_WAIT` (60 s);
+  devices are logged out on close; a login prompt mid-command re-logs in and reports `SessionLost`
+  (the command is never re-sent) (L4).
+- `cml_wait_for_converged` adds a hint for cat9000v (BOOTED before it forwards).
+- Start/build previews name the labs to stop when licences run out.
+- `CML_NODE_LICENSE_LIMIT` is optional (detected); it still overrides.
+- Core pinned to stutters-mcp-core v0.3.0 (prompts; pull-only, no event ingestion).
+
+### Fixed
+- Secret masking of CLI output works line by line: a `key 1` line no longer swallows the next line
+  (which left e.g. an SNMP community in clear); OSPF/NTP authentication keys, IKEv2 pre-shared keys,
+  SNMPv3 user secrets and trap communities are masked.
+- `cml_diff_lab` no longer shows plain-text day-0 passwords in config diffs.
 
 ## 0.3.0 - 2026-10-15
 
