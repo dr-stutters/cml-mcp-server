@@ -74,8 +74,10 @@ def analyse(
     except PcapError as e:
         raise InvalidRequest(f"Could not read the capture: {e}") from e
     picked = [p for p in all_packets if matches(p, host=host, src=src, dst=dst, protocol=protocol, port=port)]
-    out = {"captured_packets": len(all_packets), **summarise(picked, highlights=highlights)}
-    if pcap_truncated(all_packets):
+    truncated = pcap_truncated(all_packets)
+    summary = summarise(picked, highlights=highlights, whole=all_packets, truncated=truncated)
+    out = {"captured_packets": len(all_packets), **summary}
+    if truncated:
         out["truncated"] = f"only the first {len(all_packets)} packets were decoded"
     filters = {
         k: v
@@ -84,6 +86,8 @@ def analyse(
     }
     if filters:
         out = {"filters": filters, **out}
+        if "findings" in out:
+            out["findings_scope"] = "the whole capture (filters would hide the answers)"
     if packets:
         out["packet_list"] = [p.row() for p in picked[:packets]]
     return out
@@ -108,9 +112,12 @@ def register(reg: ToolRegistrar) -> None:
         Calling-Station-Id, VLAN, Cisco AV-pairs, the EAP inside; passwords, State, Class and
         authenticators are never shown), EAPOL/EAP (identity, method), OSPF (hello: router id,
         area, DR/BDR, neighbours), DHCP (Discover/Offer/Request/ACK, client MAC, address), ARP,
-        ICMP and TCP flags (sftunnel 8305, SSH, NETCONF). Filters narrow everything to matching
-        packets. Proves a MAB/802.1X exchange with ISE, FTD registration or an OSPF adjacency
-        without reading raw packet lists. Capture first with cml_capture or cml_start_capture."""
+        ICMP and TCP flags (sftunnel 8305, SSH, NETCONF); repeated packets are one row with a count.
+        `findings` says what didn't complete (DHCP Discover without Offer, unanswered ARP / ping /
+        TCP SYN / RADIUS request, EAP failures) - start there for "what's failing". Filters narrow
+        everything to matching packets. Proves a MAB/802.1X exchange with ISE, FTD registration or
+        an OSPF adjacency without reading raw packet lists. Capture first with cml_capture or
+        cml_start_capture."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab)
         lk = await app.resolve_link(info["id"], link)

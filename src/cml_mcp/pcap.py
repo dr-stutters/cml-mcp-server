@@ -329,10 +329,11 @@ def decode_ipv4(pkt: Packet, p: bytes) -> None:
         t, c = body[0], body[1]
         pkt.protocol = "ICMP"
         pkt.info = ICMP_TYPES.get(t, f"type {t}") + (f" (code {c})" if t in (3, 5, 11) else "")
+        pkt.detail = {"type": t, "code": c}
         if t in (0, 8) and len(body) >= 8:
             ident, seq = struct.unpack("!HH", body[4:8])
             pkt.info += f" id={ident} seq={seq}"
-        pkt.detail = {"type": t, "code": c}
+            pkt.detail.update(id=ident, seq=seq)
     elif proto == 6:
         decode_tcp(pkt, body)
     elif proto == 17:
@@ -706,8 +707,16 @@ def matches(
 HIGHLIGHT = ("RADIUS", "EAPOL", "OSPF", "DHCP", "ARP", "ICMP", "sftunnel", "TACACS+")
 
 
-def summarise(packets: list[Packet], *, highlights: int = 20, conversations: int = 10) -> dict[str, Any]:
-    """Protocol mix, top conversations and decoded highlights of the interesting protocols."""
+def summarise(
+    packets: list[Packet],
+    *,
+    highlights: int = 20,
+    conversations: int = 10,
+    whole: list[Packet] | None = None,
+    truncated: bool = False,
+) -> dict[str, Any]:
+    """Protocol mix, top conversations and decoded highlights of the interesting protocols.
+    `findings` are computed on `whole` (the unfiltered capture: a filter would hide the replies)."""
     mix = Counter(p.protocol for p in packets)
     conv: dict[tuple[str, str, str], list[int]] = {}
     for p in packets:
@@ -726,15 +735,215 @@ def summarise(packets: list[Packet], *, highlights: int = 20, conversations: int
         ],
     }
     hl: dict[str, list[dict[str, Any]]] = {}
+    groups: dict[tuple[Any, ...], dict[str, Any]] = {}
+    omitted: Counter[str] = Counter()
     for p in packets if highlights else []:
-        if p.protocol in HIGHLIGHT and len(hl.setdefault(p.protocol, [])) < highlights:
-            hl[p.protocol].append(p.row())
+        if p.protocol not in HIGHLIGHT:
+            continue
+        # repeats of the same packet (retransmitted Discovers, hellos) are one row with a count (L31)
+        sig = _signature(p)
+        if (row := groups.get(sig)) is not None:
+            row["count"] = row.get("count", 1) + 1
+            row["last_time"] = round(p.time, 3)
+            continue
+        if len(hl.setdefault(p.protocol, [])) < highlights:
+            groups[sig] = p.row()
+            hl[p.protocol].append(groups[sig])
+        else:
+            omitted[p.protocol] += 1
     if hl:
-        out["highlights"] = hl
+        out["highlights"] = {k: v for k, v in hl.items() if v}
+    if omitted:
+        out["highlights_omitted"] = dict(omitted)  # distinct packets beyond `highlights` per protocol
+    if found := findings(packets if whole is None else whole, truncated=truncated):
+        out["findings"] = found
     radius = Counter(p.detail.get("code") for p in packets if p.protocol == "RADIUS")
     if radius:
         out["radius"] = dict(radius)
     eapol = Counter(p.info for p in packets if p.protocol == "EAPOL")
     if eapol:
         out["eapol"] = dict(eapol.most_common(10))
+    return out
+
+
+# --- findings: exchanges that never completed (L31) ----------------------------------------------
+VOLATILE_DETAIL = {"xid", "id", "seq", "authenticator"}
+
+
+def _signature(p: Packet) -> tuple[Any, ...]:
+    detail = {k: v for k, v in p.detail.items() if k not in VOLATILE_DETAIL}
+    info = re.sub(r"\b(?:id|seq|xid)=\S+", "", p.info)
+    return (p.protocol, p.src, p.dst, p.sport, p.dport, info, repr(sorted(detail.items(), key=str)))
+
+
+def _few(items: list[str], n: int = 3) -> str:
+    return ", ".join(items[:n]) + (f" and {len(items) - n} more" if len(items) > n else "")
+
+
+RADIUS_REQUESTS = {"Access-Request", "Accounting-Request", "CoA-Request", "Disconnect-Request"}
+RADIUS_RESPONSES = {
+    "Access-Accept",
+    "Access-Reject",
+    "Access-Challenge",
+    "Accounting-Response",
+    "CoA-ACK",
+    "CoA-NAK",
+    "Disconnect-ACK",
+    "Disconnect-NAK",
+}
+IN_FLIGHT_SECONDS = 2.0  # a request this close to the end of the capture may still get its answer
+
+
+def findings(packets: list[Packet], *, truncated: bool = False) -> list[str]:
+    """Plain statements about exchanges in the capture that got no answer or failed: what a person
+    reading the packet list would conclude first. Requests are matched to their own answers (DHCP
+    per client, RADIUS by NAS port and identifier, TCP by connection, ping by id/seq); requests in
+    the last IN_FLIGHT_SECONDS of the capture don't count as unanswered."""
+    out: list[str] = []
+    if not packets:
+        return out
+    cutoff = packets[-1].time - IN_FLIGHT_SECONDS
+    settled = [p for p in packets if p.time <= cutoff]
+
+    # DHCP, per client MAC
+    offered = {p.detail.get("client_mac") for p in packets if p.detail.get("type") == "Offer"}
+    acked = {p.detail.get("client_mac") for p in packets if p.detail.get("type") in ("ACK", "NAK")}
+    discovers: Counter[str] = Counter()
+    requests_dhcp: Counter[str] = Counter()
+    for p in settled:
+        if p.protocol != "DHCP":
+            continue
+        mac = str(p.detail.get("client_mac"))
+        if p.detail.get("type") == "Discover" and p.detail.get("client_mac") not in offered:
+            discovers[mac] += 1
+        elif p.detail.get("type") == "Request" and p.detail.get("client_mac") not in acked:
+            requests_dhcp[mac] += 1
+    if discovers:
+        out.append(
+            "DHCP: Discover without any Offer from "
+            + _few([f"{m} ({n}x)" for m, n in discovers.most_common()])
+            + " - no DHCP server answered on this link (port not authorised yet, no server or relay on the "
+            "VLAN, or the server is down)."
+        )
+    if requests_dhcp:
+        out.append(
+            f"DHCP: Request without ACK/NAK from {_few(list(requests_dhcp))} - the lease never completed."
+        )
+    naks = sum(1 for p in packets if p.protocol == "DHCP" and p.detail.get("type") == "NAK")
+    if naks:
+        out.append(f"DHCP: {naks} NAK - the server refused the requested address.")
+
+    # ARP (probes from 0.0.0.0 are never answered: ignored)
+    arp_req: Counter[str] = Counter()
+    answered = {
+        str(p.detail.get("sender_ip"))
+        for p in packets
+        if p.protocol == "ARP" and p.detail.get("op") == "reply"
+    }
+    for p in settled:
+        d = p.detail
+        if (
+            p.protocol == "ARP"
+            and d.get("op") == "request"
+            and d.get("sender_ip") not in ("0.0.0.0", d.get("target_ip"))
+        ):
+            arp_req[str(d.get("target_ip"))] += 1
+    silent = [f"{ip} ({n}x)" for ip, n in arp_req.most_common() if ip not in answered]
+    if silent:
+        out.append(f"ARP: no reply for {_few(silent)} - that address is down or not on this segment.")
+
+    # ICMP echo by (requester, id, seq): broadcast pings may be answered by anyone
+    replied = {
+        (p.dst, p.detail.get("id"), p.detail.get("seq"))
+        for p in packets
+        if p.protocol == "ICMP" and p.detail.get("type") == 0
+    }
+    lost: Counter[tuple[str, str]] = Counter()
+    unreachable: Counter[str] = Counter()
+    for p in settled:
+        if p.protocol != "ICMP":
+            continue
+        t = p.detail.get("type")
+        if t == 8 and (p.src, p.detail.get("id"), p.detail.get("seq")) not in replied:
+            lost[(p.src, p.dst)] += 1
+        elif t in (3, 11):
+            unreachable[f"{p.src} -> {p.dst}: {re.sub(r' id=.*', '', p.info)}"] += 1
+    if lost:
+        out.append(
+            "ICMP: echo requests without a reply: "
+            + _few([f"{a} -> {b} ({n}x)" for (a, b), n in lost.most_common()])
+            + "."
+        )
+    if unreachable:
+        out.append(f"ICMP: {_few([f'{k} ({n}x)' for k, n in unreachable.most_common()])}.")
+
+    # TCP by connection (client address and port, server address and port)
+    synack: set[tuple[Any, ...]] = set()
+    rst: set[tuple[Any, ...]] = set()
+    for p in packets:
+        flags = p.detail.get("flags") if p.transport == "TCP" else None
+        if flags and "SYN" in flags and "ACK" in flags:
+            synack.add((p.dst, p.dport, p.src, p.sport))
+        elif flags and "RST" in flags:
+            rst.add((p.dst, p.dport, p.src, p.sport))
+    refused: Counter[str] = Counter()
+    no_answer: Counter[str] = Counter()
+    for p in settled:
+        flags = p.detail.get("flags") if p.transport == "TCP" else None
+        if not flags or "SYN" not in flags or "ACK" in flags:
+            continue
+        conn = (p.src, p.sport, p.dst, p.dport)
+        if conn in synack:
+            continue
+        (refused if conn in rst else no_answer)[f"{p.src} -> {p.dst}:{p.dport}"] += 1
+    if refused:
+        out.append(
+            f"TCP: connection refused (RST) for {_few([f'{k} ({n}x)' for k, n in refused.most_common()])}."
+        )
+    if no_answer:
+        out.append(
+            f"TCP: SYN without SYN-ACK for {_few([f'{k} ({n}x)' for k, n in no_answer.most_common()])}"
+            " - filtered, or nothing listens there."
+        )
+
+    # RADIUS: a response answers the request with the same NAS address/port and identifier
+    responded = {
+        (p.dst, p.dport, p.src, p.sport, p.detail.get("id"))
+        for p in packets
+        if p.protocol == "RADIUS" and p.detail.get("code") in RADIUS_RESPONSES
+    }
+    quiet: Counter[str] = Counter()
+    for p in settled:
+        request = p.protocol == "RADIUS" and p.detail.get("code") in RADIUS_REQUESTS
+        if request and (p.src, p.sport, p.dst, p.dport, p.detail.get("id")) not in responded:
+            quiet[f"{p.detail.get('code')} {p.src} -> {p.dst}"] += 1
+    if quiet:
+        out.append(
+            f"RADIUS: requests without any response: {_few([f'{k} ({n}x)' for k, n in quiet.most_common()])}"
+            " - the server is unreachable, doesn't know this NAS as a network device, or the shared "
+            "secret is wrong (ISE drops those silently)."
+        )
+    rejects = sum(1 for p in packets if p.protocol == "RADIUS" and p.detail.get("code") == "Access-Reject")
+    if rejects:
+        out.append(f"RADIUS: {rejects} Access-Reject - the server refused the login (see its auth log).")
+
+    # EAPOL
+    eap_codes = Counter(
+        str((p.detail.get("eap") or {}).get("code")) for p in packets if p.protocol == "EAPOL"
+    )
+    eapol_types = Counter(str(p.detail.get("type")) for p in packets if p.protocol == "EAPOL")
+    if eap_codes.get("Failure"):
+        out.append(f"EAPOL: {eap_codes['Failure']} EAP Failure - 802.1X authentication failed.")
+    if eapol_types.get("Start") and not eap_codes.get("Request"):
+        out.append(
+            "EAPOL: the client sent EAPOL-Start but the switch never sent an EAP Request "
+            "(802.1X off on the port?)."
+        )
+    if eap_codes.get("Request") and not eap_codes.get("Response"):
+        out.append(
+            "EAPOL: the switch sent EAP Requests but the client never answered - no 802.1X "
+            "supplicant (the switch falls back to MAB if configured)."
+        )
+    if out and truncated:
+        out.append("Note: the capture was cut off (packet limit); answers after the cut-off are not seen.")
     return out

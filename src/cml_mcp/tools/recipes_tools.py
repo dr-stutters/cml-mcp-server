@@ -47,6 +47,7 @@ Substitute = Annotated[
         "contract), e.g. {'198.18.128.154': '198.18.128.194'} for a copy on another address",
     ),
 ]
+BOOT_NOTE = re.compile(r"\s*[(;]|\.\s")  # where the boot time's explanation starts
 RecipeName = Annotated[str, Field(description="Recipe name (see cml_list_recipes), e.g. 'ise-access'")]
 # Fields that describe the product side of a recipe (what the fmc/catc/ise server must configure).
 PRODUCT_SIDE = re.compile(r"(?:_side|_discovery)$")
@@ -209,7 +210,10 @@ def register(reg: ToolRegistrar) -> None:
                     "lab": r["build"]["title"],
                     "lab_state": states.get(r["build"]["title"], "not built"),
                     "licensed_nodes": recipe_licensed_nodes(r),
-                    "boot_minutes": r.get("boot_minutes"),
+                    # the list shows the number; the notes are in cml_list_recipes(recipe=...) (L32)
+                    "boot_minutes": BOOT_NOTE.split(str(r["boot_minutes"]), maxsplit=1)[0]
+                    if r.get("boot_minutes") is not None
+                    else None,
                     "summary": scrub(r.get("summary"), recipe_secrets(r)),
                 }
             )
