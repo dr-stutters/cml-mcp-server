@@ -14,7 +14,7 @@ from cml_mcp.tools.recipes_tools import recipe_detail, recipe_secrets
 
 from .conftest import fixture, make_settings
 
-KNOWN_SECRETS = ("***REDACTED***", "***REDACTED***", "***REDACTED***", "mcp-rw")
+KNOWN_SECRETS = ("***REDACTED***", "***REDACTED***", "***REDACTED***", "***REDACTED***", "mcp-rw")
 
 
 @pytest.mark.parametrize("name", recipe_names())

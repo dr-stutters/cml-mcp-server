@@ -99,6 +99,7 @@ def build_topology(
     *,
     connectors: list[dict[str, Any]] | None = None,
     notes: list[str] | None = None,
+    annotations: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """(topology dict, human-readable link list). Raises BuildError for anything CML would reject.
     `connectors` (GET /system/external_connectors) lets external_connector configs be checked;
@@ -235,6 +236,8 @@ def build_topology(
         "nodes": topo_nodes,
         "links": topo_links,
     }
+    if annotations:
+        topology["annotations"] = annotations
     return topology, [f"{a}:{ia}<->{b}:{ib}" for a, ia, b, ib in resolved]
 
 

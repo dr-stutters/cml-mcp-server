@@ -11,6 +11,7 @@ from stutters_mcp_core.spec import SpecSource
 from cml_mcp.client import CmlApp
 from cml_mcp.config import Settings
 from cml_mcp.tools import (
+    annotations,
     build_tool,
     captures,
     cli,
@@ -45,6 +46,8 @@ What can be built: cml_list_node_definitions (iol-xe / ioll2-xe boot in under a 
 Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the CML console server
 (no IP reachability needed; IOS/IOS-XE, NX-OS, FTD, Linux); config changes go through
 cml_configure_node (write tier; mode='exec' for FTD 'configure manager add ...').
+Diagrams: cml_export_topology (mermaid / drawio / json with addresses); cml_list_annotations and
+cml_annotate_lab (notes, per-node addresses, recipe purpose) make a lab self-describing.
 What changed on a device: cml_diff_node_config (running config vs day-0, startup, another node, a baseline).
 Outside networks: cml_list_external_connectors, then an external_connector node in cml_build_lab.
 Degraded networks: cml_apply_link_scenario (wan-good, wan-satellite, lossy-wifi, brownout, flap) and
@@ -105,6 +108,7 @@ def create_server(
             links.register,
             link_scenarios.register,
             captures.register,
+            annotations.register,
             definitions.register,
             smart.register,
             lab_writes.register,
