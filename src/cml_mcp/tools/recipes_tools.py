@@ -14,13 +14,21 @@ from stutters_mcp_core.http import page_of
 from cml_mcp.build import NodeSpec
 from cml_mcp.client import CmlApp
 from cml_mcp.console import mask_secrets
-from cml_mcp.recipes import get_recipe, recipe_licensed_nodes, recipe_names
+from cml_mcp.recipes import get_recipe, recipe_licensed_nodes, recipe_names, substituted
 from cml_mcp.tools.build_tool import build_lab_flow
 from cml_mcp.tools.common import shaped
 from cml_mcp.tools.lab_writes import Wait
 from cml_mcp.tools.smart import Timeout
 from cml_mcp.topology import address_annotations, config_addresses, place_notes
 
+Substitute = Annotated[
+    dict[str, str] | None,
+    Field(
+        max_length=20,
+        description="Text replacements applied to the whole recipe (configs, addresses, verify "
+        "contract), e.g. {'198.18.128.154': '198.18.128.194'} for a copy on another address",
+    ),
+]
 RecipeName = Annotated[str, Field(description="Recipe name (see cml_list_recipes), e.g. 'ise-access'")]
 # Fields that describe the product side of a recipe (what the fmc/catc/ise server must configure).
 PRODUCT_SIDE = re.compile(r"(?:_side|_discovery)$")
@@ -36,7 +44,9 @@ def recipe_secrets(recipe: dict[str, Any]) -> set[str]:
         for k, v in (node.get("credentials") or {}).items():
             if "password" in k and v:
                 found.add(str(v))
-        for text in (node.get("config"), *(f.get("content") for f in node.get("files") or [])):
+        files = node.get("files") or {}
+        file_texts = files.values() if isinstance(files, dict) else (f.get("content") for f in files)
+        for text in (node.get("config"), *file_texts):
             if text:
                 found.update(SECRET_IN_TEXT.findall(str(text)))
     for key in ("credentials", "fmc_side", "ise_side", "catalyst_center_discovery"):
@@ -94,10 +104,12 @@ def recipe_detail(name: str) -> Any:
     )
 
 
-def recipe_notes(recipe_name: str) -> list[dict[str, Any]]:
-    """Purpose, address plan and credential *references* of a recipe (no secret values)."""
-    r = get_recipe(recipe_name)
-    secrets = recipe_secrets(r)
+def recipe_notes(recipe_name: str, r: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Purpose, address plan and credential *references* of a recipe (no secret values). `r` is a
+    substituted copy; secrets are collected from the packaged recipe too."""
+    secrets = recipe_secrets(get_recipe(recipe_name))
+    r = r or get_recipe(recipe_name)
+    secrets |= recipe_secrets(r)
     plan = r.get("address_plan") or {}
     purpose = "\n".join(
         [
@@ -120,19 +132,16 @@ def recipe_notes(recipe_name: str) -> list[dict[str, Any]]:
     return [{"text": scrub(t, secrets), "bold": i == 0} for i, t in enumerate([purpose, addr, creds]) if t]
 
 
-def recipe_annotations(name: str) -> list[dict[str, Any]]:
+def recipe_annotations(name: str, r: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Text annotations a recipe's lab is built with: purpose/address plan/credential references
     left of the lab and each node's day-0 addresses under it."""
-    nodes = [
-        {"label": n["label"], "x": n.get("x", 0), "y": n.get("y", 0)}
-        for n in get_recipe(name)["build"]["nodes"]
-    ]
+    r = r or get_recipe(name)
+    spec = r["build"]["nodes"]
+    nodes = [{"label": n["label"], "x": n.get("x", 0), "y": n.get("y", 0)} for n in spec]
     addresses = {
-        n["label"]: rows
-        for n in get_recipe(name)["build"]["nodes"]
-        if (rows := config_addresses(n["definition"], n.get("config")))
+        n["label"]: rows for n in spec if (rows := config_addresses(n["definition"], n.get("config")))
     }
-    return place_notes(recipe_notes(name), nodes) + address_annotations(nodes, addresses)
+    return place_notes(recipe_notes(name, r), nodes) + address_annotations(nodes, addresses)
 
 
 def register(reg: ToolRegistrar) -> None:
@@ -186,6 +195,7 @@ def register(reg: ToolRegistrar) -> None:
                 "for trying changes); default: the recipe's title",
             ),
         ] = None,
+        substitute: Substitute = None,
         start: Annotated[bool, Field(description="Start the lab after building it")] = True,
         wait: Wait = False,
         timeout: Timeout = None,  # noqa: ASYNC109 - overall wait, handled by poll_until
@@ -196,17 +206,24 @@ def register(reg: ToolRegistrar) -> None:
         where the credentials are kept (never the values) - and by default start it without waiting
         (FTDv and cat9000v take 10-30 minutes: follow up with cml_wait_for_converged, then
         cml_verify_recipe). Refuses if the lab already exists: start that one with cml_start_lab
-        instead, or pass `title` to build a copy. Preview-first; the preview shows wiring and licence
-        use."""
-        r = get_recipe(recipe)
+        instead, or pass `title` (and `substitute` for other addresses) to build a copy.
+        Preview-first; the preview shows wiring and licence use."""
+        r = substituted(get_recipe(recipe), substitute)
         b = r["build"]
         nodes = [NodeSpec.model_validate(n) for n in b.get("nodes") or []]
         return await build_lab_flow(
             ctx,
             tool="cml_build_recipe",
-            tool_args={"recipe": recipe, "title": title, "start": start, "wait": wait, "timeout": timeout},
+            tool_args={
+                "recipe": recipe,
+                "title": title,
+                "substitute": substitute,
+                "start": start,
+                "wait": wait,
+                "timeout": timeout,
+            },
             title=title or b["title"],
-            annotations=recipe_annotations(recipe),
+            annotations=recipe_annotations(recipe, r),
             nodes=nodes,
             links=list(b.get("links") or []),
             description=b.get("description"),

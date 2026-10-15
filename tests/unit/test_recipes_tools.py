@@ -73,3 +73,31 @@ async def test_build_recipe_preview(api: respx.MockRouter) -> None:
     assert data["status"] in ("preview", "blocked"), data
     assert "mcp-cml-catc" in data["action"] and data["preview"]["start"] is True
     assert not [s for s in KNOWN_SECRETS if s in json.dumps(data)]
+
+
+def test_recipe_secrets_reads_dict_files() -> None:
+    from cml_mcp.tools.recipes_tools import recipe_secrets
+
+    r = {"build": {"nodes": [{"label": "u", "files": {"network-config": "password: Sup3rSecret9"}}]}}
+    assert "Sup3rSecret9" in recipe_secrets(r)
+
+
+async def test_build_recipe_copy_with_substitute(api: respx.MockRouter) -> None:
+    api.get("/simplified_node_definitions").mock(
+        return_value=httpx.Response(200, json=fixture("simplified_node_definitions.json"))
+    )
+    api.get("/system/external_connectors").mock(
+        return_value=httpx.Response(200, json=[{"label": "System Bridge", "device_name": "bridge0"}])
+    )
+    data = await call_tool(
+        create_server(make_settings(mcp_enable_writes=True)),
+        "cml_build_recipe",
+        {
+            "recipe": "catc-routers",
+            "title": "mcp-cml2-x",
+            "substitute": {"198.18.128.152": "198.18.128.199"},
+            "start": False,
+        },
+    )
+    assert "mcp-cml2-x" in data["action"], data
+    assert not [s for s in KNOWN_SECRETS if s in json.dumps(data)]
