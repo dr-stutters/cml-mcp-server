@@ -16,7 +16,18 @@ from stutters_mcp_core import (
     get_settings,
 )
 
-from cml_mcp.build import UNLICENSED_DEFINITIONS, BuildError, NodeSpec, build_topology, to_yaml
+from cml_mcp.build import (
+    UNLICENSED_DEFINITIONS,
+    VSWITCH_FILE,
+    BuildError,
+    NodeSpec,
+    build_topology,
+    is_cat9kv,
+    serial_of,
+    to_yaml,
+    unique_serial,
+    with_serial,
+)
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
 from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage
@@ -24,6 +35,53 @@ from cml_mcp.recipes import redact_values
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.lab_writes import Wait, known_definitions, title_taken
 from cml_mcp.tools.smart import Timeout
+
+
+async def assign_cat9kv_serials(
+    app: CmlApp, title: str, nodes: list[NodeSpec]
+) -> tuple[list[NodeSpec], dict[str, str]]:
+    """Give every cat9000v without its own conf/vswitch.xml a copy of the definition's default with a unique
+    serial (stable per lab title + label), so Catalyst Center doesn't merge them.
+    Returns (nodes, {label: serial})."""
+    serials: dict[str, str] = {}
+    defaults: dict[str, str | None] = {}
+    out: list[NodeSpec] = []
+    for n in nodes:
+        if not is_cat9kv(n.definition):
+            out.append(n)
+            continue
+        given = n.files.get(VSWITCH_FILE)
+        if given is not None:
+            if s := serial_of(given):
+                serials[n.label] = s
+            out.append(n)
+            continue
+        if n.definition not in defaults:
+            defaults[n.definition] = await default_file(app, n.definition, VSWITCH_FILE)
+        base = defaults[n.definition]
+        if not base or serial_of(base) is None:
+            out.append(n)  # unknown layout: leave CML's default alone
+            continue
+        serial = unique_serial(title, n.label)
+        serials[n.label] = serial
+        out.append(n.model_copy(update={"files": {**n.files, VSWITCH_FILE: with_serial(base, serial)}}))
+    return out, serials
+
+
+async def default_file(app: CmlApp, definition: str, name: str) -> str | None:
+    """A definition's default day-0 file (GET /node_definitions/{id} returns YAML)."""
+    import yaml
+
+    try:
+        raw = await app.api.get(f"/node_definitions/{definition}")
+    except UpstreamError:
+        return None
+    nd = yaml.safe_load(raw) if isinstance(raw, str) else raw
+    files = (((nd or {}).get("configuration") or {}).get("provisioning") or {}).get("files") or []
+    for f in files:
+        if isinstance(f, dict) and f.get("name") == name:
+            return str(f.get("content") or "")
+    return None
 
 
 async def build_lab_flow(
@@ -45,6 +103,7 @@ async def build_lab_flow(
     """Preview/apply a lab build (shared by cml_build_lab and cml_build_recipe)."""
     app: CmlApp = get_client(ctx)
     defs = await known_definitions(app)
+    nodes, serials = await assign_cat9kv_serials(app, title, nodes)
     connectors = None
     if any(n.definition == "external_connector" for n in nodes):
         connectors = await app.api.get("/system/external_connectors")
@@ -83,6 +142,7 @@ async def build_lab_flow(
             **({"licences": licences} if licences else {}),
             **({"notes": notes} if notes else {}),
             **({"annotations": len(annotations)} if annotations else {}),
+            **({"cat9000v_serials": serials} if serials else {}),
         },
         blockers=blockers,
         blast_radius=len(nodes),

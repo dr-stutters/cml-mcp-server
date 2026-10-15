@@ -280,6 +280,140 @@ nodes:
           line vty 0 15
            transport input ssh
           end
+      - name: conf/vswitch.xml
+        content: |-
+          <?xml version="1.0"?>
+          <!-- Copyright (c) 2020 by Cisco Systems, Inc.-->
+          <!-- All rights reserved. -->
+          <!-- Virtual Cat9k configuration information -->
+          <switch>
+          <!-- Virtual Board ID to indicate Q200 or UADP asic simulation -->
+            <board_id>20612</board_id>
+          <!-- Unique Serial# must be provided for each running instance -->
+            <prod_serial_number>CMLC78C5D9B</prod_serial_number>
+          <!-- Number of ports must appear before other port information -->
+            <port_count>24</port_count>
+            <port lpn="1">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="2">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="3">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="4">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="5">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="6">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="7">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="8">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="9">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="10">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="11">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="12">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="13">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="14">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="15">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="16">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="17">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="18">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="19">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="20">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="21">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="22">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="23">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="24">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+          </switch>
     cpu_limit: null
     cpus: null
     data_volume: null
@@ -474,6 +608,140 @@ nodes:
           line vty 0 15
            transport input ssh
           end
+      - name: conf/vswitch.xml
+        content: |-
+          <?xml version="1.0"?>
+          <!-- Copyright (c) 2020 by Cisco Systems, Inc.-->
+          <!-- All rights reserved. -->
+          <!-- Virtual Cat9k configuration information -->
+          <switch>
+          <!-- Virtual Board ID to indicate Q200 or UADP asic simulation -->
+            <board_id>20612</board_id>
+          <!-- Unique Serial# must be provided for each running instance -->
+            <prod_serial_number>CML48D1DCC5</prod_serial_number>
+          <!-- Number of ports must appear before other port information -->
+            <port_count>24</port_count>
+            <port lpn="1">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="2">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="3">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="4">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="5">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="6">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="7">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="8">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="9">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="10">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="11">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="12">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="13">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="14">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="15">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="16">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="17">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="18">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="19">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="20">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="21">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="22">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="23">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="24">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+          </switch>
     cpu_limit: null
     cpus: null
     data_volume: null
@@ -668,6 +936,140 @@ nodes:
           line vty 0 15
            transport input ssh
           end
+      - name: conf/vswitch.xml
+        content: |-
+          <?xml version="1.0"?>
+          <!-- Copyright (c) 2020 by Cisco Systems, Inc.-->
+          <!-- All rights reserved. -->
+          <!-- Virtual Cat9k configuration information -->
+          <switch>
+          <!-- Virtual Board ID to indicate Q200 or UADP asic simulation -->
+            <board_id>20612</board_id>
+          <!-- Unique Serial# must be provided for each running instance -->
+            <prod_serial_number>CML27240BFE</prod_serial_number>
+          <!-- Number of ports must appear before other port information -->
+            <port_count>24</port_count>
+            <port lpn="1">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="2">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="3">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="4">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="5">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="6">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="7">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="8">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="9">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="10">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="11">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="12">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="13">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="14">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="15">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="16">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="17">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="18">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="19">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="20">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="21">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="22">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="23">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="24">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+          </switch>
     cpu_limit: null
     cpus: null
     data_volume: null
