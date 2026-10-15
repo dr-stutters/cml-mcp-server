@@ -1,6 +1,6 @@
 [project]
 name = "cml-mcp-server"
-version = "0.4.0"
+version = "0.5.0"
 description = "MCP server for Cisco Modeling Labs (CML 2.x), built on stutters-mcp-core"
 readme = "README.md"
 license = "MIT"
@@ -19,7 +19,7 @@ dependencies = [
 cml-mcp-server = "cml_mcp:main"
 
 [tool.uv.sources]
-stutters-mcp-core = { git = "https://github.com/dr-stutters/stutters-mcp-core", tag = "v0.3.1" }
+stutters-mcp-core = { git = "https://github.com/dr-stutters/stutters-mcp-core", tag = "v0.6.0" }
 
 [build-system]
 requires = ["uv_build>=0.10.9,<0.11.0"]

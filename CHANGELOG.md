@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.5.0 - 2026-10-15
+
+Roadmap "Next" (L8-L12). 59 -> 65 tools (read 35 -> 38, write 19 -> 22, dangerous 5).
+
+### Added
+- Link scenarios (L8): `cml_get_link_scenarios`, `cml_apply_link_scenario` (wan-good, wan-satellite,
+  lossy-wifi, brownout; `flap` = timed down/up cycles as a cancellable background job that always leaves
+  the link up), `cml_clear_link_scenarios`. Each scenario states the expected round-trip ping change.
+- Topology export and annotations (L9): `cml_export_topology` (Mermaid / draw.io / JSON with addresses
+  from day-0 configs, CML snooping or the CLI), `cml_list_annotations`, `cml_annotate_lab`. Recipe labs
+  are built with annotations (purpose, address plan, where the credentials are kept; never values).
+- Recipe `ftd-ha` (L10): 2x FTDv cabled for an FMC HA pair (direct failover and state links), not
+  registered to any manager.
+- Recipe `ise-access` gains an Ubuntu EAP-TLS client (wpa_supplicant, a lab CA it generates itself) and
+  IBNS 2.0 on the switch (802.1X first, then MAB) (L11).
+- Recipe copies: `cml_build_recipe(title, substitute)` and `cml_verify_recipe(lab, substitute)`.
+- `scripts/recipes.py ci` and the `recipes-verify` workflow for a self-hosted runner (manual, off by
+  default), with `docs/ci-runner.md` (L12).
+
+### Changed
+- `cml_check_reachability` reports the average round-trip time (`rtt_avg_ms`).
+- `scripts/recipes.py build|swap` build through `cml_build_recipe`.
+- Core pinned to stutters-mcp-core v0.6.0 (spec examples in `cml_get_definition`, opt-in safety rails
+  and per-user roles; nothing changes unless configured).
+
+### Fixed
+- FTD console: a rejected command was re-typed by FTD after "Syntax error" and the session hung until
+  the timeout; it is now cleared and the error returned at once.
+- `cml_list_recipes` crashed on recipes whose nodes carry extra config files as a mapping.
+
 ## 0.4.0 - 2026-10-15
 
 Roadmap "Now" (L1-L6). 52 -> 59 tools (read 30 -> 35, write 17 -> 19, dangerous 5) and the first MCP prompt.

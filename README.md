@@ -7,7 +7,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > Not affiliated with or endorsed by Cisco Systems, Inc. "Cisco" and "Cisco Modeling Labs" are
 > trademarks of Cisco Systems, Inc.
 
-- **59 tools** in three tiers: 35 read, 19 write, 5 dangerous (plus `cml_api_call` for non-GET), and the
+- **65 tools** in three tiers: 38 read, 22 write, 5 dangerous (plus `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -20,12 +20,15 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 - **Real platforms on the console.** IOS/IOS-XE, NX-OS (POAP skipped), FTD CLISH (no `enable`,
   `mode='exec'` for `configure manager add ...`), Linux. Questions (`[confirm]`, `[yes/no]`) are
   answered on request, runaway commands get Ctrl-C.
-- **Lab recipes for the other suite servers.** FTDv for FMC, IOS-XE routers for Catalyst Center, a Cat9kv
-  802.1X switch for ISE: `cml_list_recipes`, `cml_build_recipe`, `cml_verify_recipe` (pass/fail contract)
+- **Lab recipes for the other suite servers.** FTDv for FMC, an unregistered FTDv HA pair, IOS-XE routers for
+  Catalyst Center, a Cat9kv 802.1X switch (IBNS 2.0) with MAB and EAP-TLS clients for ISE: `cml_list_recipes`, `cml_build_recipe`, `cml_verify_recipe` (pass/fail contract)
   and the prompt `cml_build_test_lab`; `cml_plan_licences` says which labs to stop. See
   [src/cml_mcp/recipes/README.md](src/cml_mcp/recipes/README.md).
 - **Test oracles.** `cml_diff_node_config` shows what another server changed on a device;
   `cml_capture` / `cml_summarize_capture` decode RADIUS, EAPOL, OSPF, DHCP and more from a link capture.
+- **Degraded networks and diagrams.** `cml_apply_link_scenario` puts named impairments on a link (wan-good,
+  wan-satellite, lossy-wifi, brownout, or a timed `flap`); `cml_export_topology` draws a lab as Mermaid or
+  draw.io with addresses, and `cml_annotate_lab` makes a lab self-describing.
 - **Spec escape hatch.** `cml_search_spec` and `cml_get_definition` read the controller's own
   OpenAPI document. `cml_api_call` reaches any endpoint: GET in the read tier, other methods in the
   dangerous tier.
@@ -88,7 +91,7 @@ or in `.mcp.json`:
 | `cml_run_commands` | Run show, ping and traceroute (or `ip addr` etc. on Linux nodes) on one or more booted nodes through the CML console server, in parallel. Only read-only commands are allowed |
 | `cml_list_interfaces` | Interfaces with MAC, state and peer; filter free or connected |
 | `cml_get_layer3_addresses` | IPs per interface: snooped by CML on external segments, or read from every node's CLI (`source='cli'`) |
-| `cml_check_reachability` | Ping targets from nodes (per-OS syntax, VRF, FTD management) and return a pass/fail matrix |
+| `cml_check_reachability` | Ping targets from nodes (per-OS syntax, VRF, FTD management) and return a pass/fail matrix with average RTT |
 | `cml_list_external_connectors` | Networks an `external_connector` node can join (NAT, System Bridge...) |
 | `cml_list_sample_labs` | Sample labs on the controller (filter by text or node type) |
 | `cml_list_links` / `cml_get_link` | Links as `node:interface` pairs; one link with conditioning and capture status |
@@ -100,7 +103,10 @@ or in `.mcp.json`:
 | `cml_diff_node_config` | Running config (from the console) vs day-0, startup, another node or a baseline; secrets masked |
 | `cml_summarize_capture` | Decoded summary of a link capture: protocol mix, conversations, RADIUS/EAPOL/OSPF/DHCP/ARP/ICMP highlights |
 | `cml_plan_licences` | Licences in use per lab, what a lab or recipe needs, which labs to stop |
-| `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes (no secrets returned); pass/fail verify contract of a running recipe lab |
+| `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes (no secrets returned); pass/fail verify contract of a running recipe lab (or a copy: `lab`, `substitute`) |
+| `cml_get_link_scenarios` | Named link scenarios with netem values and expected round-trip ping deltas; with a lab, its conditioned links and flap jobs |
+| `cml_export_topology` | Mermaid, draw.io or JSON diagram of a lab with interface addresses (day-0 config, snooped or CLI) |
+| `cml_list_annotations` | A lab's drawn annotations (text, shapes), marking the ones this server wrote |
 | `cml_search_spec` / `cml_get_definition` / `cml_api_call` | OpenAPI search, operation and schema details, raw GET |
 
 **Write** (`MCP_ENABLE_WRITES=true`, all preview-first)
@@ -121,7 +127,10 @@ or in `.mcp.json`:
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
-| `cml_build_recipe` | Build a packaged test-lab recipe (optionally start it) |
+| `cml_build_recipe` | Build a packaged test-lab recipe (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses |
+| `cml_apply_link_scenario` | Apply a named scenario to a link: wan-good, wan-satellite, lossy-wifi, brownout, or `flap` (timed down/up cycles in the background, link always restored) |
+| `cml_clear_link_scenarios` | Stop flap jobs and remove conditioning from a lab's links |
+| `cml_annotate_lab` | Add notes, per-node address labels and the recipe's purpose/credential references as text annotations (re-runnable) |
 
 **Prompt** (write tier): `cml_build_test_lab(recipe, reuse)` - recipe -> licence plan -> build/start ->
 converge -> verify -> hand-off block for the FMC / Catalyst Center / ISE server.
