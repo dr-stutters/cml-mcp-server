@@ -23,6 +23,7 @@ from cml_mcp.tools import (
     network,
     nodes,
     planning,
+    recipes_tools,
     samples,
     smart,
     system,
@@ -49,6 +50,8 @@ Proving connectivity: cml_check_reachability; addresses: cml_get_layer3_addresse
 Slow images (FTDv 15-30 min, cat9000v ~10): build/start with wait=false, then cml_wait_for_converged.
 Running nodes are capped by the licence; external connectors and unmanaged switches don't count.
 cml_plan_licences(target) says which labs to stop before starting a lab or recipe.
+Test labs for the other suite servers: cml_list_recipes, cml_build_recipe, cml_verify_recipe, and the
+prompt cml_build_test_lab (recipe -> licences -> build/start -> converge -> verify -> hand-off).
 CML returns whole collections; list tools page client-side with limit/offset.
 Call cml_status first if anything fails. cml_search_spec / cml_get_definition describe the REST API
 (paths are relative to /api/v0) and cml_api_call reaches endpoints no other tool covers.
@@ -107,6 +110,7 @@ def create_server(
             network.register,
             samples.register,
             planning.register,
+            recipes_tools.register,
             dangerous.register,
         ],
         status=CmlApp.status,
