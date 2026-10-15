@@ -269,3 +269,67 @@ def test_probe_prefix_still_rejects_control_characters() -> None:
 
     with pytest.raises(ValueError, match="control or shell"):
         Probe(name="x", node="sw1", command="test aaa group radius u p new-code\nconfigure terminal")
+
+
+def _labs_with_notes(monkeypatch: pytest.MonkeyPatch, notes: str) -> None:
+    from cml_mcp.client import CmlApp
+
+    real = CmlApp.list_labs
+
+    async def with_notes(self: CmlApp) -> list[dict[str, Any]]:
+        return [{**lab, "notes": notes} for lab in await real(self)]
+
+    monkeypatch.setattr(CmlApp, "list_labs", with_notes)
+
+
+async def test_verify_reads_substitutions_from_lab_notes(
+    lab_api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """L25: a copy's recorded substitutions are applied without the caller passing them."""
+    from cml_mcp.recipes import recipe_marker
+
+    _fake_recipe(monkeypatch, 1)
+    _ftd_console(monkeypatch, "198.18.134.76")
+    _labs_with_notes(monkeypatch, recipe_marker("fake", {"198.18.128.151": "198.18.128.159"}))
+    data = await call_tool(create_server(make_settings()), "cml_verify_recipe", {"recipe": "fake"})
+    names = {c["check"] for c in data["checks"]}
+    assert data["substitute"] == {"198.18.128.151": "198.18.128.159"}
+    assert "r1 has 198.18.128.159" in names and "r1 has 198.18.128.151" not in names
+
+
+async def test_verify_refuses_a_lab_built_from_another_recipe(
+    lab_api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cml_mcp.recipes import recipe_marker
+
+    _fake_recipe(monkeypatch, 1)
+    _labs_with_notes(monkeypatch, recipe_marker("ise-access", None))
+    data = await call_tool(create_server(make_settings()), "cml_verify_recipe", {"recipe": "fake"})
+    assert data["passed"] is False and "built from 'ise-access'" in str(data["checks"])
+
+
+async def test_notes_substitutions_never_redirect_network_probes(
+    lab_api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review of L25: lab notes are editable by any lab editor; a hostile marker must not send a
+    probe (SNMP carries the real community) to another host."""
+    from cml_mcp.recipes import recipe_marker
+
+    _fake_recipe(monkeypatch, 1)
+    _ftd_console(monkeypatch, "198.18.134.76")
+    _labs_with_notes(monkeypatch, recipe_marker("fake", {"127.0.0.1": "203.0.113.9"}))
+    sent: list[str] = []
+
+    async def spy(target: str, timeout: float = 3.0) -> tuple[bool, str]:  # noqa: ASYNC109
+        sent.append(target)
+        return True, "open"
+
+    monkeypatch.setattr("cml_mcp.verify.tcp_probe", spy)
+    data = await call_tool(create_server(make_settings()), "cml_verify_recipe", {"recipe": "fake"})
+    assert not sent and data["skipped"]["checks"] == ["ssh"]
+    explicit = await call_tool(
+        create_server(make_settings()),
+        "cml_verify_recipe",
+        {"recipe": "fake", "substitute": {"127.0.0.1": "203.0.113.9"}},
+    )
+    assert sent == ["203.0.113.9:1"] and "skipped" not in explicit

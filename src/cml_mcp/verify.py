@@ -39,7 +39,14 @@ from cml_mcp.netops import (
     ping_command,
     ping_result,
 )
-from cml_mcp.recipes import get_recipe, redact_values, resolve_secrets, secret_names_by_value, substituted
+from cml_mcp.recipes import (
+    get_recipe,
+    read_recipe_marker,
+    redact_values,
+    resolve_secrets,
+    secret_names_by_value,
+    substituted,
+)
 
 TCP_TARGET = re.compile(r"^(?P<host>[A-Za-z0-9.:-]+):(?P<port>\d{1,5})$")
 
@@ -291,6 +298,10 @@ async def cat9kv_serial_checks(app: CmlApp, lab_id: str, nodes: list[dict[str, A
 # --- the whole contract -----------------------------------------------------------------------
 
 
+def title_of(name: str) -> str:
+    return str(get_recipe(name)["build"]["title"])
+
+
 async def verify_recipe(
     app: CmlApp, name: str, *, lab: str | None = None, substitute: dict[str, str] | None = None
 ) -> dict[str, Any]:
@@ -310,13 +321,7 @@ async def _verify_recipe(
 ) -> dict[str, Any]:
     """Run recipe `name`'s verify contract against its lab, or against `lab` (a copy built with
     cml_build_recipe(title=..., substitute=...)), with the same substitutions applied."""
-    recipe = substituted(get_recipe(name), substitute)
-    # probes may carry ${LAB_*} references (SNMP communities): filled here, never echoed in results
-    verify = resolve_secrets(
-        recipe.get("verify") or {}, app.settings.lab_secrets_file, what=f"recipe {name!r}"
-    )
-    contract = contract_of({"verify": verify})
-    title = lab or recipe["build"]["title"]
+    title = lab or get_recipe(name)["build"]["title"]
     started = time.monotonic()
     checks: list[dict[str, Any]] = []
     out: dict[str, Any] = {"recipe": name, "lab": title}
@@ -331,6 +336,35 @@ async def _verify_recipe(
         return {**out, "passed": False, "summary": "0/1 checks passed", "seconds": 0.0, "checks": checks}
     lab_info = labs[0]
     lid = lab_info["id"]
+    # L25: a copy records its recipe and substitutions in the lab notes; without them the checks would
+    # probe the recipe's own addresses (another lab's devices)
+    marker = read_recipe_marker(lab_info.get("notes"))
+    if marker is None and "notes" not in lab_info:
+        marker = read_recipe_marker((await app.api.get(f"/labs/{lid}")).get("notes"))
+    if marker and marker["recipe"] != name:
+        checks.append(
+            check(
+                "lab built from this recipe", "lab", False, f"{title!r} was built from {marker['recipe']!r}"
+            )
+        )
+        return {**out, "passed": False, "summary": "0/1 checks passed", "seconds": 0.0, "checks": checks}
+    from_notes = False
+    if substitute is None and marker:
+        substitute = marker["substitute"] or None
+        if substitute:
+            out["substitute"] = substitute
+            from_notes = True
+    elif substitute is None and lab and lab != title_of(name):
+        out["warning"] = (
+            f"{title!r} has no recorded recipe substitutions (built before v0.9.0 or by hand): the "
+            f"checks use recipe {name!r}'s own addresses. Pass `substitute` if the copy was built with one."
+        )
+    recipe = substituted(get_recipe(name), substitute)
+    # probes may carry ${LAB_*} references (SNMP communities): filled here, never echoed in results
+    verify = resolve_secrets(
+        recipe.get("verify") or {}, app.settings.lab_secrets_file, what=f"recipe {name!r}"
+    )
+    contract = contract_of({"verify": verify})
     nodes = {str(n.get("label")): n for n in await app.list_nodes(lid)}
     expected = contract.booted or [
         str(n.get("label"))
@@ -427,13 +461,27 @@ async def _verify_recipe(
                     else {"found": sorted(found), **({"errors": address_errors} if address_errors else {})},
                 )
             )
+    # Notes are writable by any lab editor: substitutions read from them never redirect a network
+    # probe (an SNMP probe sends the real community) to another host; the caller can pass them explicitly.
+    packaged = {p.name: p for p in contract_of(get_recipe(name)).probes} if from_notes else {}
+    skipped: list[str] = []
     for p in contract.probes:
+        was = packaged.get(p.name)
+        if was and (p.tcp != was.tcp or (p.snmp and was.snmp and p.snmp.host != was.snmp.host)):
+            skipped.append(p.name)
+            continue
         if p.tcp:
             ok, detail = await tcp_probe(p.tcp)
             checks.append(check(p.name, "tcp", ok, detail))
         elif p.snmp:
             ok, detail = await snmp_probe(p.snmp)
             checks.append(check(p.name, "snmp", ok, detail))
+    if skipped:
+        out["skipped"] = {
+            "checks": skipped,
+            "why": "network probes to substituted hosts don't run on substitutions read from the lab notes; "
+            "pass the same `substitute` explicitly to run them",
+        }
     passed = bool(checks) and all(c["ok"] for c in checks)
     return {
         **out,

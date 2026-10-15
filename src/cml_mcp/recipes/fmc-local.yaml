@@ -14,7 +14,7 @@ credentials:
 fmc_side: >-
   Point an fmc-mcp-server instance at https://198.18.128.192 (admin / ${LAB_FTD_ADMIN_PASSWORD}, FMC_VERIFY_SSL=false). Turn on
   the evaluation licence (fmc_register_eval_license or Smart Licenses > Evaluation mode), then fmc_register_device with
-  host 198.18.128.193 and the reg key (the FTD already shows 'show managers' -> 198.18.128.192 Pending).
+  host 198.18.128.193 and the reg key ${LAB_FTD_REG_KEY} (the FTD already shows 'show managers' -> 198.18.128.192 Pending).
 boot_minutes: 30-45 (FMCv first boot; the API answers several minutes after the console's 'login:'); FTDv 15-25 in parallel
 verify:
   booted: [fmc, ftd]
