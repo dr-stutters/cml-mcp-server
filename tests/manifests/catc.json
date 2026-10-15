@@ -1,5 +1,5 @@
 {
-  "core_version": "0.12.0",
+  "core_version": "0.12.4",
   "manifest": 1,
   "prefix": "catc",
   "prompts": {
@@ -16,6 +16,34 @@
       "tier": "write",
       "uses": [
         "catc"
+      ]
+    },
+    "catc_decommission_device": {
+      "arguments": [
+        "device",
+        "clean_config",
+        "remove_ise_nad"
+      ],
+      "references": [
+        "catc_device_360",
+        "catc_get_device_config",
+        "catc_list_config_archive",
+        "catc_delete_device",
+        "catc_list_tags",
+        "catc_list_tag_members",
+        "catc_update_tag_members",
+        "catc_get_device",
+        "catc_get_task",
+        "ise_get_nad",
+        "ise_delete_nad",
+        "ise_list_nads",
+        "catc_onboard_device"
+      ],
+      "rendered": true,
+      "tier": "dangerous",
+      "uses": [
+        "catc",
+        "ise"
       ]
     },
     "catc_onboard_device": {
@@ -45,7 +73,7 @@
         "catc_deploy_template",
         "catc_device_360",
         "catc_run_compliance",
-        "catc_get_compliance_summary",
+        "catc_get_compliance_detail",
         "catc_run_show_commands",
         "catc_recent_activity"
       ],
@@ -384,6 +412,10 @@
       "tier": "read",
       "title": "List audit logs"
     },
+    "catc_list_clients": {
+      "tier": "read",
+      "title": "List clients"
+    },
     "catc_list_compliance_policies": {
       "tier": "read",
       "title": "List compliance policies"
@@ -577,5 +609,5 @@
       "title": "Update template"
     }
   },
-  "version": "0.6.0"
+  "version": "0.8.3"
 }

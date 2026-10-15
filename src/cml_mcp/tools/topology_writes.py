@@ -23,6 +23,7 @@ from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
 from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
+from cml_mcp.scenarios import condition_changes
 from cml_mcp.tools.common import LabRef, LinkRef, NodeRef, config_text, load_topo
 from cml_mcp.tools.lab_writes import Wait, known_definitions
 from cml_mcp.tools.smart import Timeout
@@ -168,7 +169,7 @@ def register(reg: ToolRegistrar) -> None:
             for k, v in {"label": label, "tags": tags, "x": x, "y": y, "ram": ram, "cpus": cpus}.items()
             if v is not None
         }
-        changes = field_changes(n, desired)
+        changes = field_changes(n, desired)  # partial on purpose: the PATCH sends only these fields
         current_login = {k: v for k, v in (n.get("pyats") or {}).items() if v is not None}
         login = {
             k: v
@@ -500,9 +501,14 @@ def register(reg: ToolRegistrar) -> None:
         full = {**desired, "enabled": True}  # omitted impairments are reset to none
         blockers = [] if (clear or body) else ["Give at least one impairment, or clear=true"]
         name = f"{topo.endpoint(lk.get('interface_a'))}<->{topo.endpoint(lk.get('interface_b'))}"
+        changes = condition_changes(current_view, {} if clear else full)  # PATCH resets omitted ones
         plan = Plan(
             f"{'Clear conditioning on' if clear else 'Condition'} link {name}",
-            details={"current": current_view, "new": {} if clear else {**body, "enabled": True}},
+            details={
+                "current": current_view,
+                "new": {} if clear else {**body, "enabled": True},
+                "changes": changes,
+            },
             fingerprint=current_view,
             blockers=blockers,
         )

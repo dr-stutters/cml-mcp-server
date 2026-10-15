@@ -214,3 +214,34 @@ async def test_confirm_token_refused_when_node_changed(lab_api: respx.MockRouter
             "cml_set_node_state", {**args, "confirm": preview["confirm"]}, raise_on_error=False
         )
     assert res.is_error and "changed since the preview" in res.content[0].text
+
+
+async def test_link_condition_preview_lists_reset_impairments(lab_api: respx.MockRouter) -> None:
+    """Core 0.12.4 replace=True: omitted impairments are reset by the PATCH, so the preview lists them."""
+    lab_api.get(f"/labs/{LID}/links/{LINK}/condition").mock(
+        return_value=httpx.Response(
+            200, json={"latency": 100, "loss": 2.0, "enabled": True, "operational": {}}
+        )
+    )
+    lab_api.patch(f"/labs/{LID}/links/{LINK}/condition").mock(return_value=httpx.Response(200, json={}))
+    preview, _ = await preview_apply(
+        "cml_set_link_condition", {"lab": LID, "link": "r1<->r2", "latency_ms": 50}
+    )
+    assert preview["preview"]["changes"] == {
+        "latency": {"from": 100, "to": 50},
+        "loss": {"from": 2.0, "to": None, "removed": True},
+    }
+
+
+def test_condition_changes_clear_and_unconditioned() -> None:
+    from cml_mcp.scenarios import condition_changes
+
+    cur = {"latency": 100, "enabled": True, "link_id": "x"}
+    assert condition_changes(cur, {}) == {
+        "latency": {"from": 100, "to": None, "removed": True},
+        "enabled": {"from": True, "to": None, "removed": True},
+    }
+    assert condition_changes({}, {"latency": 5, "loss": None, "enabled": True}) == {
+        "latency": {"from": None, "to": 5},
+        "enabled": {"from": None, "to": True},
+    }

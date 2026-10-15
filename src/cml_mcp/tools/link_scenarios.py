@@ -15,6 +15,7 @@ from cml_mcp.scenarios import (
     FLAP_MAX_TOTAL_SECONDS,
     SCENARIOS,
     FlapJob,
+    condition_changes,
     match_scenario,
     netem_body,
 )
@@ -133,7 +134,9 @@ def register(reg: ToolRegistrar) -> None:
             )
             summary = f"Flap link {name}: {cycles} x ({down_seconds}s down, {up_seconds}s up)"
         else:
-            details.update(current=current, new=dict(sc.netem))
+            details.update(
+                current=current, new=dict(sc.netem), changes=condition_changes(current, netem_body(sc))
+            )
             summary = f"Apply scenario {sc.name} to link {name}"
         plan = Plan(
             summary,
