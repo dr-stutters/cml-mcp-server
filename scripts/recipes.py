@@ -3,7 +3,7 @@
     uv run python scripts/recipes.py list
     uv run python scripts/recipes.py build catc-routers [--start] [--no-wait] [--recreate]
     uv run python scripts/recipes.py wait catc-routers            # until every node has booted
-    uv run python scripts/recipes.py verify catc-routers          # ping the recipe's targets
+    uv run python scripts/recipes.py verify catc-routers [--json]  # run the recipe's verify contract
     uv run python scripts/recipes.py stop catc-routers            # stop (keep the lab defined)
     uv run python scripts/recipes.py plan ise-access              # which labs would have to stop
     uv run python scripts/recipes.py swap ise-access [--yes]      # stop those (asks first), start/build it
@@ -104,6 +104,7 @@ async def main() -> None:
     ap.add_argument("--start", action="store_true", help="build: start the lab after building it")
     ap.add_argument("--no-wait", action="store_true", help="build/start: don't wait for the boot")
     ap.add_argument("--recreate", action="store_true", help="build: delete an existing lab first")
+    ap.add_argument("--json", action="store_true", help="verify: print the full JSON result")
     ap.add_argument("--yes", action="store_true", help="swap: stop the planned labs without asking")
     ap.add_argument("--timeout", type=float, default=2400, help="seconds to wait for boots")
     args = ap.parse_args()
@@ -145,10 +146,14 @@ async def main() -> None:
         elif args.action == "wait":
             out = await call(c, "cml_wait_for_converged", {"lab": title, "timeout": args.timeout})
         elif args.action == "verify":
-            v = recipe["verify"]
-            out = await call(c, "cml_check_reachability", {"lab": title, **v})
-            addresses = await call(c, "cml_get_layer3_addresses", {"lab": title, "source": "cli"})
-            out = {"reachability": out, "addresses": addresses.get("cli")}
+            out = await call(c, "cml_verify_recipe", {"recipe": args.recipe})
+            if not args.json:
+                for chk in out["checks"]:
+                    mark = "PASS" if chk["ok"] else "FAIL"
+                    detail = "" if chk["ok"] else f"  {str(chk.get('detail', ''))[:160]}"
+                    print(f"{mark}  {chk['kind']:8} {chk['check']}{detail}")
+                print(f"{'PASSED' if out['passed'] else 'FAILED'}: {out['summary']} in {out['seconds']}s")
+                raise SystemExit(0 if out["passed"] else 1)
         else:
             out = await call(c, "cml_stop_lab", {"lab": title}, write=True)
     print(json.dumps(out, indent=1, default=str))

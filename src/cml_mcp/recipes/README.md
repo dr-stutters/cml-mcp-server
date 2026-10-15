@@ -9,7 +9,7 @@ with one tool call, or you can run:
 uv run python scripts/recipes.py list
 uv run python scripts/recipes.py build ftd-fmc --start --no-wait   # FTDv: 15-30 min to boot
 uv run python scripts/recipes.py wait ftd-fmc                      # until booted
-uv run python scripts/recipes.py verify ftd-fmc                    # ping matrix + addresses
+uv run python scripts/recipes.py verify ftd-fmc [--json]           # run the verify contract (pass/fail)
 uv run python scripts/recipes.py stop ftd-fmc                      # keep it defined, free licences
 uv run python scripts/recipes.py start catc-routers                # bring a stopped recipe back
 ```
@@ -41,3 +41,16 @@ Gotchas found while building them:
 - IOS-XE NETCONF (port 830) needs `aaa new-model` + `aaa authorization exec default local` and
   takes several minutes after boot to listen.
 - Wiping a node gives its interfaces new MAC addresses (matters for ISE endpoint/MAB tests).
+
+## Verify contracts
+
+Each recipe's `verify:` section is a contract that `cml_verify_recipe` (and `scripts/recipes.py verify`,
+and `pytest -m live_recipes`) checks against the running lab, pass/fail per check. Nothing is changed.
+- `booted`: nodes that must be BOOTED (default: every licensed node).
+- `nodes` / `targets` / `vrf`: a ping matrix through the consoles.
+- `addresses`: addresses each node must show in its CLI.
+- `probes`: `{name, node, command, expect, reject}` runs a console command and matches regexes;
+  `{name, tcp: host:port}` and `{name, snmp: {host, community}}` run from the MCP server's host.
+
+Verified on 2026-10-15: ftd-fmc 6/6 (FTD 'show managers' points at FMC), catc-routers 14/14 (SSH, NETCONF
+and SNMP from cortex), ise-access 9/9 (RADIUS server UP and `test aaa` answered by ISE).

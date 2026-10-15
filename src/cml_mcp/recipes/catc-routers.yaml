@@ -16,6 +16,14 @@ boot_minutes: 5-8
 verify:
   nodes: [r1, r2]
   targets: [198.18.128.1, 198.18.128.11]
+  addresses: {r1: [198.18.128.152], r2: [198.18.128.153]}
+  probes:
+    - {name: r1 SSH (22) from the server, tcp: 198.18.128.152:22}
+    - {name: r2 SSH (22) from the server, tcp: 198.18.128.153:22}
+    - {name: r1 NETCONF (830) from the server, tcp: 198.18.128.152:830}
+    - {name: r2 NETCONF (830) from the server, tcp: 198.18.128.153:830}
+    - {name: r1 SNMP v2c from the server, snmp: {host: 198.18.128.152, community: mcp-ro}}
+    - {name: r2 SNMP v2c from the server, snmp: {host: 198.18.128.153, community: mcp-ro}}
 build:
   title: mcp-cml-catc
   description: 2x cat8000v discoverable by Catalyst Center (cml-mcp-server recipe catc-routers)
