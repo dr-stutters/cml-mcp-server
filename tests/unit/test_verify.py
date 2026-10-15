@@ -277,7 +277,7 @@ def _labs_with_notes(monkeypatch: pytest.MonkeyPatch, notes: str) -> None:
     real = CmlApp.list_labs
 
     async def with_notes(self: CmlApp) -> list[dict[str, Any]]:
-        return [{**lab, "notes": notes} for lab in await real(self)]
+        return [{**lab, "lab_notes": notes} for lab in await real(self)]
 
     monkeypatch.setattr(CmlApp, "list_labs", with_notes)
 
