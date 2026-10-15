@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- Site replica (L16): `cml_plan_replica` (read) maps devices to CML node definitions (light: IOL; faithful: cat9000v,
+  cat8000v, NX-OS 9000v, FTDv, FMCv, ...) within a node/RAM budget and only to installed images, keeps firewalls/routers/WLCs
+  before switches, lists gaps (CAPWAP APs, Meraki) and returns a `cml_build_lab` spec; the `cml_replicate_site` prompt chains
+  Catalyst Center (`catc_get_site`, `catc_list_devices`, `catc_get_physical_topology`), FMC (`fmc_list_devices`) and ISE
+  (`ise_list_nads`) into it. Other servers' tool manifests in `tests/manifests/` check the prompt's references; `cml.json`
+  is this server's manifest for theirs.
 - Recipe `fmc-local` (L14): a private FMCv 10.0.1 (198.18.128.192, evaluation licence) with an FTDv (.193) that registers to it
   from day 0, for destructive fmc-server tests that must not touch the dCloud FMC. Verify: FTD `show managers` -> the local FMC,
   FMC HTTPS and FTD SSH from the server. Lab export `labs/mcp-cml-fmc-local.yaml`. `ftd-ha`'s suggested outside addresses moved off .192/.193.

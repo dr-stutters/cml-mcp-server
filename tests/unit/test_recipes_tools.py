@@ -28,7 +28,10 @@ async def test_prompt_contract(api: respx.MockRouter) -> None:
     await assert_prompt_contract(
         create_server(make_settings(mcp_enable_writes=True, mcp_enable_dangerous=True)),
         "cml",
-        samples={"cml_build_test_lab": {"recipe": "ise-access"}},
+        samples={
+            "cml_build_test_lab": {"recipe": "ise-access"},
+            "cml_replicate_site": {"site": "Global/SYD", "fidelity": "light", "max_nodes": "6"},
+        },
         known_prefixes={"cml", "ise", "fmc", "catc"},
     )
 

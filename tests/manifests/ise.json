@@ -1,0 +1,489 @@
+{
+  "core_version": "0.9.0",
+  "manifest": 1,
+  "prefix": "ise",
+  "prompts": {
+    "ise_incident_timeline": {
+      "arguments": [
+        "mac",
+        "ip",
+        "username",
+        "minutes"
+      ],
+      "references": [
+        "ise_find_session",
+        "ise_endpoint_360",
+        "ise_get_auth_history",
+        "ise_recent_auth_failures",
+        "ise_list_anc_endpoints",
+        "fmc_list_audit_records",
+        "fmc_list_deployments",
+        "fmc_device_health",
+        "catc_device_360",
+        "catc_client_360",
+        "catc_list_events",
+        "catc_list_issues",
+        "catc_list_audit_logs"
+      ],
+      "rendered": false,
+      "tier": "read",
+      "uses": [
+        "ise",
+        "fmc",
+        "catc"
+      ]
+    },
+    "ise_quarantine_host": {
+      "arguments": [
+        "reason",
+        "mac",
+        "ip",
+        "username",
+        "anc_policy",
+        "fmc_block",
+        "switch"
+      ],
+      "references": [
+        "ise_find_session",
+        "ise_endpoint_360",
+        "ise_list_anc_policies",
+        "ise_list_anc_endpoints",
+        "ise_get_policy_set"
+      ],
+      "rendered": false,
+      "tier": "read",
+      "uses": [
+        "ise",
+        "fmc",
+        "cml",
+        "catc"
+      ]
+    },
+    "ise_troubleshoot_endpoint_access": {
+      "arguments": [
+        "mac",
+        "username",
+        "ip",
+        "switch",
+        "minutes"
+      ],
+      "references": [
+        "ise_find_session",
+        "ise_recent_auth_failures",
+        "ise_why_auth_failed",
+        "ise_endpoint_360",
+        "ise_get_auth_history",
+        "ise_get_policy_set",
+        "ise_get_nad",
+        "ise_list_anc_endpoints"
+      ],
+      "rendered": false,
+      "tier": "read",
+      "uses": [
+        "ise",
+        "cml",
+        "catc"
+      ]
+    }
+  },
+  "server": "ise-mcp-server",
+  "tools": {
+    "ise_api_call": {
+      "tier": "dangerous",
+      "title": "Raw Cisco ISE API call"
+    },
+    "ise_apply_anc": {
+      "tier": "dangerous",
+      "title": "Apply ANC policy to an endpoint"
+    },
+    "ise_audit_nads": {
+      "tier": "read",
+      "title": "Audit network devices"
+    },
+    "ise_bind_certificate": {
+      "tier": "dangerous",
+      "title": "Bind a CA-signed certificate to its CSR"
+    },
+    "ise_bulk_endpoints": {
+      "tier": "write",
+      "title": "Bulk create, update or delete endpoints"
+    },
+    "ise_clear_anc": {
+      "tier": "dangerous",
+      "title": "Clear ANC policy from an endpoint"
+    },
+    "ise_coa_disconnect": {
+      "tier": "dangerous",
+      "title": "CoA: disconnect a session"
+    },
+    "ise_coa_reauth": {
+      "tier": "dangerous",
+      "title": "CoA: reauthenticate a session"
+    },
+    "ise_create_anc_policy": {
+      "tier": "write",
+      "title": "Create ANC policy"
+    },
+    "ise_create_authn_rule": {
+      "tier": "write",
+      "title": "Create authentication rule"
+    },
+    "ise_create_authz_profile": {
+      "tier": "write",
+      "title": "Create authorization profile"
+    },
+    "ise_create_authz_rule": {
+      "tier": "write",
+      "title": "Create authorization rule"
+    },
+    "ise_create_group": {
+      "tier": "write",
+      "title": "Create identity or endpoint group"
+    },
+    "ise_create_internal_user": {
+      "tier": "write",
+      "title": "Create internal user"
+    },
+    "ise_create_nad": {
+      "tier": "write",
+      "title": "Create network device"
+    },
+    "ise_create_ndg": {
+      "tier": "write",
+      "title": "Create network device group"
+    },
+    "ise_create_policy_set": {
+      "tier": "write",
+      "title": "Create policy set"
+    },
+    "ise_delete_certificate": {
+      "tier": "dangerous",
+      "title": "Delete a certificate"
+    },
+    "ise_delete_csr": {
+      "tier": "write",
+      "title": "Delete a CSR"
+    },
+    "ise_delete_nad": {
+      "tier": "dangerous",
+      "title": "Delete network device"
+    },
+    "ise_delete_object": {
+      "tier": "write",
+      "title": "Delete an ISE object"
+    },
+    "ise_delete_policy_rule": {
+      "tier": "dangerous",
+      "title": "Delete a policy rule"
+    },
+    "ise_delete_policy_set": {
+      "tier": "dangerous",
+      "title": "Delete a policy set"
+    },
+    "ise_delete_trustsec_object": {
+      "tier": "write",
+      "title": "Delete an IP-SGT mapping or SXP connection"
+    },
+    "ise_deploy_ip_sgt": {
+      "tier": "dangerous",
+      "title": "Deploy IP-SGT mappings to devices (SSH)"
+    },
+    "ise_deployment_health": {
+      "tier": "read",
+      "title": "Deployment health check"
+    },
+    "ise_endpoint_360": {
+      "tier": "read",
+      "title": "Endpoint 360"
+    },
+    "ise_export_csr": {
+      "tier": "read",
+      "title": "Export a CSR (PEM)"
+    },
+    "ise_find_session": {
+      "tier": "read",
+      "title": "Find a session"
+    },
+    "ise_generate_csr": {
+      "tier": "write",
+      "title": "Generate a CSR"
+    },
+    "ise_get_auth_history": {
+      "tier": "read",
+      "title": "Authentication history for a MAC"
+    },
+    "ise_get_auth_list": {
+      "tier": "read",
+      "title": "Sessions authenticated in a time window"
+    },
+    "ise_get_authz_profile": {
+      "tier": "read",
+      "title": "Get an authorization profile"
+    },
+    "ise_get_backup_status": {
+      "tier": "read",
+      "title": "Last configuration backup"
+    },
+    "ise_get_dacl": {
+      "tier": "read",
+      "title": "Get a downloadable ACL"
+    },
+    "ise_get_definition": {
+      "tier": "read",
+      "title": "Describe a Cisco ISE API path or schema"
+    },
+    "ise_get_egress_matrix": {
+      "tier": "read",
+      "title": "TrustSec egress matrix"
+    },
+    "ise_get_internal_user": {
+      "tier": "read",
+      "title": "Get an internal user"
+    },
+    "ise_get_license_status": {
+      "tier": "read",
+      "title": "ISE license status"
+    },
+    "ise_get_nad": {
+      "tier": "read",
+      "title": "Get a network device"
+    },
+    "ise_get_policy_set": {
+      "tier": "read",
+      "title": "Get a policy set with its rules"
+    },
+    "ise_get_task": {
+      "tier": "read",
+      "title": "Get an ISE task's status"
+    },
+    "ise_import_trusted_cert": {
+      "tier": "write",
+      "title": "Import a trusted (CA) certificate"
+    },
+    "ise_list_active_sessions": {
+      "tier": "read",
+      "title": "List active sessions"
+    },
+    "ise_list_allowed_protocols": {
+      "tier": "read",
+      "title": "List allowed protocols services"
+    },
+    "ise_list_anc_endpoints": {
+      "tier": "read",
+      "title": "List endpoints under ANC"
+    },
+    "ise_list_anc_policies": {
+      "tier": "read",
+      "title": "List ANC policies"
+    },
+    "ise_list_authz_profiles": {
+      "tier": "read",
+      "title": "List authorization profiles"
+    },
+    "ise_list_certificates": {
+      "tier": "read",
+      "title": "List certificates"
+    },
+    "ise_list_command_sets": {
+      "tier": "read",
+      "title": "List TACACS+ command sets"
+    },
+    "ise_list_conditions": {
+      "tier": "read",
+      "title": "List library conditions"
+    },
+    "ise_list_csrs": {
+      "tier": "read",
+      "title": "List certificate signing requests"
+    },
+    "ise_list_custom_attributes": {
+      "tier": "read",
+      "title": "List endpoint custom attributes"
+    },
+    "ise_list_dacls": {
+      "tier": "read",
+      "title": "List downloadable ACLs"
+    },
+    "ise_list_dictionary_attributes": {
+      "tier": "read",
+      "title": "List policy dictionary attributes"
+    },
+    "ise_list_endpoint_groups": {
+      "tier": "read",
+      "title": "List endpoint identity groups"
+    },
+    "ise_list_endpoints": {
+      "tier": "read",
+      "title": "List endpoints"
+    },
+    "ise_list_failure_reasons": {
+      "tier": "read",
+      "title": "Search failure reasons"
+    },
+    "ise_list_identity_groups": {
+      "tier": "read",
+      "title": "List user identity groups"
+    },
+    "ise_list_identity_sources": {
+      "tier": "read",
+      "title": "List identity sources"
+    },
+    "ise_list_internal_users": {
+      "tier": "read",
+      "title": "List internal users"
+    },
+    "ise_list_ip_sgt_mappings": {
+      "tier": "read",
+      "title": "List IP-SGT mappings"
+    },
+    "ise_list_nads": {
+      "tier": "read",
+      "title": "List network devices (NADs)"
+    },
+    "ise_list_ndgs": {
+      "tier": "read",
+      "title": "List network device groups"
+    },
+    "ise_list_nodes": {
+      "tier": "read",
+      "title": "List ISE deployment nodes"
+    },
+    "ise_list_patches": {
+      "tier": "read",
+      "title": "List installed patches"
+    },
+    "ise_list_policy_sets": {
+      "tier": "read",
+      "title": "List policy sets"
+    },
+    "ise_list_posture_policies": {
+      "tier": "read",
+      "title": "List posture policies"
+    },
+    "ise_list_posture_requirements": {
+      "tier": "read",
+      "title": "List posture requirements"
+    },
+    "ise_list_profiler_profiles": {
+      "tier": "read",
+      "title": "List profiler profiles"
+    },
+    "ise_list_sgacls": {
+      "tier": "read",
+      "title": "List SGACLs"
+    },
+    "ise_list_sgts": {
+      "tier": "read",
+      "title": "List security group tags"
+    },
+    "ise_list_shell_profiles": {
+      "tier": "read",
+      "title": "List TACACS+ shell profiles"
+    },
+    "ise_list_sxp_bindings": {
+      "tier": "read",
+      "title": "List SXP bindings"
+    },
+    "ise_list_sxp_connections": {
+      "tier": "read",
+      "title": "List SXP connections"
+    },
+    "ise_policy_explain": {
+      "tier": "read",
+      "title": "Explain which policy rule a request would hit"
+    },
+    "ise_push_trustsec_matrix": {
+      "tier": "dangerous",
+      "title": "Push TrustSec policy to devices (CoA)"
+    },
+    "ise_recent_auth_failures": {
+      "tier": "read",
+      "title": "Recent authentication failures"
+    },
+    "ise_release_rejected_endpoint": {
+      "tier": "write",
+      "title": "Release rejected endpoints"
+    },
+    "ise_search_spec": {
+      "tier": "read",
+      "title": "Search the Cisco ISE API spec"
+    },
+    "ise_set_cert_auth_profile": {
+      "tier": "write",
+      "title": "Create or update a certificate authentication profile"
+    },
+    "ise_set_command_set": {
+      "tier": "write",
+      "title": "Create or replace a TACACS+ command set"
+    },
+    "ise_set_custom_attribute": {
+      "tier": "write",
+      "title": "Create or delete an endpoint custom attribute"
+    },
+    "ise_set_dacl": {
+      "tier": "write",
+      "title": "Create or update a downloadable ACL"
+    },
+    "ise_set_egress_policy": {
+      "tier": "write",
+      "title": "Set an egress matrix cell"
+    },
+    "ise_set_endpoint": {
+      "tier": "write",
+      "title": "Create or update an endpoint"
+    },
+    "ise_set_identity_sequence": {
+      "tier": "write",
+      "title": "Create or update an identity source sequence"
+    },
+    "ise_set_ip_sgt": {
+      "tier": "write",
+      "title": "Create or update a static IP-SGT mapping"
+    },
+    "ise_set_sgt": {
+      "tier": "write",
+      "title": "Create or update an SGT"
+    },
+    "ise_set_shell_profile": {
+      "tier": "write",
+      "title": "Create or update a TACACS+ shell profile"
+    },
+    "ise_set_sxp_connection": {
+      "tier": "write",
+      "title": "Create or update an SXP connection"
+    },
+    "ise_status": {
+      "tier": "read",
+      "title": "Cisco ISE status"
+    },
+    "ise_update_authz_profile": {
+      "tier": "write",
+      "title": "Update authorization profile"
+    },
+    "ise_update_internal_user": {
+      "tier": "write",
+      "title": "Update internal user"
+    },
+    "ise_update_nad": {
+      "tier": "write",
+      "title": "Update network device"
+    },
+    "ise_update_node_services": {
+      "tier": "dangerous",
+      "title": "Enable or disable node services"
+    },
+    "ise_update_policy_rule": {
+      "tier": "write",
+      "title": "Update a policy rule"
+    },
+    "ise_update_policy_set": {
+      "tier": "write",
+      "title": "Update policy set"
+    },
+    "ise_why_auth_failed": {
+      "tier": "read",
+      "title": "Why did authentication fail?"
+    }
+  },
+  "version": "0.6.1"
+}
