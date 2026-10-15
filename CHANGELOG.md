@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Image upload (L19): `cml_get_image_files` (read), `cml_upload_image` (dangerous: streamed multipart from the
+  allow-listed `CML_IMAGE_DIR`, symlink escapes refused, SHA-256 / name / controller-disk checks),
+  `cml_create_image_definition` (write), `cml_delete_image` (dangerous; refused while nodes use it). Admin-only in CML.
 - Non-admin CML accounts (L17): `docs/least-privilege.md` (read account `mcp-cml-viewer`, write account
   `mcp-cml-operator`, groups, resource pools), `scripts/seed_lab.py --least-privilege`, live test
   `tests/live/test_least_privilege.py` (read tier as the viewer via core's `read_tier_report`, write tier as the

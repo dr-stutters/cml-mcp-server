@@ -7,7 +7,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > Not affiliated with or endorsed by Cisco Systems, Inc. "Cisco" and "Cisco Modeling Labs" are
 > trademarks of Cisco Systems, Inc.
 
-- **65 tools** in three tiers: 38 read, 22 write, 5 dangerous (plus `cml_api_call` for non-GET), and the
+- **69 tools** in three tiers: 38 read, 23 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -98,6 +98,7 @@ or in `.mcp.json`:
 | `cml_list_capture_packets` | Decoded packets from a link capture (filter by protocol or text) |
 | `cml_list_node_definitions` / `cml_get_node_definition` | What can be built: interfaces, resources, boot markers, default configs |
 | `cml_list_image_definitions` | Installed images |
+| `cml_get_image_files` | Disk images in `CML_IMAGE_DIR` on the server host, and the controller's drop folder |
 | `cml_wait_for_converged` | Wait until a lab or node has booted, with progress notifications; `console_pattern` waits for a later console message |
 | `cml_diff_lab` | Diff a lab with another lab or a saved YAML: nodes, interfaces, links, config diff (`running_configs=true` for live configs) |
 | `cml_diff_node_config` | Running config (from the console) vs day-0, startup, another node or a baseline; secrets masked |
@@ -131,6 +132,7 @@ or in `.mcp.json`:
 | `cml_apply_link_scenario` | Apply a named scenario to a link: wan-good, wan-satellite, lossy-wifi, brownout, or `flap` (timed down/up cycles in the background, link always restored) |
 | `cml_clear_link_scenarios` | Stop flap jobs and remove conditioning from a lab's links |
 | `cml_annotate_lab` | Add notes, per-node address labels and the recipe's purpose/credential references as text annotations (re-runnable) |
+| `cml_create_image_definition` | Make an uploaded disk image usable by a node definition (admin) |
 
 **Prompt** (write tier): `cml_build_test_lab(recipe, reuse)` - recipe -> licence plan -> build/start ->
 converge -> verify -> hand-off block for the FMC / Catalyst Center / ISE server.
@@ -141,6 +143,8 @@ converge -> verify -> hand-off block for the FMC / Catalyst Center / ISE server.
 |---|---|
 | `cml_wipe_lab` / `cml_wipe_node` | Erase node disks (`force=true` stops first) |
 | `cml_delete_lab` / `cml_delete_node` / `cml_delete_link` | Delete (`force=true` stops and wipes first where CML requires it) |
+| `cml_upload_image` | Stream a disk image from `CML_IMAGE_DIR` to the controller (never through MCP), SHA-256 and disk-space checked (admin) |
+| `cml_delete_image` | Delete an image definition (refused while nodes use it) and/or a drop-folder file (admin) |
 | `cml_api_call` (non-GET) | Raw POST, PUT, PATCH or DELETE, preview-first |
 
 Device CLI uses the controller's console server: SSH to the controller with the CML credentials,
@@ -167,6 +171,7 @@ tool that fixes it.
 | `CML_CONSOLE_PORT` | `22` | SSH port of the CML console server (used for device CLI) |
 | `CML_CONSOLE_LOCK_WAIT` | `60` | Seconds a console call waits for another call on the same node before reporting it busy |
 | `CML_LAB_SECRETS_FILE` | | dotenv file with the `LAB_*` values that recipes reference as `${LAB_*}` (device passwords, keys, communities). `LAB_*` environment variables override it. Recipe builds name any missing variable |
+| `CML_IMAGE_DIR` | | The only directory `cml_upload_image` reads (images are streamed from it; uploads are off without it) |
 | `CML_PROTECTED_LABS` / `CML_MANAGED_LABS` | | Safety rails ([docs/safety.md](docs/safety.md)): labs no change may touch; labs the dangerous tools may wipe/delete (title globs or ids) |
 | `CML_CONFIG_DENY_DEFAULTS` / `CML_CONFIG_DENY` | `true` / | `cml_configure_node` refuses destructive device commands (write erase, reload, format, delete, ...); one extra regex |
 | `CML_TLS_CHECK_HOSTNAME` | `true` | `false` only with `CML_CA_BUNDLE` = the controller's own certificate (pinned; `scripts/pin_controller.py`) |
