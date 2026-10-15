@@ -157,15 +157,69 @@ def read_only_problem(command: str) -> str | None:
     return "only show/ping/traceroute-style commands are allowed here; use cml_configure_node for changes"
 
 
-SECRET_LINE = re.compile(
-    r"(?im)^(.*\b(?:password|secret|key-string|key|community|psk|pre-shared-key|passphrase)\b\s+"
-    r"(?:\d{1,2}\s+)?)(\S+)(.*)$"
+# Secret masking for device CLI output and configs. Line by line: nothing may span a newline.
+_SP = r"[ \t]+"
+_TYPE = (
+    rf"(?:\d{{1,2}}{_SP})?"  # an encryption type digit before the secret ('secret 9 $9$...', 'key 7 0822')
+)
+_M = "********"
+# Specific forms first (the first one that matches a line wins); each masks group 'secret'.
+SECRET_FORMS = [
+    # ip ospf message-digest-key 1 md5 7 X / ntp authentication-key 1 md5 X 7
+    re.compile(
+        rf"\b(?:message-digest-key|authentication-key){_SP}\d+{_SP}(?:md5|sha\S*){_SP}{_TYPE}(?P<secret>\S+)",
+        re.I,
+    ),
+    # wpa-psk ascii 7 X
+    re.compile(rf"\bwpa-psk{_SP}(?:ascii|hex){_SP}{_TYPE}(?P<secret>\S+)", re.I),
+    # IKEv2 keyring 'pre-shared-key [local|remote] [hex] [0|6|7] X'; ASA 'ikev1 pre-shared-key X'
+    re.compile(
+        rf"\bpre-shared-key{_SP}(?:(?:local|remote){_SP})?(?:hex{_SP})?{_TYPE}(?!address\b|hostname\b)(?P<secret>\S+)",
+        re.I,
+    ),
+    # snmp-server host H [informs|traps] [version 1|2c|3 [auth|noauth|priv]] COMMUNITY
+    re.compile(
+        rf"^\s*snmp-server{_SP}host{_SP}\S+(?:{_SP}(?:informs|traps))?(?:{_SP}version{_SP}(?:1|2c|3(?:{_SP}(?:auth|noauth|priv))?))?"
+        rf"{_SP}(?!community\b)(?P<secret>\S+)",
+        re.I,
+    ),
+]
+# snmp-server user U G v3 auth sha X priv aes 128 Y: both secrets
+SNMP_USER = re.compile(rf"^\s*snmp-server{_SP}user\b", re.I)
+SNMP_USER_SECRETS = re.compile(
+    rf"\b(?P<kw>auth{_SP}(?:md5|sha\S*)|priv{_SP}(?:des\S*|3des|aes(?:{_SP}\d{{3}})?)){_SP}{_TYPE}(?P<secret>\S+)",
+    re.I,
+)
+# Generic 'keyword [type] secret'. 'key chain', 'crypto key generate', 'pre-shared-key address' etc.
+# are not secrets.
+GENERIC_SECRET = re.compile(
+    rf"\b(?:password|secret|key-string|key|community|psk|pre-shared-key|passphrase|server-key){_SP}{_TYPE}"
+    r"(?!(?:chain|generate|config-key|zeroize|import|export|storage|label|pubkey|address|hostname|"
+    r"encryption|exchange|pair|rotation|hash)\b)(?P<secret>[^\s*]\S*)",
+    re.I,
 )
 
 
+def _mask_group(m: re.Match[str]) -> str:
+    whole, start = m.group(0), m.start("secret") - m.start(0)
+    return whole[:start] + _M + whole[m.end("secret") - m.start(0) :]
+
+
+def mask_line(line: str) -> str:
+    if SNMP_USER.match(line):
+        return SNMP_USER_SECRETS.sub(_mask_group, line)
+    for form in SECRET_FORMS:
+        masked, n = form.subn(_mask_group, line, count=1)
+        if n:
+            return masked
+    return GENERIC_SECRET.sub(_mask_group, line)
+
+
 def mask_secrets(text: str) -> str:
-    """Mask the secret token in config lines like 'username x secret 9 $9$...', 'snmp-server community x'."""
-    return SECRET_LINE.sub(lambda m: f"{m.group(1)}********{m.group(3)}", text)
+    """Mask the secret token in config/CLI lines: 'username x secret 9 $9$...', 'snmp-server
+    community x', 'key 7 ...', OSPF/NTP keys, IKE pre-shared keys, SNMPv3 users, trap communities.
+    Works line by line, so a keyword at a line end never swallows the next line."""
+    return "\n".join(mask_line(line) for line in text.split("\n"))
 
 
 @dataclass
