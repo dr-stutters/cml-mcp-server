@@ -1,5 +1,5 @@
 # cml-mcp-server roadmap
-_Last updated 2026-10-15. Current release v0.7.0 (Now, Next L8-L11, Production gate L17/L19/L20/L21 and Later L13/L14/L15/L16 delivered; L18 skipped (needs older CML versions); L12 waits for the runner).; L15 first slice; L12 waits for the runner). Suite roadmap: [stutters-mcp-core/ROADMAP.md](https://github.com/dr-stutters/stutters-mcp-core/blob/main/ROADMAP.md). Gap analysis: [docs/GAP-ANALYSIS.md](docs/GAP-ANALYSIS.md)._
+_Last updated 2026-10-15. Current release v0.8.0 (Now, Next L8-L11, Production gate L17/L19/L20/L21 and Later L13/L14/L15/L16 delivered; L18 skipped (needs older CML versions); L12 waits for the runner).; L15 first slice; L12 waits for the runner). Suite roadmap: [stutters-mcp-core/ROADMAP.md](https://github.com/dr-stutters/stutters-mcp-core/blob/main/ROADMAP.md). Gap analysis: [docs/GAP-ANALYSIS.md](docs/GAP-ANALYSIS.md)._
 
 ## Summary
 - **Where it stands (v0.4.0):** 59 tools (35 read, 19 write, 5 dangerous plus `cml_api_call`) and the prompt
@@ -44,7 +44,7 @@ _Last updated 2026-10-15. Current release v0.7.0 (Now, Next L8-L11, Production g
 ## Added overnight 2 (step 4)
 | # | Item | Why (operator value) | External needs | Test plan | Size | Issue |
 |---|---|---|---|---|---|---|
-| L23 | **Long CML tools as MCP background tasks** (core C12): upload, waits, verify, captures with `task=True` | HTTP clients time out on 10-45 min calls (1.9 GB upload 549 s, FMCv converge 30 min) | none | unit: task registration; live: converge as a task | S | [#56](https://github.com/dr-stutters/cml-mcp-server/issues/56) |
+| L23 ✅ v0.8.0 | **Long CML tools as MCP background tasks** (core C12): upload, waits, verify, captures with `task=True` | HTTP clients time out on 10-45 min calls (1.9 GB upload 549 s, FMCv converge 30 min) | none | unit: task registration; live: converge as a task | S | [#56](https://github.com/dr-stutters/cml-mcp-server/issues/56) |
 | L24 ✅ v0.7.0 | **Safety guard and console hardening** (review follow-ups): guard reuses the tool's lab resolution, console `all` toggle only for non-admins, `server_version` in status | robustness of the production rails | none | unit | S | [#57](https://github.com/dr-stutters/cml-mcp-server/issues/57) |
 
 ## Events (pull-only)
