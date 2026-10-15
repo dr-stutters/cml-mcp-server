@@ -7,7 +7,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > Not affiliated with or endorsed by Cisco Systems, Inc. "Cisco" and "Cisco Modeling Labs" are
 > trademarks of Cisco Systems, Inc.
 
-- **70 tools** in three tiers: 38 read, 24 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **71 tools** in three tiers: 39 read, 24 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -104,6 +104,7 @@ or in `.mcp.json`:
 | `cml_diff_node_config` | Running config (from the console) vs day-0, startup, another node or a baseline; secrets masked |
 | `cml_summarize_capture` | Decoded summary of a link capture: protocol mix, conversations, RADIUS/EAPOL/OSPF/DHCP/ARP/ICMP highlights |
 | `cml_plan_licences` | Licences in use per lab, what a lab or recipe needs, which labs to stop |
+| `cml_plan_replica` | Map a real site's devices (Catalyst Center / ISE / FMC inventories) to CML node definitions within a node/RAM budget: ready `cml_build_lab` spec, gaps, dropped devices |
 | `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes (no secrets returned); pass/fail verify contract of a running recipe lab (or a copy: `lab`, `substitute`) |
 | `cml_get_link_scenarios` | Named link scenarios with netem values and expected round-trip ping deltas; with a lab, its conditioned links and flap jobs |
 | `cml_export_topology` | Mermaid, draw.io or JSON diagram of a lab with interface addresses (day-0 config, snooped or CLI) |
@@ -135,7 +136,8 @@ or in `.mcp.json`:
 | `cml_annotate_lab` | Add notes, per-node address labels and the recipe's purpose/credential references as text annotations (re-runnable) |
 | `cml_create_image_definition` | Make an uploaded disk image usable by a node definition (admin) |
 
-**Prompt** (write tier): `cml_build_test_lab(recipe, reuse)` - recipe -> licence plan -> build/start ->
+**Prompts** (write tier): `cml_replicate_site(site, fidelity, max_nodes)` - Catalyst Center site (+ FMC firewalls, ISE NADs)
+-> `cml_plan_replica` -> licence check -> `cml_build_lab` -> report gaps. `cml_build_test_lab(recipe, reuse)` - recipe -> licence plan -> build/start ->
 converge -> verify -> hand-off block for the FMC / Catalyst Center / ISE server.
 
 **Dangerous** (`MCP_ENABLE_DANGEROUS=true` as well)

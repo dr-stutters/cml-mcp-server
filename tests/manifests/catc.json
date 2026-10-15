@@ -1,0 +1,581 @@
+{
+  "core_version": "0.12.0",
+  "manifest": 1,
+  "prefix": "catc",
+  "prompts": {
+    "catc_change_window": {
+      "arguments": [
+        "template",
+        "targets",
+        "window_end",
+        "params",
+        "rollback"
+      ],
+      "references": [],
+      "rendered": false,
+      "tier": "write",
+      "uses": [
+        "catc"
+      ]
+    },
+    "catc_onboard_device": {
+      "arguments": [
+        "ip_or_range",
+        "site_path",
+        "cli_credential",
+        "snmp_credential",
+        "provision"
+      ],
+      "references": [
+        "catc_get_device",
+        "catc_list_global_credentials",
+        "catc_create_global_credential",
+        "catc_create_discovery",
+        "catc_list_discoveries",
+        "catc_list_discovery_devices",
+        "catc_get_site",
+        "catc_create_site",
+        "catc_get_site_settings",
+        "catc_update_site_settings",
+        "catc_assign_site_credentials",
+        "catc_list_network_profiles",
+        "catc_get_network_profile",
+        "catc_assign_devices_to_site",
+        "catc_provision_devices",
+        "catc_deploy_template",
+        "catc_device_360",
+        "catc_run_compliance",
+        "catc_get_compliance_summary",
+        "catc_run_show_commands",
+        "catc_recent_activity"
+      ],
+      "rendered": true,
+      "tier": "write",
+      "uses": [
+        "catc"
+      ]
+    },
+    "catc_onboard_switch_with_nac": {
+      "arguments": [
+        "switch_ip",
+        "site_path",
+        "access_port",
+        "test_mac",
+        "auth_mode",
+        "cli_credential",
+        "snmp_credential"
+      ],
+      "references": [],
+      "rendered": false,
+      "tier": "write",
+      "uses": [
+        "catc",
+        "ise"
+      ]
+    }
+  },
+  "server": "catc-mcp-server",
+  "tools": {
+    "catc_accept_ise_certificate": {
+      "tier": "dangerous",
+      "title": "Accept the ISE certificate"
+    },
+    "catc_activate_image": {
+      "tier": "dangerous",
+      "title": "Activate software image"
+    },
+    "catc_add_anycast_gateway": {
+      "tier": "dangerous",
+      "title": "Add anycast gateway"
+    },
+    "catc_add_fabric_device": {
+      "tier": "dangerous",
+      "title": "Add fabric device"
+    },
+    "catc_add_ise_server": {
+      "tier": "dangerous",
+      "title": "Add Cisco ISE to Catalyst Center"
+    },
+    "catc_api_call": {
+      "tier": "dangerous",
+      "title": "Raw Cisco Catalyst Center API call"
+    },
+    "catc_assign_compliance_policy": {
+      "tier": "write",
+      "title": "Assign compliance policy to sites"
+    },
+    "catc_assign_devices_to_site": {
+      "tier": "write",
+      "title": "Assign devices to site"
+    },
+    "catc_assign_fabric_port": {
+      "tier": "dangerous",
+      "title": "Assign fabric edge port"
+    },
+    "catc_assign_profile_to_sites": {
+      "tier": "write",
+      "title": "Assign network profile to sites"
+    },
+    "catc_assign_site_credentials": {
+      "tier": "write",
+      "title": "Assign credentials to site"
+    },
+    "catc_attach_template_to_profile": {
+      "tier": "write",
+      "title": "Attach template to network profiles"
+    },
+    "catc_claim_pnp_device": {
+      "tier": "dangerous",
+      "title": "Claim a PnP device to a site"
+    },
+    "catc_client_360": {
+      "tier": "read",
+      "title": "Client 360"
+    },
+    "catc_commit_template": {
+      "tier": "write",
+      "title": "Commit template"
+    },
+    "catc_compare_device_configs": {
+      "tier": "read",
+      "title": "Compare device configs"
+    },
+    "catc_create_compliance_policy": {
+      "tier": "write",
+      "title": "Create compliance policy"
+    },
+    "catc_create_discovery": {
+      "tier": "write",
+      "title": "Create discovery"
+    },
+    "catc_create_fabric_site": {
+      "tier": "write",
+      "title": "Create fabric site"
+    },
+    "catc_create_global_credential": {
+      "tier": "write",
+      "title": "Create global credential"
+    },
+    "catc_create_ip_pool": {
+      "tier": "write",
+      "title": "Create IP pool"
+    },
+    "catc_create_report": {
+      "tier": "write",
+      "title": "Create report"
+    },
+    "catc_create_site": {
+      "tier": "write",
+      "title": "Create site"
+    },
+    "catc_create_ssid": {
+      "tier": "write",
+      "title": "Create SSID"
+    },
+    "catc_create_switching_profile": {
+      "tier": "write",
+      "title": "Create switching profile"
+    },
+    "catc_create_tag": {
+      "tier": "write",
+      "title": "Create tag"
+    },
+    "catc_create_template": {
+      "tier": "write",
+      "title": "Create template"
+    },
+    "catc_create_template_project": {
+      "tier": "write",
+      "title": "Create template project"
+    },
+    "catc_create_virtual_network": {
+      "tier": "write",
+      "title": "Create virtual network"
+    },
+    "catc_create_wireless_profile": {
+      "tier": "write",
+      "title": "Create wireless profile"
+    },
+    "catc_delete_compliance_policy": {
+      "tier": "dangerous",
+      "title": "Delete compliance policy"
+    },
+    "catc_delete_device": {
+      "tier": "dangerous",
+      "title": "Delete device (un-provision)"
+    },
+    "catc_delete_discovery": {
+      "tier": "dangerous",
+      "title": "Delete discovery"
+    },
+    "catc_delete_global_credential": {
+      "tier": "write",
+      "title": "Delete global credential"
+    },
+    "catc_delete_ip_pool": {
+      "tier": "write",
+      "title": "Delete IP pool"
+    },
+    "catc_delete_pnp_device": {
+      "tier": "dangerous",
+      "title": "Delete a PnP device"
+    },
+    "catc_delete_policy_server": {
+      "tier": "dangerous",
+      "title": "Remove an authentication and policy server"
+    },
+    "catc_delete_report": {
+      "tier": "write",
+      "title": "Delete report"
+    },
+    "catc_delete_sda_object": {
+      "tier": "dangerous",
+      "title": "Delete SDA object"
+    },
+    "catc_delete_site": {
+      "tier": "dangerous",
+      "title": "Delete site"
+    },
+    "catc_delete_ssid": {
+      "tier": "write",
+      "title": "Delete SSID"
+    },
+    "catc_delete_tag": {
+      "tier": "write",
+      "title": "Delete tag"
+    },
+    "catc_delete_template": {
+      "tier": "write",
+      "title": "Delete template"
+    },
+    "catc_delete_template_project": {
+      "tier": "write",
+      "title": "Delete template project"
+    },
+    "catc_delete_wireless_profile": {
+      "tier": "write",
+      "title": "Delete wireless profile"
+    },
+    "catc_deploy_template": {
+      "tier": "dangerous",
+      "title": "Deploy template"
+    },
+    "catc_detach_template_from_profile": {
+      "tier": "write",
+      "title": "Detach template from network profiles"
+    },
+    "catc_device_360": {
+      "tier": "read",
+      "title": "Device 360"
+    },
+    "catc_distribute_image": {
+      "tier": "dangerous",
+      "title": "Distribute software image"
+    },
+    "catc_get_client": {
+      "tier": "read",
+      "title": "Get client"
+    },
+    "catc_get_client_health": {
+      "tier": "read",
+      "title": "Client health"
+    },
+    "catc_get_compliance_detail": {
+      "tier": "read",
+      "title": "Device compliance detail"
+    },
+    "catc_get_compliance_policy": {
+      "tier": "read",
+      "title": "Get compliance policy"
+    },
+    "catc_get_compliance_summary": {
+      "tier": "read",
+      "title": "Compliance summary"
+    },
+    "catc_get_definition": {
+      "tier": "read",
+      "title": "Describe a Cisco Catalyst Center API path or schema"
+    },
+    "catc_get_device": {
+      "tier": "read",
+      "title": "Get network device"
+    },
+    "catc_get_device_config": {
+      "tier": "read",
+      "title": "Get device running config"
+    },
+    "catc_get_device_hardware": {
+      "tier": "read",
+      "title": "Device hardware and licences"
+    },
+    "catc_get_issue": {
+      "tier": "read",
+      "title": "Get assurance issue"
+    },
+    "catc_get_l3_topology": {
+      "tier": "read",
+      "title": "Layer 3 topology"
+    },
+    "catc_get_network_health": {
+      "tier": "read",
+      "title": "Overall network health"
+    },
+    "catc_get_network_profile": {
+      "tier": "read",
+      "title": "Get network profile"
+    },
+    "catc_get_physical_topology": {
+      "tier": "read",
+      "title": "Physical topology"
+    },
+    "catc_get_policy_servers": {
+      "tier": "read",
+      "title": "List authentication and policy servers"
+    },
+    "catc_get_report_content": {
+      "tier": "read",
+      "title": "Get report content"
+    },
+    "catc_get_report_view": {
+      "tier": "read",
+      "title": "Get report view"
+    },
+    "catc_get_sda_fabric": {
+      "tier": "read",
+      "title": "SDA fabric"
+    },
+    "catc_get_site": {
+      "tier": "read",
+      "title": "Get site"
+    },
+    "catc_get_site_hierarchy": {
+      "tier": "read",
+      "title": "Site hierarchy"
+    },
+    "catc_get_site_settings": {
+      "tier": "read",
+      "title": "Get site network settings"
+    },
+    "catc_get_system_health": {
+      "tier": "read",
+      "title": "Appliance health"
+    },
+    "catc_get_task": {
+      "tier": "read",
+      "title": "Get task status"
+    },
+    "catc_get_template": {
+      "tier": "read",
+      "title": "Get template"
+    },
+    "catc_get_template_deployment": {
+      "tier": "read",
+      "title": "Get template deployment"
+    },
+    "catc_get_vlan_topology": {
+      "tier": "read",
+      "title": "VLAN topology"
+    },
+    "catc_get_wireless_controller": {
+      "tier": "read",
+      "title": "Wireless controller"
+    },
+    "catc_list_audit_logs": {
+      "tier": "read",
+      "title": "List audit logs"
+    },
+    "catc_list_compliance_policies": {
+      "tier": "read",
+      "title": "List compliance policies"
+    },
+    "catc_list_compliance_violations": {
+      "tier": "read",
+      "title": "List compliance violations"
+    },
+    "catc_list_config_archive": {
+      "tier": "read",
+      "title": "List config archive"
+    },
+    "catc_list_device_health": {
+      "tier": "read",
+      "title": "List device health"
+    },
+    "catc_list_device_images": {
+      "tier": "read",
+      "title": "List device image status"
+    },
+    "catc_list_device_interfaces": {
+      "tier": "read",
+      "title": "List device interfaces"
+    },
+    "catc_list_device_modules": {
+      "tier": "read",
+      "title": "List device modules"
+    },
+    "catc_list_device_replacements": {
+      "tier": "read",
+      "title": "List device replacements (RMA)"
+    },
+    "catc_list_devices": {
+      "tier": "read",
+      "title": "List network devices"
+    },
+    "catc_list_discoveries": {
+      "tier": "read",
+      "title": "List discoveries"
+    },
+    "catc_list_discovery_devices": {
+      "tier": "read",
+      "title": "List discovered devices"
+    },
+    "catc_list_event_notifications": {
+      "tier": "read",
+      "title": "List event notifications"
+    },
+    "catc_list_events": {
+      "tier": "read",
+      "title": "List assurance events"
+    },
+    "catc_list_global_credentials": {
+      "tier": "read",
+      "title": "List global credentials"
+    },
+    "catc_list_images": {
+      "tier": "read",
+      "title": "List software images"
+    },
+    "catc_list_ip_pools": {
+      "tier": "read",
+      "title": "List IP pools"
+    },
+    "catc_list_issues": {
+      "tier": "read",
+      "title": "List assurance issues"
+    },
+    "catc_list_itsm_instances": {
+      "tier": "read",
+      "title": "List ITSM integrations"
+    },
+    "catc_list_network_profiles": {
+      "tier": "read",
+      "title": "List network profiles"
+    },
+    "catc_list_pnp_devices": {
+      "tier": "read",
+      "title": "List PnP devices"
+    },
+    "catc_list_report_views": {
+      "tier": "read",
+      "title": "List report views"
+    },
+    "catc_list_reports": {
+      "tier": "read",
+      "title": "List reports"
+    },
+    "catc_list_ssids": {
+      "tier": "read",
+      "title": "List SSIDs"
+    },
+    "catc_list_tag_members": {
+      "tier": "read",
+      "title": "List tag members"
+    },
+    "catc_list_tags": {
+      "tier": "read",
+      "title": "List tags"
+    },
+    "catc_list_template_projects": {
+      "tier": "read",
+      "title": "List template projects"
+    },
+    "catc_list_templates": {
+      "tier": "read",
+      "title": "List templates"
+    },
+    "catc_mark_device_for_replacement": {
+      "tier": "write",
+      "title": "Mark a device for replacement"
+    },
+    "catc_path_trace": {
+      "tier": "read",
+      "title": "Path trace"
+    },
+    "catc_preview_template": {
+      "tier": "read",
+      "title": "Preview template"
+    },
+    "catc_provision_devices": {
+      "tier": "dangerous",
+      "title": "Provision devices"
+    },
+    "catc_provision_wireless_controller": {
+      "tier": "dangerous",
+      "title": "Provision wireless controller"
+    },
+    "catc_recent_activity": {
+      "tier": "read",
+      "title": "Recent activity on a device or site"
+    },
+    "catc_replace_device": {
+      "tier": "dangerous",
+      "title": "Replace a faulty device (RMA)"
+    },
+    "catc_reset_pnp_device": {
+      "tier": "dangerous",
+      "title": "Reset a PnP device"
+    },
+    "catc_resync_devices": {
+      "tier": "write",
+      "title": "Resync devices"
+    },
+    "catc_run_compliance": {
+      "tier": "write",
+      "title": "Run compliance check"
+    },
+    "catc_run_show_commands": {
+      "tier": "read",
+      "title": "Run show commands"
+    },
+    "catc_search_spec": {
+      "tier": "read",
+      "title": "Search the Cisco Catalyst Center API spec"
+    },
+    "catc_status": {
+      "tier": "read",
+      "title": "Cisco Catalyst Center status"
+    },
+    "catc_tag_golden_image": {
+      "tier": "write",
+      "title": "Tag golden image"
+    },
+    "catc_unassign_profile_from_sites": {
+      "tier": "write",
+      "title": "Unassign network profile from sites"
+    },
+    "catc_update_issue_status": {
+      "tier": "write",
+      "title": "Resolve or ignore issues"
+    },
+    "catc_update_site": {
+      "tier": "write",
+      "title": "Update site"
+    },
+    "catc_update_site_aaa_settings": {
+      "tier": "write",
+      "title": "Update site AAA settings"
+    },
+    "catc_update_site_settings": {
+      "tier": "write",
+      "title": "Update site network settings"
+    },
+    "catc_update_tag_members": {
+      "tier": "write",
+      "title": "Update tag members"
+    },
+    "catc_update_template": {
+      "tier": "write",
+      "title": "Update template"
+    }
+  },
+  "version": "0.6.0"
+}
