@@ -22,6 +22,7 @@ All of them attach to the lab network (198.18.128.0/18, gateway 198.18.128.1) th
 | `ftd-fmc` | `mcp-cml-ftd` | 1 (ftdv, 8 GB, 4 vCPU) | ftd1 mgmt 198.18.128.151 | FMC 198.18.134.76, reg key `${LAB_FTD_REG_KEY}` |
 | `catc-routers` | `mcp-cml-catc` | 2 (cat8000v) | r1 198.18.128.152, r2 198.18.128.153 | Catalyst Center 198.18.128.11 discovery |
 | `ftd-ha` | `mcp-cml-ftd-ha` | 3 (2x ftdv + alpine) | ftd-a 198.18.128.190, ftd-b .191 (not registered) | FMC HA pair tests (`fmc_form_ha`); failover link Gi0/2, state link Gi0/3 |
+| `fabric` | `mcp-cml-fabric` | 5 (3x cat9000v-uadp 18 GB + iol-xe + alpine) | bcp 198.18.128.197, edge1 .198, edge2 .199 (management); Loopback0 RLOCs 10.255.255.11-.14 | Catalyst Center SD-Access (D13): pre-built underlay (OSPF, MTU 9100), fusion router with DHCP for the fabric pool 10.10.40.0/24, unassigned client port edge1 Gi1/0/3 |
 | `ise-access` | `mcp-cml-ise` | 3 (cat9000v-uadp 18 GB + alpine + ubuntu) | sw1 198.18.128.154 | ISE 198.18.134.35 RADIUS, IBNS 2.0 802.1X then MAB; MAB client + EAP-TLS client (self-made lab CA) |
 
 Reserved for recipes: 198.18.128.150-.159 and (since phase 4) .190-.199: .190/.191 ftd-ha management, .192/.193 ftd-ha outside (suggested), .194 copies of ise-access (`mcp-cml2-ise`); (.150 probe, .155 spare FTD outside, .156-.159 free);

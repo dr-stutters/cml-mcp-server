@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- Recipe `fabric` (L15, first slice): SD-Access-style underlay for Catalyst Center - border/control plane + 2 edges
+  (cat9000v-uadp, OSPF, Loopback0 RLOCs, MTU 9100, management .197-.199), a fusion router serving DHCP for the fabric
+  client pool and an unassigned client port; verify contract with 23 checks (OSPF adjacencies, RLOC reachability,
+  SSH/SNMP from the server). Lab export `labs/mcp-cml-fabric.yaml`.
 - Image upload (L19): `cml_get_image_files` (read), `cml_upload_image` (dangerous: streamed multipart from the
   allow-listed `CML_IMAGE_DIR`, symlink escapes refused, SHA-256 / name / controller-disk checks),
   `cml_create_image_definition` (write), `cml_delete_image` (dangerous; refused while nodes use it). Admin-only in CML.
