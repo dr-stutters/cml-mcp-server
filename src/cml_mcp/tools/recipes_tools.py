@@ -19,6 +19,7 @@ from cml_mcp.tools.build_tool import build_lab_flow
 from cml_mcp.tools.common import shaped
 from cml_mcp.tools.lab_writes import Wait
 from cml_mcp.tools.smart import Timeout
+from cml_mcp.topology import address_annotations, config_addresses, place_notes
 
 RecipeName = Annotated[str, Field(description="Recipe name (see cml_list_recipes), e.g. 'ise-access'")]
 # Fields that describe the product side of a recipe (what the fmc/catc/ise server must configure).
@@ -93,6 +94,47 @@ def recipe_detail(name: str) -> Any:
     )
 
 
+def recipe_notes(recipe_name: str) -> list[dict[str, Any]]:
+    """Purpose, address plan and credential *references* of a recipe (no secret values)."""
+    r = get_recipe(recipe_name)
+    secrets = recipe_secrets(r)
+    plan = r.get("address_plan") or {}
+    purpose = "\n".join(
+        [
+            f"cml-mcp-server recipe: {recipe_name}",
+            str(r.get("summary") or ""),
+            "Verify: cml_verify_recipe(recipe='" + recipe_name + "')",
+        ]
+    )
+    addr = "Address plan\n" + "\n".join(f"{k}: {v}" for k, v in plan.items()) if plan else ""
+    creds = (
+        "Credentials: not shown here. See cml_list_recipes(recipe='"
+        + recipe_name
+        + "') -> credentials.where"
+        + (
+            f" (keys: {', '.join(sorted((r.get('credentials') or {}).keys()))})"
+            if r.get("credentials")
+            else ""
+        )
+    )
+    return [{"text": scrub(t, secrets), "bold": i == 0} for i, t in enumerate([purpose, addr, creds]) if t]
+
+
+def recipe_annotations(name: str) -> list[dict[str, Any]]:
+    """Text annotations a recipe's lab is built with: purpose/address plan/credential references
+    left of the lab and each node's day-0 addresses under it."""
+    nodes = [
+        {"label": n["label"], "x": n.get("x", 0), "y": n.get("y", 0)}
+        for n in get_recipe(name)["build"]["nodes"]
+    ]
+    addresses = {
+        n["label"]: rows
+        for n in get_recipe(name)["build"]["nodes"]
+        if (rows := config_addresses(n["definition"], n.get("config")))
+    }
+    return place_notes(recipe_notes(name), nodes) + address_annotations(nodes, addresses)
+
+
 def register(reg: ToolRegistrar) -> None:
     @reg.read(title="List lab recipes")
     async def cml_list_recipes(
@@ -135,24 +177,36 @@ def register(reg: ToolRegistrar) -> None:
     async def cml_build_recipe(
         ctx: Context,
         recipe: RecipeName,
+        title: Annotated[
+            str | None,
+            Field(
+                min_length=1,
+                max_length=64,
+                description="Build it under another lab title (a copy next to the recipe's own lab, e.g. "
+                "for trying changes); default: the recipe's title",
+            ),
+        ] = None,
         start: Annotated[bool, Field(description="Start the lab after building it")] = True,
         wait: Wait = False,
         timeout: Timeout = None,  # noqa: ASYNC109 - overall wait, handled by poll_until
         confirm: Confirm = None,
     ) -> dict[str, Any]:
         """Build a recipe's lab (see cml_list_recipes) exactly as packaged - nodes, day-0 configs with
-        their lab credentials, links - and by default start it without waiting (FTDv and cat9000v
-        take 10-30 minutes: follow up with cml_wait_for_converged, then cml_verify_recipe). Refuses
-        if the lab already exists: start that one with cml_start_lab instead. Preview-first; the
-        preview shows wiring and licence use."""
+        their lab credentials, links, and text annotations with the recipe's purpose, address plan and
+        where the credentials are kept (never the values) - and by default start it without waiting
+        (FTDv and cat9000v take 10-30 minutes: follow up with cml_wait_for_converged, then
+        cml_verify_recipe). Refuses if the lab already exists: start that one with cml_start_lab
+        instead, or pass `title` to build a copy. Preview-first; the preview shows wiring and licence
+        use."""
         r = get_recipe(recipe)
         b = r["build"]
         nodes = [NodeSpec.model_validate(n) for n in b.get("nodes") or []]
         return await build_lab_flow(
             ctx,
             tool="cml_build_recipe",
-            tool_args={"recipe": recipe, "start": start, "wait": wait, "timeout": timeout},
-            title=b["title"],
+            tool_args={"recipe": recipe, "title": title, "start": start, "wait": wait, "timeout": timeout},
+            title=title or b["title"],
+            annotations=recipe_annotations(recipe),
             nodes=nodes,
             links=list(b.get("links") or []),
             description=b.get("description"),

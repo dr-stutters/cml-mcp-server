@@ -37,6 +37,7 @@ async def build_lab_flow(
     wait: bool,
     timeout: float | None,  # noqa: ASYNC109 - overall wait, handled by poll_until
     confirm: str | None,
+    annotations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Preview/apply a lab build (shared by cml_build_lab and cml_build_recipe)."""
     app: CmlApp = get_client(ctx)
@@ -50,7 +51,14 @@ async def build_lab_flow(
     topology: dict[str, Any] = {}
     try:
         topology, wiring = build_topology(
-            title, nodes, links, defs, description, connectors=connectors, notes=notes
+            title,
+            nodes,
+            links,
+            defs,
+            description,
+            connectors=connectors,
+            notes=notes,
+            annotations=annotations,
         )
     except BuildError as e:
         blockers.append(str(e))
@@ -71,6 +79,7 @@ async def build_lab_flow(
             "licensed_nodes": needed,
             **({"licences": licences} if licences else {}),
             **({"notes": notes} if notes else {}),
+            **({"annotations": len(annotations)} if annotations else {}),
         },
         blockers=blockers,
     )
