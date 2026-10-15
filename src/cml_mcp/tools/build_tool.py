@@ -24,6 +24,86 @@ from cml_mcp.tools.lab_writes import Wait, known_definitions, title_taken
 from cml_mcp.tools.smart import Timeout
 
 
+async def build_lab_flow(
+    ctx: Context,
+    *,
+    tool: str,
+    tool_args: dict[str, Any],
+    title: str,
+    nodes: list[NodeSpec],
+    links: list[str],
+    description: str | None,
+    start: bool,
+    wait: bool,
+    timeout: float | None,  # noqa: ASYNC109 - overall wait, handled by poll_until
+    confirm: str | None,
+) -> dict[str, Any]:
+    """Preview/apply a lab build (shared by cml_build_lab and cml_build_recipe)."""
+    app: CmlApp = get_client(ctx)
+    defs = await known_definitions(app)
+    connectors = None
+    if any(n.definition == "external_connector" for n in nodes):
+        connectors = await app.api.get("/system/external_connectors")
+    blockers: list[str] = []
+    notes: list[str] = []
+    wiring: list[str] = []
+    topology: dict[str, Any] = {}
+    try:
+        topology, wiring = build_topology(
+            title, nodes, links, defs, description, connectors=connectors, notes=notes
+        )
+    except BuildError as e:
+        blockers.append(str(e))
+    if await title_taken(app, title):
+        blockers.append(f"A lab titled {title!r} already exists")
+    needed = sum(1 for n in nodes if n.definition not in UNLICENSED_DEFINITIONS)
+    licences: dict[str, Any] | None = None
+    if start:
+        licences = await licence_usage(app)
+        if problem := licence_blocker(licences, needed):
+            blockers.append(problem)
+    plan = Plan(
+        f"Build lab {title!r}: {len(nodes)} nodes, {len(links)} links" + (", then start it" if start else ""),
+        details={
+            "nodes": {n.label: n.definition for n in nodes},
+            "links": wiring,
+            "start": start,
+            "licensed_nodes": needed,
+            **({"licences": licences} if licences else {}),
+            **({"notes": notes} if notes else {}),
+        },
+        blockers=blockers,
+    )
+    limit = timeout or get_settings(ctx).wait_timeout
+
+    async def apply() -> Any:
+        res = await app.api.post(
+            "/import",
+            None,
+            params={"title": title},
+            content=to_yaml(topology),
+            headers={"Content-Type": "application/x-yaml"},
+        )
+        out: dict[str, Any] = {"id": res.get("id"), "title": title, "links": wiring}
+        if res.get("warnings"):
+            out["warnings"] = res["warnings"]
+        if start:
+            try:
+                await app.api.put(f"/labs/{res['id']}/start")
+            except UpstreamError as e:
+                raise await explain_licence_error(
+                    app, e, f"Lab {title!r} was created ({res['id']}) but not started"
+                ) from e
+            if wait:
+                out["convergence"] = await wait_converged(app, str(res["id"]), timeout=limit, ctx=ctx)
+            else:
+                out["started"] = True
+                out["next"] = "cml_wait_for_converged"
+        return out
+
+    return await preview_or_apply(ctx, tool=tool, args=tool_args, confirm=confirm, plan=plan, apply=apply)
+
+
 def register(reg: ToolRegistrar) -> None:
     @reg.write(title="Build lab from spec")
     async def cml_build_lab(
@@ -64,73 +144,10 @@ def register(reg: ToolRegistrar) -> None:
         cml_run_commands can log in. Slow images (FTDv 15-30 min, cat9000v ~10 min): use wait=false
         and then cml_wait_for_converged. Example nodes: [{"label": "r1", "definition": "iol-xe"},
         {"label": "sw1", "definition": "ioll2-xe"}], links: ["r1 sw1"]."""
-        app: CmlApp = get_client(ctx)
-        defs = await known_definitions(app)
-        connectors = None
-        if any(n.definition == "external_connector" for n in nodes):
-            connectors = await app.api.get("/system/external_connectors")
-        blockers: list[str] = []
-        notes: list[str] = []
-        wiring: list[str] = []
-        topology: dict[str, Any] = {}
-        try:
-            topology, wiring = build_topology(
-                title, nodes, links, defs, description, connectors=connectors, notes=notes
-            )
-        except BuildError as e:
-            blockers.append(str(e))
-        if await title_taken(app, title):
-            blockers.append(f"A lab titled {title!r} already exists")
-        needed = sum(1 for n in nodes if n.definition not in UNLICENSED_DEFINITIONS)
-        licences: dict[str, Any] | None = None
-        if start:
-            licences = await licence_usage(app)
-            if problem := licence_blocker(licences, needed):
-                blockers.append(problem)
-        plan = Plan(
-            f"Build lab {title!r}: {len(nodes)} nodes, {len(links)} links"
-            + (", then start it" if start else ""),
-            details={
-                "nodes": {n.label: n.definition for n in nodes},
-                "links": wiring,
-                "start": start,
-                "licensed_nodes": needed,
-                **({"licences": licences} if licences else {}),
-                **({"notes": notes} if notes else {}),
-            },
-            blockers=blockers,
-        )
-        limit = timeout or get_settings(ctx).wait_timeout
-
-        async def apply() -> Any:
-            res = await app.api.post(
-                "/import",
-                None,
-                params={"title": title},
-                content=to_yaml(topology),
-                headers={"Content-Type": "application/x-yaml"},
-            )
-            out: dict[str, Any] = {"id": res.get("id"), "title": title, "links": wiring}
-            if res.get("warnings"):
-                out["warnings"] = res["warnings"]
-            if start:
-                try:
-                    await app.api.put(f"/labs/{res['id']}/start")
-                except UpstreamError as e:
-                    raise await explain_licence_error(
-                        app, e, f"Lab {title!r} was created ({res['id']}) but not started"
-                    ) from e
-                if wait:
-                    out["convergence"] = await wait_converged(app, str(res["id"]), timeout=limit, ctx=ctx)
-                else:
-                    out["started"] = True
-                    out["next"] = "cml_wait_for_converged"
-            return out
-
-        return await preview_or_apply(
+        return await build_lab_flow(
             ctx,
             tool="cml_build_lab",
-            args={
+            tool_args={
                 "title": title,
                 "nodes": [n.model_dump() for n in nodes],
                 "links": links,
@@ -139,7 +156,12 @@ def register(reg: ToolRegistrar) -> None:
                 "wait": wait,
                 "timeout": timeout,
             },
+            title=title,
+            nodes=nodes,
+            links=links,
+            description=description,
+            start=start,
+            wait=wait,
+            timeout=timeout,
             confirm=confirm,
-            plan=plan,
-            apply=apply,
         )
