@@ -1,0 +1,283 @@
+annotations: []
+smart_annotations: []
+nodes:
+  - boot_disk_size: null
+    configuration:
+      - name: ios_config.txt
+        content: |-
+          hostname r1
+          interface Ethernet0/0
+           ip address 10.0.12.1 255.255.255.0
+           no shutdown
+          interface Ethernet0/1
+           ip address 10.0.13.1 255.255.255.0
+           no shutdown
+          interface Loopback0
+           ip address 10.255.0.1 255.255.255.255
+          router ospf 1
+           router-id 10.255.0.1
+           network 10.0.0.0 0.255.255.255 area 0
+          end
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n0
+    image_definition: null
+    label: r1
+    node_definition: iol-xe
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 0
+    y: 0
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: Ethernet0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: Ethernet0/1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: Ethernet0/2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: Ethernet0/3
+        mac_address: null
+        type: physical
+        slot: 3
+  - boot_disk_size: null
+    configuration:
+      - name: ios_config.txt
+        content: |-
+          hostname r2
+          interface Ethernet0/0
+           ip address 10.0.12.2 255.255.255.0
+           no shutdown
+          interface Ethernet0/1
+           ip address 10.0.23.2 255.255.255.0
+           no shutdown
+          interface Loopback0
+           ip address 10.255.0.2 255.255.255.255
+          router ospf 1
+           router-id 10.255.0.2
+           network 10.0.0.0 0.255.255.255 area 0
+          end
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n1
+    image_definition: null
+    label: r2
+    node_definition: iol-xe
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 200
+    y: 0
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: Ethernet0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: Ethernet0/1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: Ethernet0/2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: Ethernet0/3
+        mac_address: null
+        type: physical
+        slot: 3
+  - boot_disk_size: null
+    configuration:
+      - name: ios_config.txt
+        content: |-
+          hostname r3
+          interface Ethernet0/0
+           ip address 10.0.13.3 255.255.255.0
+           no shutdown
+          interface Ethernet0/1
+           ip address 10.0.23.3 255.255.255.0
+           no shutdown
+          interface Loopback0
+           ip address 10.255.0.3 255.255.255.255
+          router ospf 1
+           router-id 10.255.0.3
+           network 10.0.0.0 0.255.255.255 area 0
+          end
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n2
+    image_definition: null
+    label: r3
+    node_definition: iol-xe
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 0
+    y: 160
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: Ethernet0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: Ethernet0/1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: Ethernet0/2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: Ethernet0/3
+        mac_address: null
+        type: physical
+        slot: 3
+  - boot_disk_size: null
+    configuration:
+      - name: ios_config.txt
+        content: |-
+          hostname r4
+          interface Ethernet0/0
+           ip address 10.0.34.4 255.255.255.0
+           no shutdown
+          interface Loopback0
+           ip address 10.255.0.4 255.255.255.255
+          router ospf 1
+           router-id 10.255.0.4
+           network 10.0.0.0 0.255.255.255 area 0
+          end
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n3
+    image_definition: null
+    label: r4
+    node_definition: iol-xe
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 0
+    y: 0
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: Ethernet0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: Ethernet0/1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: Ethernet0/2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: Ethernet0/3
+        mac_address: null
+        type: physical
+        slot: 3
+links:
+  - id: l0
+    n1: n0
+    n2: n1
+    i1: i1
+    i2: i1
+    conditioning:
+      latency: 5
+      loss: 5
+      duplicate: 1
+      jitter: 30
+      enabled: true
+    label: r1-Ethernet0/0<->r2-Ethernet0/0
+  - id: l1
+    n1: n0
+    n2: n2
+    i1: i2
+    i2: i1
+    conditioning: {}
+    label: r1-Ethernet0/1<->r3-Ethernet0/0
+  - id: l2
+    n1: n1
+    n2: n2
+    i1: i2
+    i2: i2
+    conditioning: {}
+    label: r2-Ethernet0/1<->r3-Ethernet0/1
+  - id: l3
+    n1: n3
+    n2: n2
+    i1: i1
+    i2: i3
+    conditioning: {}
+    label: r4-Ethernet0/0<->r3-Ethernet0/2
+lab:
+  description: built by cml-mcp-server
+  notes: ''
+  title: mcp-cml-ospf
+  node_staging:
+    enabled: false
+    start_remaining: true
+    abort_on_failure: false
+  version: 0.3.1

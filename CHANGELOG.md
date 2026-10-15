@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.9.0 - 2026-10-15
+
+Operator-eyes quality pass (L25-L33): 13 realistic tasks run through the MCP tools against the live controller; the
+problems found are fixed. 71 -> 72 tools (read 39, write 25, dangerous 8 incl. `cml_api_call`).
+
+### Fixed
+- Recipe copies (L25): `cml_verify_recipe(recipe, lab=<copy>)` checked the recipe's *own* addresses (another lab's devices).
+  `cml_build_recipe` now records `cml-mcp-recipe: {recipe, substitute}` in the lab notes and verify applies it; a lab built
+  from another recipe is refused. Substitutions read from notes never redirect network probes (SNMP carries the real
+  community): those are listed under `skipped` unless the caller passes `substitute`.
+- Recipe hand-off (L26): `cml_list_recipes(recipe=...)` masked `${LAB_*}` reference names, prose ('(the') and node names
+  ('eaptls-client'); references now come through, masking is whole-token.
+- Config diffs (L27): `cml_diff_node_config` (default `view='changes'`) and `cml_diff_lab(running_configs=true)` report
+  changes by section; IOS-rendered default sections and consumed day-0 commands are hidden (named in `hidden`), ACL /
+  route-map / prefix-list / QoS / AAA server order still counts, nested blocks keep their path, vty ranges compare per line.
+  Live: IOL +38/-4 -> +4/-0; a freshly booted cat9000v 208 added lines -> 1.
+- RAM (L28): `cml_plan_licences`, `cml_start_lab` and `cml_build_lab` / `cml_build_recipe` previews compare the RAM needed
+  with the controller's free memory and warn.
+
+### Added
+- `cml_stop_labs` (L33): several labs (or every running lab except `keep`) with one preview: owner, licences and RAM freed,
+  protected labs refused; a failing stop doesn't stop the rest.
+- `cml_get_resource_usage` (L30): `labs` (running labs by RAM) and `top_nodes`.
+- Capture `findings` (L31): DHCP Discover without Offer (per client), unanswered ARP / ping (id/seq) / TCP SYN (per
+  connection) / RADIUS request (NAS port + id), RST refusals, Access-Reject, EAP failures; computed on the whole capture,
+  in-flight tail ignored, truncation noted. Repeated packets are one highlight row with a count.
+- `cml_check_reachability(wait_seconds)` (L29): repeats the matrix until routing has converged (BOOTED isn't converged).
+
+### Changed
+- Token trims (L32): IOS route-code legend dropped from `cml_run_commands`; previews carry the full licence block only when
+  blocked; the recipe list shows the boot time number only.
+- Guidance (L29): wrong defaults in two parameter descriptions fixed (a test now checks every '(default X)'), server
+  instructions name the newer workflows. Core request for product-neutral spec-tool examples: stutters-mcp-core#57.
+
 ## 0.8.0 - 2026-10-15
 
 ### Added
