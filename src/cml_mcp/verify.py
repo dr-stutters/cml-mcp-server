@@ -28,7 +28,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from cml_mcp.client import CmlApp
-from cml_mcp.console import Credentials, mask_secrets, read_only_problem
+from cml_mcp.console import FORBIDDEN_CHARS, Credentials, mask_secrets, read_only_problem
 from cml_mcp.netops import (
     Command,
     address_commands,
@@ -37,7 +37,7 @@ from cml_mcp.netops import (
     ping_command,
     ping_result,
 )
-from cml_mcp.recipes import get_recipe
+from cml_mcp.recipes import get_recipe, substituted
 
 TCP_TARGET = re.compile(r"^(?P<host>[A-Za-z0-9.:-]+):(?P<port>\d{1,5})$")
 
@@ -74,6 +74,8 @@ class Probe(BaseModel):
                 raise ValueError(f"probe {self.name!r}: a command needs a node")
             if read_only_problem(self.command) and not self.command.startswith(PROBE_COMMAND_PREFIXES):
                 raise ValueError(f"probe {self.name!r}: {self.command!r} is not a read-only command")
+            if any(ch in FORBIDDEN_CHARS for ch in self.command):  # also for the allowed prefixes
+                raise ValueError(f"probe {self.name!r}: control or shell characters in {self.command!r}")
         if self.tcp:
             m = TCP_TARGET.fullmatch(self.tcp)
             if not m or not 1 <= int(m["port"]) <= 65535:
@@ -239,10 +241,14 @@ async def snmp_probe(p: SnmpProbe, timeout: float = 4.0) -> tuple[bool, str]:  #
 # --- the whole contract -----------------------------------------------------------------------
 
 
-async def verify_recipe(app: CmlApp, name: str) -> dict[str, Any]:
-    recipe = get_recipe(name)
+async def verify_recipe(
+    app: CmlApp, name: str, *, lab: str | None = None, substitute: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """Run recipe `name`'s verify contract against its lab, or against `lab` (a copy built with
+    cml_build_recipe(title=..., substitute=...)), with the same substitutions applied."""
+    recipe = substituted(get_recipe(name), substitute)
     contract = contract_of(recipe)
-    title = recipe["build"]["title"]
+    title = lab or recipe["build"]["title"]
     started = time.monotonic()
     checks: list[dict[str, Any]] = []
     out: dict[str, Any] = {"recipe": name, "lab": title}
@@ -255,8 +261,8 @@ async def verify_recipe(app: CmlApp, name: str) -> dict[str, Any]:
         )
         checks.append(check("lab exists", "lab", False, problem))
         return {**out, "passed": False, "summary": "0/1 checks passed", "seconds": 0.0, "checks": checks}
-    lab = labs[0]
-    lid = lab["id"]
+    lab_info = labs[0]
+    lid = lab_info["id"]
     nodes = {str(n.get("label")): n for n in await app.list_nodes(lid)}
     expected = contract.booted or [
         str(n.get("label"))
@@ -362,7 +368,7 @@ async def verify_recipe(app: CmlApp, name: str) -> dict[str, Any]:
     passed = bool(checks) and all(c["ok"] for c in checks)
     return {
         **out,
-        "lab_state": lab.get("state"),
+        "lab_state": lab_info.get("state"),
         "passed": passed,
         "summary": f"{sum(c['ok'] for c in checks)}/{len(checks)} checks passed",
         "seconds": round(time.monotonic() - started, 1),

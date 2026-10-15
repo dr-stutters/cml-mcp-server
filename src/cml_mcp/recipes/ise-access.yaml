@@ -1,21 +1,32 @@
-# A Catalyst 9000v access switch doing 802.1X + MAB against ISE (198.18.134.35), with a client on an
-# access port. Build with scripts/recipes.py, or pass `build:` to cml_build_lab.
+# A Catalyst 9000v access switch doing 802.1X (IBNS 2.0: dot1x first, then MAB) against ISE (198.18.134.35),
+# with a MAB client (Alpine) and an EAP-TLS client (Ubuntu + wpa_supplicant) on access ports.
+# Build with scripts/recipes.py or cml_build_recipe.
 name: ise-access
-summary: cat9000v-uadp access switch (RADIUS/802.1X/MAB/CoA to ISE 198.18.134.35) + Alpine client on Gi1/0/2
+summary: cat9000v-uadp access switch (IBNS 2.0 802.1X then MAB, CoA to ISE 198.18.134.35) + Alpine MAB client on Gi1/0/2 + Ubuntu EAP-TLS client on Gi1/0/3
 address_plan:
   sw1 GigabitEthernet1/0/1: 198.18.128.154/18 routed uplink to dCloud (RADIUS source, gateway 198.18.128.1)
   sw1 Vlan10: 10.10.10.1/24 (client VLAN, DHCP pool 10.10.10.100-199)
-  client eth0 (sw1 Gi1/0/2, access VLAN 10): DHCP, normally 10.10.10.100
+  client eth0 (sw1 Gi1/0/2, access VLAN 10): DHCP, normally 10.10.10.100 (MAB)
+  eaptls-client ens2 (sw1 Gi1/0/3, access VLAN 10): 10.10.10.50/24 static (802.1X EAP-TLS, identity mcp-eaptls-client)
+  eaptls-client ens3: DHCP from the controller's NAT connector (ext-nat), only to install wpasupplicant at first boot
 credentials:
   cli: netadmin / ***REDACTED*** (enable secret ***REDACTED***), SSH + SNMP v2c mcp-ro / mcp-rw like catc-routers
   radius_shared_secret: ***REDACTED*** (ISE network device 198.18.128.154, CoA port 1700)
   client: Alpine, login cisco / cisco
-ise_side: add a network device 'mcp-sw1' 198.18.128.154 with RADIUS secret ***REDACTED***; the client's MAC (cml_list_interfaces) authenticates via MAB, or 802.1X with a supplicant
-boot_minutes: 10-15 (BOOTED after ~6 min; the routed uplink forwards 2-3 min later - re-run verify)
-verified: 2026-10-14 - sw1 pinged 198.18.128.1 and ISE; MAB from the client's MAC reached ISE (temporary NAD,
-  'Rejected per authorization profile' with ISE's default policy). Note a wipe gives the client a new MAC.
+  eaptls_client: Ubuntu, login cisco / cisco; lab CA + client certificate generated on first boot in /etc/eaptls (no keys in git)
+ise_side: >-
+  Add a network device for sw1 (198.18.128.154, RADIUS secret ***REDACTED***, CoA 1700). MAB: the Alpine client's MAC (cml_list_interfaces).
+  EAP-TLS: the client makes its own lab CA at first boot (CN mcp-test-cml-lab-ca); read it with
+  cml_configure_node(node='eaptls-client', mode='exec', lines=['cat /etc/eaptls/ca.pem']) and import it into ISE's trusted
+  certificates as mcp-test-cml-lab-ca with 'trust for client authentication'. ISE's Default Network Access allowed
+  protocols include EAP-TLS and the default Dot1X rule's All_User_ID_Stores includes the Preloaded_Certificate_Profile,
+  so authentication then passes (identity mcp-eaptls-client); authorization follows the policy set's rules.
+  Rebuilding the lab makes a new CA: re-import it. The client does not validate ISE's EAP certificate (lab only).
+boot_minutes: 10-15 (BOOTED after ~6 min; the routed uplink forwards 2-3 min later - re-run verify; eaptls-client needs ~3 min of apt)
+verified: 2026-10-14 - sw1 pinged 198.18.128.1 and ISE; MAB from the client's MAC reached ISE. 2026-10-15 - EAP-TLS (L11) verified on
+  the copy mcp-cml2-ise (sw1 at 198.18.128.194) - see the cml-mcp-server notes. A wipe gives the clients new MACs.
 verify:
-  booted: [sw1, client]
+  booted: [sw1, client, eaptls-client]
   nodes: [sw1]
   targets: [198.18.128.1, 198.18.134.35]
   addresses: {sw1: [198.18.128.154, 10.10.10.1]}
@@ -29,10 +40,14 @@ verify:
       command: test aaa group radius mcp-test-probe mcp-test-probe new-code
       expect: '(?i)user (was )?rejected|user successfully authenticated'
       reject: '(?i)timed out|no response|not responding|not authenticated'
+    - name: sw1 runs IBNS 2.0 on the EAP-TLS port (dot1x session seen)
+      node: sw1
+      command: show access-session interface GigabitEthernet1/0/3 details
+      expect: '(?i)dot1x'
     - {name: sw1 SSH (22) from the server, tcp: 198.18.128.154:22}
 build:
   title: mcp-cml-ise
-  description: cat9000v access switch with 802.1X/MAB against ISE + client (cml-mcp-server recipe ise-access)
+  description: cat9000v access switch with 802.1X (IBNS 2.0) / MAB against ISE + MAB and EAP-TLS clients (cml-mcp-server recipe ise-access)
   nodes:
     - label: ext
       definition: external_connector
@@ -69,6 +84,37 @@ build:
         radius-server dead-criteria time 5 tries 3
         ip radius source-interface GigabitEthernet1/0/1
         dot1x system-auth-control
+        class-map type control subscriber match-all MCP-DOT1X-FAILED
+         match method dot1x
+         match result-type method dot1x authoritative
+        class-map type control subscriber match-all MCP-DOT1X-NO-RESP
+         match method dot1x
+         match result-type method dot1x agent-not-found
+        class-map type control subscriber match-all MCP-MAB-FAILED
+         match method mab
+         match result-type method mab authoritative
+        policy-map type control subscriber MCP-DOT1X-THEN-MAB
+         event session-started match-all
+          10 class always do-until-failure
+           10 authenticate using dot1x priority 10
+         event authentication-failure match-first
+          10 class MCP-DOT1X-FAILED do-until-failure
+           10 terminate dot1x
+           20 authenticate using mab priority 20
+          20 class MCP-DOT1X-NO-RESP do-until-failure
+           10 terminate dot1x
+           20 authenticate using mab priority 20
+          30 class MCP-MAB-FAILED do-until-failure
+           10 terminate mab
+           20 authentication-restart 60
+          40 class always do-until-failure
+           10 terminate dot1x
+           20 terminate mab
+           30 authentication-restart 60
+         event agent-found match-all
+          10 class always do-until-failure
+           10 terminate mab
+           20 authenticate using dot1x priority 10
         vlan 10
          name CLIENTS
         ip dhcp excluded-address 10.10.10.1 10.10.10.99
@@ -84,20 +130,28 @@ build:
          ip address 10.10.10.1 255.255.255.0
          no shutdown
         interface GigabitEthernet1/0/2
-         description client (802.1X / MAB)
+         description client (MAB; 802.1X first)
          switchport mode access
          switchport access vlan 10
-         authentication host-mode multi-auth
-         authentication order dot1x mab
-         authentication priority dot1x mab
-         authentication port-control auto
-         authentication periodic
-         authentication timer reauthenticate server
-         authentication violation restrict
+         access-session host-mode multi-auth
+         access-session port-control auto
          mab
          dot1x pae authenticator
          dot1x timeout tx-period 5
          spanning-tree portfast
+         service-policy type control subscriber MCP-DOT1X-THEN-MAB
+         no shutdown
+        interface GigabitEthernet1/0/3
+         description eaptls-client (802.1X EAP-TLS)
+         switchport mode access
+         switchport access vlan 10
+         access-session host-mode multi-auth
+         access-session port-control auto
+         mab
+         dot1x pae authenticator
+         dot1x timeout tx-period 5
+         spanning-tree portfast
+         service-policy type control subscriber MCP-DOT1X-THEN-MAB
          no shutdown
         ip route 0.0.0.0 0.0.0.0 198.18.128.1
         crypto key generate rsa modulus 2048
@@ -125,6 +179,74 @@ build:
         # DHCP from sw1 (VLAN 10) once the port is authorized; retries in the background (never block
         # this boot script: the console only gets a login prompt after it finishes)
         (udhcpc -i eth0 -f -t 0 -T 10 >/dev/null 2>&1 &)
+    - label: eaptls-client
+      definition: ubuntu
+      x: 200
+      y: 320
+      credentials: {username: cisco, password: cisco}
+      config: |
+        #cloud-config
+        hostname: eaptls-client
+        manage_etc_hosts: true
+        system_info:
+          default_user:
+            name: cisco
+        password: cisco
+        chpasswd: {expire: false}
+        ssh_pwauth: true
+        package_update: true
+        packages: [wpasupplicant]
+        write_files:
+          - path: /usr/local/sbin/mcp-lab-ca
+            permissions: '0755'
+            content: |
+              #!/bin/sh
+              # Self-contained lab CA + EAP-TLS client certificate (made once, on first boot)
+              set -e
+              d=/etc/eaptls; mkdir -p $d; cd $d
+              [ -f client.pem ] && exit 0
+              openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 825 \
+                -subj "/O=mcp-test-cml/CN=mcp-test-cml-lab-ca" \
+                -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign
+              openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr \
+                -subj "/O=mcp-test-cml/CN=mcp-eaptls-client"
+              printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=clientAuth\n' > ext.cnf
+              openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out client.pem \
+                -days 825 -extfile ext.cnf
+              chmod 600 ca.key client.key; chmod 644 ca.pem client.pem
+          - path: /etc/wpa_supplicant/wpa_supplicant-wired-ens2.conf
+            content: |
+              ctrl_interface=/run/wpa_supplicant
+              ap_scan=0
+              network={
+                key_mgmt=IEEE8021X
+                eap=TLS
+                identity="mcp-eaptls-client"
+                client_cert="/etc/eaptls/client.pem"
+                private_key="/etc/eaptls/client.key"
+                eapol_flags=0
+              }
+        runcmd:
+          - /usr/local/sbin/mcp-lab-ca
+          - systemctl enable --now wpa_supplicant-wired@ens2
+      files:
+        network-config: |
+          network:
+            version: 2
+            ethernets:
+              ens2:
+                addresses: [10.10.10.50/24]
+                optional: true
+              ens3:
+                dhcp4: true
+                optional: true
+    - label: ext-nat
+      definition: external_connector
+      config: NAT
+      x: 400
+      y: 320
   links:
     - sw1:GigabitEthernet1/0/1 ext
     - sw1:GigabitEthernet1/0/2 client:eth0
+    - sw1:GigabitEthernet1/0/3 eaptls-client:ens2
+    - eaptls-client:ens3 ext-nat

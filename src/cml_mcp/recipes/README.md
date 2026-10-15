@@ -22,7 +22,7 @@ All of them attach to the dCloud network (198.18.128.0/18, gateway 198.18.128.1)
 | `ftd-fmc` | `mcp-cml-ftd` | 1 (ftdv, 8 GB, 4 vCPU) | ftd1 mgmt 198.18.128.151 | FMC 198.18.134.76, reg key `***REDACTED***` |
 | `catc-routers` | `mcp-cml-catc` | 2 (cat8000v) | r1 198.18.128.152, r2 198.18.128.153 | Catalyst Center 198.18.128.11 discovery |
 | `ftd-ha` | `mcp-cml-ftd-ha` | 3 (2x ftdv + alpine) | ftd-a 198.18.128.190, ftd-b .191 (not registered) | FMC HA pair tests (`fmc_form_ha`); failover link Gi0/2, state link Gi0/3 |
-| `ise-access` | `mcp-cml-ise` | 2 (cat9000v-uadp 18 GB + alpine) | sw1 198.18.128.154 | ISE 198.18.134.35 RADIUS/802.1X/MAB |
+| `ise-access` | `mcp-cml-ise` | 3 (cat9000v-uadp 18 GB + alpine + ubuntu) | sw1 198.18.128.154 | ISE 198.18.134.35 RADIUS, IBNS 2.0 802.1X then MAB; MAB client + EAP-TLS client (self-made lab CA) |
 
 Reserved for recipes: 198.18.128.150-.159 and (since phase 4) .190-.199: .190/.191 ftd-ha management, .192/.193 ftd-ha outside (suggested), .194 copies of ise-access (`mcp-cml2-ise`); (.150 probe, .155 spare FTD outside, .156-.159 free);
 checked unused by ping/ARP on 2026-10-14.
@@ -31,6 +31,10 @@ Running licensed nodes are capped by the controller's licence (external connecto
 switches don't count); the three recipes together need 5. `scripts/recipes.py plan <recipe>` (or
 `cml_plan_licences`) shows the cap and which labs to stop; `scripts/recipes.py swap <recipe>` stops
 them and starts the recipe.
+
+Copies: `cml_build_recipe(recipe, title='mcp-cml2-...', substitute={'198.18.128.154': '198.18.128.194'})` builds a copy
+next to the recipe's own lab (e.g. to try a recipe change while someone uses the original), and
+`cml_verify_recipe(recipe, lab=..., substitute=...)` verifies it against the same contract.
 
 Gotchas found while building them:
 - FTDv forces a password change at first login when the day-0 `AdminPassword` is weak or a
@@ -42,6 +46,11 @@ Gotchas found while building them:
 - IOS-XE NETCONF (port 830) needs `aaa new-model` + `aaa authorization exec default local` and
   takes several minutes after boot to listen.
 - Wiping a node gives its interfaces new MAC addresses (matters for ISE endpoint/MAB tests).
+- EAP-TLS (`ise-access` eaptls-client): the Ubuntu client installs `wpasupplicant` through the NAT connector at first
+  boot and makes its own lab CA + client certificate in `/etc/eaptls` (no keys in git). ISE must trust that CA
+  (import `/etc/eaptls/ca.pem` with trust for client authentication); every rebuild makes a new CA. ISE's
+  trusted-certificate import answers 400 "Security Check Failed" when the description contains parentheses.
+- FTD 10 re-types a rejected command after `Syntax error`; the console clears it (Ctrl-U) and returns the error.
 
 ## Verify contracts
 

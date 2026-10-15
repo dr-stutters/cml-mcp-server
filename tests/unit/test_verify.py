@@ -216,3 +216,56 @@ async def test_console_failure_fails_every_planned_check(
     data = await call_tool(create_server(make_settings()), "cml_verify_recipe", {"recipe": "fake"})
     failed = {c["check"] for c in data["checks"] if not c["ok"]}
     assert {"r1 console", "r1 -> 198.18.134.76", "manager", "r1 has 198.18.128.151", "ssh"} <= failed
+
+
+async def test_verify_copy_uses_lab_and_substitutions(api: respx.MockRouter) -> None:
+    api.get("/labs").mock(return_value=httpx.Response(200, json=[]))
+    data = await call_tool(
+        create_server(make_settings()),
+        "cml_verify_recipe",
+        {"recipe": "ise-access", "lab": "mcp-cml2-ise", "substitute": {"198.18.128.154": "198.18.128.194"}},
+    )
+    assert data["lab"] == "mcp-cml2-ise" and "'mcp-cml2-ise'" in str(data["checks"])
+
+
+def test_substituted_rewrites_every_string() -> None:
+    from cml_mcp.recipes import substituted
+
+    r = substituted(get_recipe("ise-access"), {"198.18.128.154": "198.18.128.194"})
+    text = str(r)
+    assert "198.18.128.154" not in text and "198.18.128.194" in text
+    assert r["verify"]["addresses"]["sw1"][0] == "198.18.128.194"
+    assert substituted({"a": ["x"]}, None) == {"a": ["x"]}
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        {"secret": "xx"},
+        {"***REDACTED***": "password1"},
+        {"mcp-test-probe": "x\nconfigure terminal"},
+        {"a b": "c"},
+        {"": "x"},
+        {"198.18.128.154": "1;reload"},
+    ],
+)
+def test_substitute_rejects_unsafe_mappings(mapping: dict[str, str]) -> None:
+    from stutters_mcp_core import InvalidRequest
+
+    from cml_mcp.recipes import substituted
+
+    with pytest.raises(InvalidRequest):
+        substituted(get_recipe("ise-access"), mapping)
+
+
+def test_substitute_is_single_pass() -> None:
+    from cml_mcp.recipes import substituted
+
+    assert substituted("a.1 b.2", {"a.1": "b.2", "b.2": "c.3"}) == "b.2 c.3"
+
+
+def test_probe_prefix_still_rejects_control_characters() -> None:
+    from cml_mcp.verify import Probe
+
+    with pytest.raises(ValueError, match="control or shell"):
+        Probe(name="x", node="sw1", command="test aaa group radius u p new-code\nconfigure terminal")

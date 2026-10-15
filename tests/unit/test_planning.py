@@ -63,7 +63,7 @@ def test_blocker_names_the_plan() -> None:
 
 def test_recipes_package() -> None:
     assert {"ftd-fmc", "catc-routers", "ise-access"} <= set(recipe_names())
-    assert recipe_licensed_nodes(get_recipe("ise-access")) == 2
+    assert recipe_licensed_nodes(get_recipe("ise-access")) == 3
     assert recipe_licensed_nodes(get_recipe("ftd-fmc")) == 1
     assert recipe_for_lab("mcp-cml-catc") == "catc-routers"
 

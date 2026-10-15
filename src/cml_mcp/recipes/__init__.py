@@ -6,6 +6,7 @@ descriptive fields (summary, address plan, credentials, what to configure on the
 
 from __future__ import annotations
 
+import re
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -52,3 +53,44 @@ def recipe_licensed_nodes(recipe: dict[str, Any]) -> int:
     return sum(
         1 for n in recipe["build"].get("nodes") or [] if n.get("definition") not in UNLICENSED_DEFINITIONS
     )
+
+
+# Substitutions are for addresses and names (a copy on another IP, another hostname): plain tokens only,
+# never secret keywords, so a mapping can't rename e.g. 'secret' to hide a value from the scrubbers or
+# smuggle spaces/newlines into probe commands.
+SUBST_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}")
+SUBST_DENY = re.compile(r"(?i)secret|password|passwd|key|community|psk|cred|token")
+
+
+def check_substitute(mapping: dict[str, str] | None) -> None:
+    """Raise InvalidRequest unless every key and value is a plain address/name token."""
+    for k, v in (mapping or {}).items():
+        for part in (k, v):
+            if not SUBST_TOKEN.fullmatch(part):
+                raise InvalidRequest(
+                    f"substitute {k!r} -> {v!r}: keys and values must be addresses or names "
+                    "(letters, digits, . _ : / -; no spaces), 1-64 characters"
+                )
+            if SUBST_DENY.search(part):
+                raise InvalidRequest(f"substitute {k!r} -> {v!r}: credential keywords can't be substituted")
+
+
+def substituted(value: Any, mapping: dict[str, str] | None) -> Any:
+    """`value` (a recipe or part of one) with each key of `mapping` replaced by its value in every
+    string, in one pass (a replacement is never replaced again) - e.g. {'198.18.128.154':
+    '198.18.128.194'} to build or verify a copy of a recipe on another address. Longer keys win."""
+    if not mapping:
+        return value
+    check_substitute(mapping)
+    rx = re.compile("|".join(re.escape(k) for k in sorted(mapping, key=len, reverse=True)))
+
+    def walk(v: Any) -> Any:
+        if isinstance(v, dict):
+            return {k: walk(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        if isinstance(v, str):
+            return rx.sub(lambda m: mapping[m.group(0)], v)
+        return v
+
+    return walk(value)
