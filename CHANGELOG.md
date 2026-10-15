@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+- cat9000v serials: every cat9000v reported CMLUADP, so Catalyst Center merged multi-switch labs (e.g. `fabric`) into one
+  device. `cml_build_lab` / `cml_build_recipe` now give each cat9000v without its own `conf/vswitch.xml` a unique, stable serial
+  (shown in the preview as `cat9000v_serials`); `cml_verify_recipe` fails on duplicate serials in a lab and warns about
+  collisions with cat9000v in other running labs.
+
 ### Changed
 - Safety guard (L24): checks exactly the lab the tool resolved (no second lookup; no rename window), the console
   server's `all` toggle only for non-admin accounts, `cml_status` reports `server_version`.

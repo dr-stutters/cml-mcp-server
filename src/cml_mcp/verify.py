@@ -28,6 +28,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from stutters_mcp_core import InvalidRequest, UpstreamError
 
+from cml_mcp.build import VSWITCH_FILE, is_cat9kv, serial_of
 from cml_mcp.client import CmlApp
 from cml_mcp.console import FORBIDDEN_CHARS, Credentials, mask_secrets, read_only_problem
 from cml_mcp.netops import (
@@ -239,6 +240,54 @@ async def snmp_probe(p: SnmpProbe, timeout: float = 4.0) -> tuple[bool, str]:  #
             got.exception()  # retrieved, so asyncio doesn't log it
 
 
+# --- cat9000v serials ----------------------------------------------------------------------------
+
+DEFAULT_CAT9KV_SERIAL = "CMLUADP"  # what conf/vswitch.xml holds unless a recipe or build sets one
+
+
+async def node_serial(app: CmlApp, lab_id: str, node: dict[str, Any]) -> str:
+    full = await app.api.get(f"/labs/{lab_id}/nodes/{node['id']}")
+    cfg = full.get("configuration") if isinstance(full, dict) else None
+    for f in cfg if isinstance(cfg, list) else []:
+        if isinstance(f, dict) and f.get("name") == VSWITCH_FILE:
+            return serial_of(str(f.get("content") or "")) or DEFAULT_CAT9KV_SERIAL
+    return DEFAULT_CAT9KV_SERIAL
+
+
+async def cat9kv_serial_checks(app: CmlApp, lab_id: str, nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Catalyst Center keys devices by serial: every cat9000v in this lab needs its own, also against the
+    cat9000v running in other labs (one CatC may discover them all)."""
+    mine = [n for n in nodes if is_cat9kv(str(n.get("node_definition") or ""))]
+    if not mine:
+        return []
+    serials = {str(n.get("label")): await node_serial(app, lab_id, n) for n in mine}
+    by_serial: dict[str, list[str]] = {}
+    for label, s in serials.items():
+        by_serial.setdefault(s, []).append(label)
+    problems = [f"{', '.join(labels)} share serial {s}" for s, labels in by_serial.items() if len(labels) > 1]
+    elsewhere: list[str] = []
+    for lab in await app.list_labs():
+        if lab["id"] == lab_id or lab.get("state") in ("STOPPED", "DEFINED_ON_CORE"):
+            continue
+        for n in await app.list_nodes(str(lab["id"])):
+            if is_cat9kv(str(n.get("node_definition") or "")) and n.get("state") in ("BOOTED", "STARTED"):
+                s = await node_serial(app, str(lab["id"]), n)
+                if s in by_serial:
+                    other = f"{lab.get('lab_title')}/{n.get('label')}"
+                    elsewhere.append(f"{', '.join(by_serial[s])} share serial {s} with {other}")
+    fix = (
+        " - Catalyst Center would merge them into one device: rebuild with unique conf/vswitch.xml serials "
+        "(cml_build_lab/cml_build_recipe assign them)"
+    )
+    # duplicates inside the lab fail; another lab's switch with the same serial only matters when one Catalyst
+    # Center discovers both, so it is reported as a warning
+    detail: Any = "; ".join(problems) + fix if problems else serials
+    out = [check("cat9000v serials unique in the lab (Catalyst Center)", "serial", not problems, detail)]
+    if elsewhere:
+        out[0]["warning"] = "; ".join(elsewhere) + " (only matters if one Catalyst Center discovers both)"
+    return out
+
+
 # --- the whole contract -----------------------------------------------------------------------
 
 
@@ -292,6 +341,7 @@ async def _verify_recipe(
         state = (nodes.get(label) or {}).get("state", "missing")
         ok = state == "BOOTED"
         checks.append(check(f"{label} booted", "state", ok, None if ok else f"state {state}"))
+    checks += await cat9kv_serial_checks(app, lid, list(nodes.values()))
     console_nodes = sorted(
         set(contract.nodes)
         | set(contract.addresses)

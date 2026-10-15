@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 import yaml
@@ -243,3 +244,30 @@ def build_topology(
 
 def to_yaml(topology: dict[str, Any]) -> str:
     return yaml.safe_dump(topology, sort_keys=False, default_flow_style=False)
+
+
+# --- cat9000v serials ----------------------------------------------------------------------------------
+# Every cat9000v reports the serial in its day-0 file conf/vswitch.xml (CMLUADP by default). Catalyst Center
+# keys devices by serial, so two cat9000v with the default are merged into one device.
+VSWITCH_FILE = "conf/vswitch.xml"
+SERIAL_RE = re.compile(r"<prod_serial_number>\s*([^<\s]*)\s*</prod_serial_number>")
+
+
+def is_cat9kv(definition: str) -> bool:
+    return definition.startswith("cat9000v")
+
+
+def unique_serial(title: str, label: str) -> str:
+    """A stable 11-character serial for a node (same lab title + label -> same serial)."""
+    import hashlib
+
+    return "CML" + hashlib.sha256(f"{title}/{label}".encode()).hexdigest()[:8].upper()
+
+
+def serial_of(vswitch_xml: str | None) -> str | None:
+    m = SERIAL_RE.search(vswitch_xml or "")
+    return m.group(1) if m else None
+
+
+def with_serial(vswitch_xml: str, serial: str) -> str:
+    return SERIAL_RE.sub(f"<prod_serial_number>{serial}</prod_serial_number>", vswitch_xml, count=1)
