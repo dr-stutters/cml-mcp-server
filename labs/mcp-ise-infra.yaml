@@ -1,0 +1,119 @@
+annotations: []
+smart_annotations: []
+nodes:
+- boot_disk_size: null
+  configuration:
+  - name: default
+    content: System Bridge
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n0
+  image_definition: null
+  label: ext
+  node_definition: external_connector
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags: []
+  x: 0
+  y: 0
+  interfaces:
+  - id: i0
+    label: port
+    mac_address: null
+    type: physical
+    slot: 0
+- boot_disk_size: null
+  configuration:
+  - name: user-data
+    content: |-
+      #cloud-config
+      hostname: dc1
+      fqdn: dc1.mcp.lab
+      manage_etc_hosts: false
+      ssh_pwauth: true
+      users:
+        - name: cisco
+          plain_text_passwd: ${LAB_DEFAULT_PASSWORD}
+          lock_passwd: false
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+      write_files:
+        - path: /etc/hosts
+          content: |
+            127.0.0.1 localhost
+            198.18.128.180 dc1.mcp.lab dc1
+        - path: /root/provision.sh
+          permissions: '0755'
+          content: |
+            #!/bin/bash
+            set -x
+            export DEBIAN_FRONTEND=noninteractive
+            for i in 1 2 3 4 5; do apt-get update && break; sleep 20; done
+            apt-get install -y samba winbind krb5-user smbclient ldb-tools chrony openssl dnsutils
+            systemctl disable --now smbd nmbd winbind systemd-resolved || true
+            rm -f /etc/samba/smb.conf /etc/resolv.conf
+            echo "nameserver 198.18.128.1" > /etc/resolv.conf
+            samba-tool domain provision --realm=MCP.LAB --domain=MCP --server-role=dc --dns-backend=SAMBA_INTERNAL --adminpass='${LAB_AD_ADMIN_PASSWORD}' --option="dns forwarder = 198.18.128.1" --use-rfc2307
+            cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
+            systemctl unmask samba-ad-dc; systemctl enable --now samba-ad-dc
+            echo -e "search mcp.lab\nnameserver 127.0.0.1" > /etc/resolv.conf
+            echo provisioned > /root/PROVISIONED
+      runcmd:
+        - [bash, -c, "/root/provision.sh > /root/provision.log 2>&1"]
+  - name: network-config
+    content: |-
+      version: 2
+      ethernets:
+        ens2:
+          match: {name: "e*"}
+          addresses: [198.18.128.180/18]
+          routes: [{to: default, via: 198.18.128.1}]
+          nameservers: {addresses: [198.18.128.1]}
+  cpu_limit: null
+  cpus: 2
+  data_volume: null
+  hide_links: false
+  id: n1
+  image_definition: null
+  label: dc1
+  node_definition: ubuntu
+  parameters: {}
+  priority: null
+  pyats:
+    username: cisco
+    password: ${LAB_DEFAULT_PASSWORD}
+    enable_password: null
+  ram: 4096
+  tags: []
+  x: 200
+  y: 0
+  interfaces:
+  - id: i0
+    label: ens2
+    mac_address: 52:54:00:c9:4c:6b
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: n1
+  n2: n0
+  i1: i0
+  i2: i0
+  conditioning: {}
+  label: dc1-ens2<->ext-port
+lab:
+  description: 'ISE builder: Ubuntu dc1 198.18.128.180 = Samba AD DC (MCP.LAB) + OpenSSL lab CA'
+  notes: ''
+  title: mcp-ise-infra
+  node_staging:
+    enabled: false
+    start_remaining: true
+    abort_on_failure: false
+  version: 0.3.1

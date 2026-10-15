@@ -1,0 +1,349 @@
+annotations: []
+smart_annotations: []
+nodes:
+- boot_disk_size: null
+  configuration:
+  - name: default
+    content: System Bridge
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n0
+  image_definition: null
+  label: ext
+  node_definition: external_connector
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags: []
+  x: 0
+  y: 0
+  interfaces:
+  - id: i0
+    label: port
+    mac_address: null
+    type: physical
+    slot: 0
+- boot_disk_size: null
+  configuration:
+  - name: iosxe_config.txt
+    content: |-
+      hostname mcp-sw1
+      ip domain name mcp.lab
+      no ip domain lookup
+      username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+      enable secret ${LAB_CLI_PASSWORD}
+      aaa new-model
+      aaa authentication login default local
+      aaa authentication login CONSOLE local
+      aaa authorization exec default local
+      aaa authentication dot1x default group radius
+      aaa authorization network default group radius
+      aaa accounting dot1x default start-stop group radius
+      aaa accounting update newinfo periodic 2880
+      aaa server radius dynamic-author
+       client 198.18.134.35 server-key ${LAB_RADIUS_SECRET}
+      radius server ISE
+       address ipv4 198.18.134.35 auth-port 1812 acct-port 1813
+       key ${LAB_RADIUS_SECRET}
+      radius-server attribute 6 on-for-login-auth
+      radius-server attribute 8 include-in-access-req
+      radius-server attribute 25 access-request include
+      radius-server dead-criteria time 5 tries 3
+      ip radius source-interface GigabitEthernet1/0/1
+      dot1x system-auth-control
+      vlan 10
+       name CLIENTS
+      ip dhcp excluded-address 10.10.10.1 10.10.10.99
+      ip dhcp pool CLIENTS
+       network 10.10.10.0 255.255.255.0
+       default-router 10.10.10.1
+      interface GigabitEthernet1/0/1
+       description uplink to dCloud 198.18.128.0/18
+       no switchport
+       ip address 198.18.128.154 255.255.192.0
+       no shutdown
+      interface Vlan10
+       ip address 10.10.10.1 255.255.255.0
+       no shutdown
+      interface GigabitEthernet1/0/2
+       description client (802.1X / MAB)
+       switchport mode access
+       switchport access vlan 10
+       authentication host-mode multi-auth
+       authentication order dot1x mab
+       authentication priority dot1x mab
+       authentication port-control auto
+       authentication periodic
+       authentication timer reauthenticate server
+       authentication violation restrict
+       mab
+       dot1x pae authenticator
+       dot1x timeout tx-period 5
+       spanning-tree portfast
+       no shutdown
+      ip route 0.0.0.0 0.0.0.0 198.18.128.1
+      crypto key generate rsa modulus 2048
+      ip ssh version 2
+      snmp-server community ${LAB_SNMP_RO} RO
+      snmp-server community ${LAB_SNMP_RW} RW
+      line con 0
+       exec-timeout 0 0
+       logging synchronous
+       login authentication CONSOLE
+      line vty 0 15
+       transport input ssh
+      end
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n1
+  image_definition: null
+  label: sw1
+  node_definition: cat9000v-uadp
+  parameters: {}
+  priority: null
+  pyats:
+    username: netadmin
+    password: ${LAB_CLI_PASSWORD}
+    enable_password: ${LAB_CLI_PASSWORD}
+  ram: null
+  tags: []
+  x: 0
+  y: 160
+  interfaces:
+  - id: i0
+    label: Loopback0
+    mac_address: null
+    type: loopback
+  - id: i1
+    label: GigabitEthernet0/0
+    mac_address: 52:54:00:54:6a:32
+    type: physical
+    slot: 0
+  - id: i2
+    label: GigabitEthernet1/0/1
+    mac_address: 52:54:00:ad:c1:36
+    type: physical
+    slot: 1
+  - id: i3
+    label: GigabitEthernet1/0/2
+    mac_address: 52:54:00:9c:88:51
+    type: physical
+    slot: 2
+  - id: i4
+    label: GigabitEthernet1/0/3
+    mac_address: 52:54:00:b6:7f:32
+    type: physical
+    slot: 3
+  - id: i5
+    label: GigabitEthernet1/0/4
+    mac_address: 52:54:00:1a:43:dd
+    type: physical
+    slot: 4
+  - id: i6
+    label: GigabitEthernet1/0/5
+    mac_address: 52:54:00:48:a7:2e
+    type: physical
+    slot: 5
+  - id: i7
+    label: GigabitEthernet1/0/6
+    mac_address: 52:54:00:14:bd:98
+    type: physical
+    slot: 6
+  - id: i8
+    label: GigabitEthernet1/0/7
+    mac_address: 52:54:00:41:25:91
+    type: physical
+    slot: 7
+  - id: i9
+    label: GigabitEthernet1/0/8
+    mac_address: 52:54:00:e4:ee:6c
+    type: physical
+    slot: 8
+  - id: i10
+    label: GigabitEthernet1/0/9
+    mac_address: 52:54:00:c4:d5:f8
+    type: physical
+    slot: 9
+  - id: i11
+    label: GigabitEthernet1/0/10
+    mac_address: 52:54:00:57:ba:f3
+    type: physical
+    slot: 10
+  - id: i12
+    label: GigabitEthernet1/0/11
+    mac_address: 52:54:00:b4:cf:8d
+    type: physical
+    slot: 11
+  - id: i13
+    label: GigabitEthernet1/0/12
+    mac_address: 52:54:00:3f:b2:16
+    type: physical
+    slot: 12
+  - id: i14
+    label: GigabitEthernet1/0/13
+    mac_address: 52:54:00:5a:60:a3
+    type: physical
+    slot: 13
+  - id: i15
+    label: GigabitEthernet1/0/14
+    mac_address: 52:54:00:bd:a9:50
+    type: physical
+    slot: 14
+  - id: i16
+    label: GigabitEthernet1/0/15
+    mac_address: 52:54:00:a7:2b:80
+    type: physical
+    slot: 15
+  - id: i17
+    label: GigabitEthernet1/0/16
+    mac_address: 52:54:00:b4:3d:91
+    type: physical
+    slot: 16
+  - id: i18
+    label: GigabitEthernet1/0/17
+    mac_address: 52:54:00:c7:4a:91
+    type: physical
+    slot: 17
+  - id: i19
+    label: GigabitEthernet1/0/18
+    mac_address: 52:54:00:7b:6d:57
+    type: physical
+    slot: 18
+  - id: i20
+    label: GigabitEthernet1/0/19
+    mac_address: 52:54:00:0e:fd:db
+    type: physical
+    slot: 19
+  - id: i21
+    label: GigabitEthernet1/0/20
+    mac_address: 52:54:00:8f:5c:c8
+    type: physical
+    slot: 20
+  - id: i22
+    label: GigabitEthernet1/0/21
+    mac_address: 52:54:00:56:7d:b5
+    type: physical
+    slot: 21
+  - id: i23
+    label: GigabitEthernet1/0/22
+    mac_address: 52:54:00:40:d8:97
+    type: physical
+    slot: 22
+  - id: i24
+    label: GigabitEthernet1/0/23
+    mac_address: 52:54:00:19:9c:4f
+    type: physical
+    slot: 23
+  - id: i25
+    label: GigabitEthernet1/0/24
+    mac_address: 52:54:00:38:ab:20
+    type: physical
+    slot: 24
+- boot_disk_size: null
+  configuration:
+  - name: node.cfg
+    content: |
+      # this is a shell script which will be sourced at boot
+      hostname client
+      USERNAME=cisco
+      PASSWORD=${LAB_DEFAULT_PASSWORD}
+      ip link set eth0 up
+      # DHCP from sw1 (VLAN 10) once the port is authorized; retries in the background (never block
+      # this boot script: the console only gets a login prompt after it finishes)
+      (udhcpc -i eth0 -f -t 0 -T 10 >/dev/null 2>&1 &)
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n2
+  image_definition: null
+  label: client
+  node_definition: alpine
+  parameters: {}
+  priority: null
+  pyats:
+    username: cisco
+    password: ${LAB_DEFAULT_PASSWORD}
+    enable_password: null
+  ram: null
+  tags: []
+  x: 0
+  y: 320
+  interfaces:
+  - id: i0
+    label: eth0
+    mac_address: 52:54:00:61:3d:9e
+    type: physical
+    slot: 0
+  - id: i1
+    label: eth1
+    mac_address: 52:54:00:19:ca:77
+    type: physical
+    slot: 1
+- boot_disk_size: null
+  configuration:
+  - name: default
+    content: NAT
+  cpu_limit: null
+  cpus: null
+  data_volume: null
+  hide_links: false
+  id: n3
+  image_definition: null
+  label: nat
+  node_definition: external_connector
+  parameters: {}
+  priority: null
+  pyats:
+    username: null
+    password: null
+    enable_password: null
+  ram: null
+  tags: []
+  x: 200
+  y: 320
+  interfaces:
+  - id: i0
+    label: port
+    mac_address: null
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: n1
+  n2: n0
+  i1: i2
+  i2: i0
+  conditioning: {}
+  label: sw1-GigabitEthernet1/0/1<->ext-port
+- id: l1
+  n1: n1
+  n2: n2
+  i1: i3
+  i2: i0
+  conditioning: {}
+  label: sw1-GigabitEthernet1/0/2<->client-eth0
+- id: l2
+  n1: n2
+  n2: n3
+  i1: i1
+  i2: i0
+  conditioning: {}
+  label: client-eth1<->nat-port
+lab:
+  description: cat9000v access switch with 802.1X/MAB against ISE + client (cml-mcp-server recipe ise-access)
+  notes: ''
+  title: mcp-cml-ise
+  node_staging:
+    enabled: false
+    start_remaining: true
+    abort_on_failure: false
+  version: 0.3.1
