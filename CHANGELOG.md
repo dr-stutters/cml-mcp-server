@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 - 2026-10-15
+
+Later milestone (L13 wireless, L14 fmc-local, L16 site replica; L15 serial fix) and L24. 69 -> 71 tools (read 39, write 24,
+dangerous 8 incl. `cml_api_call`) and a second prompt (`cml_replicate_site`).
 
 ### Fixed
 - cat9000v serials: every cat9000v reported CMLUADP, so Catalyst Center merged multi-switch labs (e.g. `fabric`) into one
