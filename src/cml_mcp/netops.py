@@ -49,6 +49,7 @@ async def console_batch(
     commands_for: CommandsFor,
     *,
     timeout: float,  # noqa: ASYNC109 - per-command timeout
+    purpose: str = "a console call",
 ) -> list[dict[str, Any]]:
     """Run commands on several booted nodes in parallel (4 at a time), one console session each.
     Per node: {node, os, prompt, outputs: [{command, output}]} or {node, error}; never raises for
@@ -69,23 +70,27 @@ async def console_batch(
         if not commands:
             out["error"] = f"no commands for this node type ({node.get('node_definition')})"
             return out
-        async with sem, app.console.lock(node["id"]):
-            try:
-                async with app.console.open(lab_id, node["id"], cred) as session:
-                    await prepare(session)
-                    out["prompt"] = session.prompt
-                    out["outputs"] = []
-                    for item in commands:
-                        cmd, interrupt = item if isinstance(item, tuple) else (item, None)
-                        try:
-                            text = await session.run(cmd, timeout=timeout, interrupt_after=interrupt)
-                        except UpstreamTimeout as e:  # run() sent Ctrl-C; go on with the next one
-                            out["outputs"].append({"command": cmd, "error": session.safe(str(e))[:300]})
-                            await session.drain(limit=5.0)
-                            continue
-                        out["outputs"].append({"command": cmd, "output": mask_secrets(text)})
-            except Exception as e:  # report per node; never lose the other nodes' results
-                out["error"] = mask_secrets(str(e))[:500] or type(e).__name__
+        try:
+            # claim the node first: a busy node must not hold one of the batch's parallel slots
+            async with (
+                app.console.claim(node["id"], label, purpose),
+                sem,
+                app.console.open(lab_id, node["id"], cred) as session,
+            ):
+                await prepare(session)
+                out["prompt"] = session.prompt
+                out["outputs"] = []
+                for item in commands:
+                    cmd, interrupt = item if isinstance(item, tuple) else (item, None)
+                    try:
+                        text = await session.run(cmd, timeout=timeout, interrupt_after=interrupt)
+                    except UpstreamTimeout as e:  # run() sent Ctrl-C; go on with the next one
+                        out["outputs"].append({"command": cmd, "error": session.safe(str(e))[:300]})
+                        await session.drain(limit=5.0)
+                        continue
+                    out["outputs"].append({"command": cmd, "output": mask_secrets(text)})
+        except Exception as e:  # report per node; never lose the other nodes' results
+            out["error"] = mask_secrets(str(e))[:500] or type(e).__name__
         return out
 
     return list(await asyncio.gather(*(one(n) for n in nodes)))

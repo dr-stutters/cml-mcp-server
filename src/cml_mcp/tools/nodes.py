@@ -245,7 +245,12 @@ def register(reg: ToolRegistrar) -> None:
             nodes = [await app.resolve_node(lid, node)] if node else await app.list_nodes(lid)
             nodes = [n for n in nodes if licensed(n) and n.get("state") in ("BOOTED", "STARTED")]
             batch = await console_batch(
-                app, lid, nodes, lambda _n, cred: address_commands(cred.os), timeout=30
+                app,
+                lid,
+                nodes,
+                lambda _n, cred: address_commands(cred.os),
+                timeout=30,
+                purpose="cml_get_layer3_addresses",
             )
             cli_rows: list[dict[str, Any]] = []
             for res in batch:

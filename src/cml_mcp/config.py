@@ -15,6 +15,9 @@ class Settings(BaseServerSettings):
     # known_hosts file for the console server's SSH host key. When unset, the key is checked against
     # ~/.ssh/known_hosts if CML_VERIFY_SSL is true, and not checked when it is false (lab default).
     console_known_hosts: str | None = Field(default=None, description="CML_CONSOLE_KNOWN_HOSTS")
+    # Seconds a console call waits for another call on the same node to finish before it reports
+    # the console as busy (one session per node per server process).
+    console_lock_wait: float = Field(default=60.0, ge=0, description="CML_CONSOLE_LOCK_WAIT")
 
     # Node-licence cap (CML doesn't report it: an EVAL Personal licence allows 5 running nodes).
     # When set, start/build previews refuse to start more licensed nodes than are free.

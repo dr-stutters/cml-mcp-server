@@ -12,7 +12,7 @@ import contextlib
 import logging
 import re
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -30,6 +30,11 @@ LOGIN = re.compile(r"(?:username|login)\s*:\s*$", re.IGNORECASE)
 PASSWORD = re.compile(r"password\s*:\s*$", re.IGNORECASE)
 NEW_PASSWORD = re.compile(r"(?:enter|confirm) new password\s*:\s*$", re.IGNORECASE)
 PRESS_RETURN = re.compile(r"press return to get started", re.IGNORECASE)
+# A login prompt on its own final line ('Username:', 'h1 login:'): a session that was logged out.
+LOGIN_LINE = re.compile(r"(?:^|\n)[ \t]*(?:[\w.-]+[ \t]+)?(?:username|login)[ \t]*:[ \t]*$", re.IGNORECASE)
+PRESS_RETURN_LINE = re.compile(r"press return to get started!?[ \t]*\n?[ \t]*$", re.IGNORECASE)
+# How long the device must stay quiet after a login-looking tail before it counts as a lost session.
+LOGOUT_QUIET = 2.0
 CONFIG_DIALOG = re.compile(r"configuration dialog\?\s*\[yes/no\]:\s*$", re.IGNORECASE)
 # NX-OS first boot without a day-0 config: skip Power On Auto Provisioning.
 POAP = re.compile(r"Abort (?:Power On )?Auto Provisioning.*:\s*$", re.IGNORECASE | re.DOTALL)
@@ -39,6 +44,14 @@ QUESTION = re.compile(
     r"|\[[^\]\n]{1,60}\]\?)[ \t]*$",
     re.IGNORECASE,
 )
+
+
+class ConsoleBusy(InvalidRequest):
+    """Another call in this process holds the node's console."""
+
+
+class SessionLost(UpstreamError):
+    """The device dropped back to a login/RETURN prompt mid-command (reboot, wipe, idle logout)."""
 
 
 def auto_answer(question: str) -> str:
@@ -191,6 +204,8 @@ class ConsoleSession:
         self.buffer = ""
         self.prompt = ""
         self.last_prompt = ""
+        # True while the console sits at a CLI prompt after a command that completed normally
+        self.at_prompt = False
 
     def redact(self, text: str) -> str:
         for secret in (self.creds.password, self.creds.enable):
@@ -294,6 +309,8 @@ class ConsoleSession:
                 if prompt.endswith(">") and (self.creds.os or "").lower() not in NO_ENABLE_OS:
                     prompt = await self._enable(prompt)
                 self.prompt = prompt
+                self.last_prompt = ""
+                self.at_prompt = True
                 return prompt
         raise UpstreamTimeout("Could not reach a CLI prompt on the console")
 
@@ -308,6 +325,34 @@ class ConsoleSession:
             text = await self.read_until(lambda t: bool(PROMPT.search(t)), self.timeout)
         m = PROMPT.search(text)
         return m.group(1).strip() if m else prompt
+
+    def _cancel_pending(self) -> None:
+        with contextlib.suppress(Exception):
+            self.proc.stdin.write("\x03")
+
+    async def logout(self) -> None:
+        """Leave the device logged out: 'end' out of config modes, then 'exit' (IOS/NX-OS/FTD/Linux
+        all end the login with it). If the last command didn't finish at a prompt (an error,
+        timeout or pending question), Ctrl-C first and send nothing else unless a fresh prompt
+        comes back, so a pending question is never answered. Best effort, never raises."""
+        if not self.prompt:
+            return
+        prompt = self._prompt_re()
+        in_config = "(config" in self.last_prompt
+        self.prompt = ""
+        with contextlib.suppress(Exception):
+            if not self.at_prompt:
+                self._cancel_pending()
+                self.buffer = ""
+                text = await self.read_until(lambda t: bool(prompt.search(t)), 3.0)
+                m = prompt.search(text)
+                in_config = bool(m and "(config" in m.group(0))
+            if in_config:
+                self.send("end\r")
+                await self.read_until(lambda t: bool(prompt.search(t)), 3.0)
+            self.send("exit\r")
+            await self.drain(quiet=0.5, limit=2.0)
+        self.at_prompt = False
 
     def _prompt_re(self) -> re.Pattern[str]:
         # hostname plus anything mode-like: 'r1#', 'r1(config)#', 'r1(config-if)#', 'h1:~$'
@@ -355,6 +400,7 @@ class ConsoleSession:
             nl = t.find("\n", idx)
             return None if nl < 0 else t[nl:]
 
+        self.at_prompt = False
         self.send(command + "\r")
         answered = 0
         need_echo = True
@@ -363,9 +409,15 @@ class ConsoleSession:
         def view(t: str) -> str | None:
             return after_echo(t) if need_echo else t
 
+        def logged_out(r: str) -> bool:
+            tail = r[-200:]
+            return bool(
+                LOGIN_LINE.search(tail) or PRESS_RETURN_LINE.search(tail) or CONFIG_DIALOG.search(tail)
+            )
+
         def finished(t: str) -> bool:
             r = view(t)
-            return r is not None and bool(prompt.search(r) or QUESTION.search(r[-120:]))
+            return r is not None and bool(prompt.search(r) or QUESTION.search(r[-120:]) or logged_out(r))
 
         while True:
             try:
@@ -385,6 +437,23 @@ class ConsoleSession:
             rest = view(text) or ""
             if prompt.search(rest):
                 break
+            if logged_out(rest):
+                # ordinary output can end a chunk in 'login:'; a real logout stays quiet
+                if await self._more_output(LOGOUT_QUIET):
+                    continue
+                # the node rebooted, was wiped or logged the session out while the command ran:
+                # log in again so the session stays usable, but never re-send the command
+                self.prompt = ""
+                self.last_prompt = ""
+                try:
+                    await self.wake()
+                    state = "logged in again"
+                except UpstreamError as e:
+                    state = f"logging in again failed: {self.safe(str(e))[:120]}"
+                raise SessionLost(
+                    f"The console session ended while running {self.safe(command)!r} (the node rebooted, "
+                    f"was wiped or logged out); {state}. Check the node and re-run the command."
+                )
             # a question-like tail may just be a chunk boundary in ordinary output: only treat it as
             # a question if the device then stays quiet
             if await self._more_output(0.6):
@@ -401,6 +470,7 @@ class ConsoleSession:
                 )
             answered += 1
             if answered > 5:
+                self._cancel_pending()
                 raise InvalidRequest(
                     f"{self.safe(command)!r} kept asking questions (last: {self.safe(question)!r})"
                 )
@@ -412,6 +482,7 @@ class ConsoleSession:
         if lines and prompt.search("\n" + lines[-1]):
             self.last_prompt = lines[-1].strip()
             lines = lines[:-1]
+        self.at_prompt = True
         return "\n".join(line.rstrip() for line in lines).strip("\n")
 
 
@@ -427,6 +498,7 @@ class ConsoleServer:
         port: int = 22,
         timeout: float = 30.0,
         known_hosts: Any = None,
+        lock_wait: float = 60.0,
     ) -> None:
         self.host = urlparse(url).hostname or ""
         self.port = port
@@ -434,12 +506,36 @@ class ConsoleServer:
         self.password = password
         self.timeout = timeout
         self.known_hosts = known_hosts
+        self.lock_wait = lock_wait
         self._locks: dict[str, asyncio.Lock] = {}
+        self._holders: dict[str, tuple[str, float]] = {}
         self._warned = False
 
     def lock(self, node_id: str) -> asyncio.Lock:
-        """One console session per node at a time."""
+        """The node's console lock (one session per node per process)."""
         return self._locks.setdefault(node_id, asyncio.Lock())
+
+    @contextlib.asynccontextmanager
+    async def claim(self, node_id: str, label: str, purpose: str) -> AsyncIterator[None]:
+        """Hold the node's console for one session. Waits up to `lock_wait` seconds for another call
+        on the same node to finish, then raises ConsoleBusy instead of interleaving output.
+        Sessions in other server processes are not coordinated."""
+        lock = self.lock(node_id)
+        try:
+            await asyncio.wait_for(lock.acquire(), self.lock_wait)
+        except TimeoutError:
+            holder = self._holders.get(node_id)
+            held = f"{holder[0]}, for {time.monotonic() - holder[1]:.0f}s" if holder else "another call"
+            raise ConsoleBusy(
+                f"The console of {label!r} is busy ({held}); waited {self.lock_wait:g}s. Retry when "
+                "that call has finished."
+            ) from None
+        self._holders[node_id] = (purpose, time.monotonic())
+        try:
+            yield
+        finally:
+            self._holders.pop(node_id, None)
+            lock.release()
 
     def open(self, lab_id: str, node_id: str, creds: Credentials, line: int = 0) -> OpenConsole:
         if not self.username or not self.password:
@@ -463,6 +559,7 @@ class OpenConsole:
         self.creds = creds
         self.conn: Any = None
         self.proc: Any = None
+        self.session: ConsoleSession | None = None
 
     async def __aenter__(self) -> ConsoleSession:
         s = self.server
@@ -502,6 +599,7 @@ class OpenConsole:
             if "Escape character" not in text:
                 detail = session.redact(text.strip()[-200:])
                 raise InvalidRequest(f"The console server could not open {self.target}: {detail}")
+            self.session = session
             await session.wake()
             return session
         except BaseException:
@@ -509,6 +607,16 @@ class OpenConsole:
             raise
 
     async def __aexit__(self, *exc: object) -> None:
+        try:
+            if self.session is not None and not isinstance(exc[1], asyncio.CancelledError | Unreachable):
+                async with asyncio.timeout(10):
+                    await self.session.logout()
+        except Exception:
+            pass  # logout is best effort; the connection is closed below either way
+        finally:
+            await self._finish()
+
+    async def _finish(self) -> None:
         if self.proc is not None:
             with contextlib.suppress(Exception):
                 self.proc.stdin.write("\x1d")  # escape back to the console server before hanging up

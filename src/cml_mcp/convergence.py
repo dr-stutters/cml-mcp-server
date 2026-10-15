@@ -13,6 +13,10 @@ from cml_mcp.tools.common import state_counts
 
 RUNNING = ("STARTED", "QUEUED", "BOOTED")
 
+# Definitions that report BOOTED before their data plane forwards (verified live on CML 2.10:
+# cat9000v-uadp's routed uplink forwards 2-3 minutes after BOOTED).
+SLOW_FORWARDING = ("cat9000v",)
+
 
 async def wait_converged(
     app: CmlApp,
@@ -72,4 +76,20 @@ async def wait_converged(
     }
     if not_booted:
         out["not_booted"] = not_booted
+    if hint := slow_forwarding_hint(result["nodes"]):
+        out["hint"] = hint
     return out
+
+
+def slow_forwarding_hint(nodes: list[dict[str, Any]]) -> str | None:
+    slow = sorted(
+        str(n.get("label"))
+        for n in nodes
+        if n.get("state") == "BOOTED" and str(n.get("node_definition") or "").startswith(SLOW_FORWARDING)
+    )
+    if not slow:
+        return None
+    return (
+        f"{', '.join(slow)}: cat9000v reports BOOTED 2-3 minutes before its interfaces forward traffic. "
+        "If pings or RADIUS fail right after boot, wait a few minutes and retry (cml_check_reachability)."
+    )
