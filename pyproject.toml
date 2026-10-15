@@ -19,7 +19,7 @@ dependencies = [
 cml-mcp-server = "cml_mcp:main"
 
 [tool.uv.sources]
-stutters-mcp-core = { git = "https://github.com/dr-stutters/stutters-mcp-core", tag = "v0.3.0" }
+stutters-mcp-core = { git = "https://github.com/dr-stutters/stutters-mcp-core", tag = "v0.3.1" }
 
 [build-system]
 requires = ["uv_build>=0.10.9,<0.11.0"]
