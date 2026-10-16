@@ -130,3 +130,13 @@ See the [suite roadmap](https://github.com/dr-stutters/stutters-mcp-core/blob/ma
 | # | Item | Milestone |
 |---|---|---|
 | [L34](https://github.com/dr-stutters/cml-mcp-server/issues/81) | `ise-fmc-identity` recipe (802.1X client behind the FTD) | ✅ v0.10.0 |
+
+
+## Wave 4 (started 2026-10-16)
+The rest of Wave 4 for this server is still to be planned (see ise, fmc and catc Wave 4 for the shared shape: standalone
+packaging, a de-labbed repo, depth, prompts). Only the core bundle is planned so far, so CML moves with the other servers.
+
+### Phase A: standalone and reusable (no lab needed)
+| # | Item | Why (operator value) | External needs | Test plan | Size | Issue |
+|---|---|---|---|---|---|---|
+| [L35](https://github.com/dr-stutters/cml-mcp-server/issues/1) | **Bundle core into the package**: the suite release workflow (as ise I35, fmc F35, catc D31) vendors the pinned stutters-mcp-core tag into the wheel and image (`cml_mcp._core`), including the `[tasks]` extra's dependencies; no git dependency; CI fails on drift; `cml_status` reports the bundled core version; `recipes-verify.yml` runs against the built wheel | Installing today needs a git dependency and a `CORE_READ_TOKEN` for Docker | none | Unit + contract suite on the built wheel in a clean venv; `pip install --no-index`; drift check by bumping the tag; recipe verification on mocks | M | [#1](https://github.com/dr-stutters/cml-mcp-server/issues/1) |
