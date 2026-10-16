@@ -21,7 +21,9 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
   `mode='exec'` for `configure manager add ...`), Linux. Questions (`[confirm]`, `[yes/no]`) are
   answered on request, runaway commands get Ctrl-C.
 - **Lab recipes for the other suite servers.** FTDv for FMC, an unregistered FTDv HA pair, IOS-XE routers for
-  Catalyst Center, a Cat9kv 802.1X switch (IBNS 2.0) with MAB and EAP-TLS clients for ISE: `cml_list_recipes`, `cml_build_recipe`, `cml_verify_recipe` (pass/fail contract)
+  Catalyst Center, a Cat9kv 802.1X switch (IBNS 2.0) with MAB and EAP-TLS clients for ISE, an AD-user 802.1X client behind an
+  FMC-managed FTD for user-based firewalling: `cml_list_recipes`, `cml_build_recipe`, `cml_verify_recipe` (pass/fail contract,
+  incl. ISE live sessions), `cml_run_recipe_action` (e.g. switch the logged-in user)
   and the prompt `cml_build_test_lab`; `cml_plan_licences` says which labs to stop. See
   [src/cml_mcp/recipes/README.md](src/cml_mcp/recipes/README.md).
 - **Test oracles.** `cml_diff_node_config` shows what another server changed on a device;
@@ -133,6 +135,7 @@ or in `.mcp.json`:
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
 | `cml_capture_wireless` | Capture the simulated 802.11 medium at a wireless-ap / wireless-client node and decode it (SSIDs, auth/assoc, deauth reasons, EAPOL 4-way handshake, EAP identity/method) |
 | `cml_build_recipe` | Build a packaged test-lab recipe (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses |
+| `cml_run_recipe_action` | Run one of a recipe's packaged actions on its lab, e.g. `ise-fmc-identity` `login-alice` / `login-bob` / `logoff` (802.1X as another AD user); the command comes from the recipe, never the caller |
 | `cml_apply_link_scenario` | Apply a named scenario to a link: wan-good, wan-satellite, lossy-wifi, brownout, or `flap` (timed down/up cycles in the background, link always restored) |
 | `cml_clear_link_scenarios` | Stop flap jobs and remove conditioning from a lab's links |
 | `cml_annotate_lab` | Add notes, per-node address labels and the recipe's purpose/credential references as text annotations (re-runnable) |

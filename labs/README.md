@@ -38,6 +38,7 @@ CML .190-.199.
 | - | `mcp-catc-onboard` | CatC (D3/D6) | fresh cat9000v for the onboarding prompt test (the test discovers and deletes it) | sw2 cat9000v-uadp (1) | sw2 198.18.128.170 | ~8 min |
 | - | `mcp-catc-pnp` | CatC (D11) | blank cat8000v booting into PnP; Alpine `dhcp` serves option 43 -> CatC for pnp1's MAC only (the DHCP server is set up at runtime, not in day-0) | pnp1 cat8000v, dhcp alpine (2) | dhcp 198.18.128.171 | ~6 min |
 | - | `mcp-cml-ospf` | CML (operator pass, v0.9.0) | IOL OSPF triangle r1-r3 + r4 behind r3 (loopbacks 10.255.0.x), internal only; used for the "prove it converges", diff and link-scenario tasks | r1-r4 iol-xe (4) | internal 10.0.x | <1 min |
+| 7 | `mcp-cml-identity` | CML (recipe `ise-fmc-identity`, L34; for FMC F34 / ISE I30) | 802.1X AD-user client behind an FMC-managed FTDv, cat9000v RADIUS to ISE, outside telnet/http host. After import: `scripts/identity_lab.py up` (ISE NAD + FMC registration/policies) | sw1 cat9000v-uadp, ftd ftdv, client + outside-host ubuntu (4) | sw1 198.18.128.194, ftd mgmt .157; inside 10.10.34.0/24 (FTD .1), outside 172.31.34.0/24 (host .10) | 15-30 min |
 | - | `mcp-cml-probe` | CML (P1) | obsolete reachability probe; kept for the record, don't import | probe alpine (1) | - | - |
 
 "-" = import only, start when a test needs it. Exported 2026-10-15 ~12:00 UTC from CML 2.10.0.

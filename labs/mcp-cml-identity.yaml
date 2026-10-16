@@ -1,0 +1,1040 @@
+annotations:
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: true
+    text_content: |-
+      cml-mcp-server recipe: ise-fmc-identity
+      802.1X PEAP client (AD user mcp-alice / mcp-bob) on a cat9000v (RADIUS to ISE 198.18.134.35) whose VLAN gateway is FTDv mcp-ftd-identity (FMC 198.18.134.76) in front of an outside host (telnet 23, http 80)
+      Verify: cml_verify_recipe(recipe='ise-fmc-identity')
+    text_font: monospace
+    text_italic: false
+    text_size: 10
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: -500.0
+    y1: -524.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: |-
+      Address plan
+      sw1 GigabitEthernet1/0/1: 198.18.128.194/18 routed uplink to dCloud (RADIUS source = ISE NAD mcp-test-cml-identity-sw, gateway 198.18.128.1)
+      sw1 Vlan34: 10.10.34.2/24 (DHCP server for the client VLAN 34, pool 10.10.34.100-.199, default router 10.10.34.1 = the FTD)
+      ftd Management0/0: 198.18.128.157/18 (gateway 198.18.128.1), managed by FMC 198.18.134.76 as mcp-ftd-identity
+      ftd GigabitEthernet0/1 (FMC Ethernet0/1): inside 10.10.34.1/24, zone mcp-test-identity-inside (sw1 Gi1/0/3, access VLAN 34)
+      ftd GigabitEthernet0/0 (FMC Ethernet0/0): outside 172.31.34.1/24, zone mcp-test-identity-outside
+      outside-host ens2: 172.31.34.10/24 (gateway 172.31.34.1); telnet 23 (telnetd, login ******** / ********) and http 80 (python http.server)
+      outside-host ens3: DHCP from a NAT connector (ext-nat2), only to install telnetd at first boot, then disabled
+      client ens2 (sw1 Gi1/0/2, 802.1X, access VLAN 34): DHCP, normally 10.10.34.100; default route via 10.10.34.1 (the FTD)
+      client ens3: DHCP from the controller's NAT connector (ext-nat), only to install wpasupplicant at first boot, then disabled
+    text_font: monospace
+    text_italic: false
+    text_size: 10
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: -500.0
+    y1: -456.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: 'Credentials: not shown here. See cml_list_recipes(recipe=''ise-fmc-identity'')
+      -> credentials.where (keys: cli, client, fmc_registration, ftd_cli, ise_api,
+      outside_host, radius_shared_secret)'
+    text_font: monospace
+    text_italic: false
+    text_size: 10
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: -500.0
+    y1: -276.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: |-
+      Gi1/0/1 198.18.128.194/18
+      Vlan34 10.10.34.2/24
+    text_font: monospace
+    text_italic: false
+    text_size: 9
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: -260.0
+    y1: 200.0
+    z_index: 42
+  - border_color: '#00000000'
+    border_style: ''
+    color: '#202020'
+    rotation: 0
+    text_bold: false
+    text_content: Mgmt0/0 198.18.128.157/18
+    text_font: monospace
+    text_italic: false
+    text_size: 9
+    text_unit: pt
+    thickness: 1
+    type: text
+    x1: 140.0
+    y1: 200.0
+    z_index: 42
+smart_annotations: []
+nodes:
+  - boot_disk_size: null
+    configuration:
+      - name: default
+        content: System Bridge
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n0
+    image_definition: null
+    label: ext
+    node_definition: external_connector
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 0
+    y: -160
+    interfaces:
+      - id: i0
+        label: port
+        mac_address: null
+        type: physical
+        slot: 0
+  - boot_disk_size: null
+    configuration: []
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n1
+    image_definition: null
+    label: mgmt-sw
+    node_definition: unmanaged_switch
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 0
+    y: 0
+    interfaces:
+      - id: i0
+        label: port0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i1
+        label: port1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i2
+        label: port2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i3
+        label: port3
+        mac_address: null
+        type: physical
+        slot: 3
+      - id: i4
+        label: port4
+        mac_address: null
+        type: physical
+        slot: 4
+      - id: i5
+        label: port5
+        mac_address: null
+        type: physical
+        slot: 5
+      - id: i6
+        label: port6
+        mac_address: null
+        type: physical
+        slot: 6
+      - id: i7
+        label: port7
+        mac_address: null
+        type: physical
+        slot: 7
+  - boot_disk_size: null
+    configuration:
+      - name: iosxe_config.txt
+        content: |-
+          hostname mcp-identity-sw1
+          ip domain name mcp.lab
+          no ip domain lookup
+          username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+          enable secret ${LAB_CLI_PASSWORD}
+          aaa new-model
+          aaa authentication login default local
+          aaa authentication login CONSOLE local
+          aaa authorization exec default local
+          aaa authentication dot1x default group radius
+          aaa authorization network default group radius
+          aaa accounting dot1x default start-stop group radius
+          aaa accounting update newinfo periodic 2880
+          aaa server radius dynamic-author
+           client 198.18.134.35 server-key ${LAB_RADIUS_SECRET}
+          radius server ISE
+           address ipv4 198.18.134.35 auth-port 1812 acct-port 1813
+           key ${LAB_RADIUS_SECRET}
+          radius-server attribute 6 on-for-login-auth
+          radius-server attribute 8 include-in-access-req
+          radius-server attribute 25 access-request include
+          radius-server dead-criteria time 5 tries 3
+          ip radius source-interface GigabitEthernet1/0/1
+          dot1x system-auth-control
+          device-tracking policy MCP-DT
+           tracking enable
+          class-map type control subscriber match-all MCP-DOT1X-FAILED
+           match method dot1x
+           match result-type method dot1x authoritative
+          policy-map type control subscriber MCP-DOT1X
+           event session-started match-all
+            10 class always do-until-failure
+             10 authenticate using dot1x priority 10
+           event authentication-failure match-first
+            10 class MCP-DOT1X-FAILED do-until-failure
+             10 terminate dot1x
+             20 authentication-restart 30
+            20 class always do-until-failure
+             10 terminate dot1x
+             20 authentication-restart 30
+           event agent-found match-all
+            10 class always do-until-failure
+             10 authenticate using dot1x priority 10
+          vlan 34
+           name IDENTITY-CLIENTS
+          ip dhcp excluded-address 10.10.34.1 10.10.34.99
+          ip dhcp excluded-address 10.10.34.200 10.10.34.254
+          ip dhcp pool IDENTITY-CLIENTS
+           network 10.10.34.0 255.255.255.0
+           default-router 10.10.34.1
+          interface GigabitEthernet1/0/1
+           description uplink to dCloud 198.18.128.0/18 (RADIUS to ISE)
+           no switchport
+           ip address 198.18.128.194 255.255.192.0
+           no shutdown
+          interface Vlan34
+           description client VLAN (gateway is the FTD inside 10.10.34.1)
+           ip address 10.10.34.2 255.255.255.0
+           no shutdown
+          interface GigabitEthernet1/0/2
+           description client (802.1X PEAP, AD user)
+           switchport mode access
+           switchport access vlan 34
+           device-tracking attach-policy MCP-DT
+           access-session host-mode single-host
+           access-session port-control auto
+           dot1x pae authenticator
+           dot1x timeout tx-period 5
+           spanning-tree portfast
+           service-policy type control subscriber MCP-DOT1X
+           no shutdown
+          interface GigabitEthernet1/0/3
+           description ftd inside (Ethernet0/1)
+           switchport mode access
+           switchport access vlan 34
+           spanning-tree portfast
+           no shutdown
+          ip route 0.0.0.0 0.0.0.0 198.18.128.1
+          crypto key generate rsa modulus 2048
+          ip ssh version 2
+          snmp-server community ${LAB_SNMP_RO} RO
+          snmp-server community ${LAB_SNMP_RW} RW
+          line con 0
+           exec-timeout 0 0
+           logging synchronous
+           login authentication CONSOLE
+          line vty 0 15
+           transport input ssh
+          end
+      - name: conf/vswitch.xml
+        content: |-
+          <?xml version="1.0"?>
+          <!-- Copyright (c) 2020 by Cisco Systems, Inc.-->
+          <!-- All rights reserved. -->
+          <!-- Virtual Cat9k configuration information -->
+          <switch>
+          <!-- Virtual Board ID to indicate Q200 or UADP asic simulation -->
+            <board_id>20612</board_id>
+          <!-- Unique Serial# must be provided for each running instance -->
+            <prod_serial_number>CML2A7A68F4</prod_serial_number>
+          <!-- Number of ports must appear before other port information -->
+            <port_count>24</port_count>
+            <port lpn="1">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="2">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="3">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="4">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="5">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="6">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="7">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="8">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="9">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="10">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="11">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="12">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="13">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="14">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="15">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="16">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="17">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="18">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="19">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="20">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="21">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="22">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="23">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+            <port lpn="24">
+              <asic_id>0</asic_id>
+              <asic_ifg>0</asic_ifg>
+              <asic_slice>0</asic_slice>
+            </port>
+          </switch>
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n2
+    image_definition: null
+    label: sw1
+    node_definition: cat9000v-uadp
+    parameters: {}
+    priority: null
+    pyats:
+      username: netadmin
+      password: ${LAB_CLI_PASSWORD}
+      enable_password: ${LAB_CLI_PASSWORD}
+    ram: null
+    tags: []
+    x: -200
+    y: 160
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: GigabitEthernet0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet1/0/1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet1/0/2
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet1/0/3
+        mac_address: null
+        type: physical
+        slot: 3
+      - id: i5
+        label: GigabitEthernet1/0/4
+        mac_address: null
+        type: physical
+        slot: 4
+      - id: i6
+        label: GigabitEthernet1/0/5
+        mac_address: null
+        type: physical
+        slot: 5
+      - id: i7
+        label: GigabitEthernet1/0/6
+        mac_address: null
+        type: physical
+        slot: 6
+      - id: i8
+        label: GigabitEthernet1/0/7
+        mac_address: null
+        type: physical
+        slot: 7
+      - id: i9
+        label: GigabitEthernet1/0/8
+        mac_address: null
+        type: physical
+        slot: 8
+      - id: i10
+        label: GigabitEthernet1/0/9
+        mac_address: null
+        type: physical
+        slot: 9
+      - id: i11
+        label: GigabitEthernet1/0/10
+        mac_address: null
+        type: physical
+        slot: 10
+      - id: i12
+        label: GigabitEthernet1/0/11
+        mac_address: null
+        type: physical
+        slot: 11
+      - id: i13
+        label: GigabitEthernet1/0/12
+        mac_address: null
+        type: physical
+        slot: 12
+      - id: i14
+        label: GigabitEthernet1/0/13
+        mac_address: null
+        type: physical
+        slot: 13
+      - id: i15
+        label: GigabitEthernet1/0/14
+        mac_address: null
+        type: physical
+        slot: 14
+      - id: i16
+        label: GigabitEthernet1/0/15
+        mac_address: null
+        type: physical
+        slot: 15
+      - id: i17
+        label: GigabitEthernet1/0/16
+        mac_address: null
+        type: physical
+        slot: 16
+      - id: i18
+        label: GigabitEthernet1/0/17
+        mac_address: null
+        type: physical
+        slot: 17
+      - id: i19
+        label: GigabitEthernet1/0/18
+        mac_address: null
+        type: physical
+        slot: 18
+      - id: i20
+        label: GigabitEthernet1/0/19
+        mac_address: null
+        type: physical
+        slot: 19
+      - id: i21
+        label: GigabitEthernet1/0/20
+        mac_address: null
+        type: physical
+        slot: 20
+      - id: i22
+        label: GigabitEthernet1/0/21
+        mac_address: null
+        type: physical
+        slot: 21
+      - id: i23
+        label: GigabitEthernet1/0/22
+        mac_address: null
+        type: physical
+        slot: 22
+      - id: i24
+        label: GigabitEthernet1/0/23
+        mac_address: null
+        type: physical
+        slot: 23
+      - id: i25
+        label: GigabitEthernet1/0/24
+        mac_address: null
+        type: physical
+        slot: 24
+  - boot_disk_size: null
+    configuration:
+      - name: day0-config
+        content: |-
+          {
+            "EULA": "accept",
+            "Hostname": "mcp-ftd-identity",
+            "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+            "FirewallMode": "routed",
+            "DNS1": "198.18.133.1",
+            "DNS2": "",
+            "DNS3": "",
+            "IPv4Mode": "manual",
+            "IPv4Addr": "198.18.128.157",
+            "IPv4Mask": "255.255.192.0",
+            "IPv4Gw": "198.18.128.1",
+            "IPv6Mode": "disabled",
+            "IPv6Addr": "",
+            "IPv6Mask": "",
+            "IPv6Gw": "",
+            "FmcIp": "198.18.134.76",
+            "FmcRegKey": "${LAB_FTD_REG_KEY}",
+            "FmcNatId": "",
+            "ManageLocally": "No"
+          }
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n3
+    image_definition: null
+    label: ftd
+    node_definition: ftdv
+    parameters: {}
+    priority: null
+    pyats:
+      username: admin
+      password: ${LAB_FTD_ADMIN_PASSWORD}
+      enable_password: null
+    ram: null
+    tags: []
+    x: 200
+    y: 160
+    interfaces:
+      - id: i0
+        label: Management0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i1
+        label: donotuse1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i2
+        label: GigabitEthernet0/0
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i3
+        label: GigabitEthernet0/1
+        mac_address: null
+        type: physical
+        slot: 3
+  - boot_disk_size: null
+    configuration:
+      - name: user-data
+        content: |-
+          #cloud-config
+          hostname: outside-host
+          manage_etc_hosts: true
+          system_info:
+            default_user:
+              name: cisco
+              groups: [adm, sudo]
+              sudo: ['ALL=(ALL) NOPASSWD:ALL']
+              shell: /bin/bash
+              lock_passwd: false
+          password: cisco
+          chpasswd: {expire: false}
+          ssh_pwauth: true
+          package_update: true
+          packages: [telnetd]
+          write_files:
+            - path: /srv/www/index.html
+              permissions: '0644'
+              content: |
+                mcp outside-host (cml-mcp-server recipe ise-fmc-identity)
+            - path: /etc/systemd/system/mcp-http.service
+              content: |
+                [Unit]
+                Description=http on port 80 for the ise-fmc-identity recipe
+                After=network-online.target
+                [Service]
+                ExecStart=/usr/bin/python3 -m http.server 80 --bind 0.0.0.0 --directory /srv/www
+                Restart=always
+                [Install]
+                WantedBy=multi-user.target
+            # Ubuntu 24.04's telnetd comes without an inetd: a systemd socket starts it per connection
+            - path: /etc/systemd/system/mcp-telnet.socket
+              content: |
+                [Unit]
+                Description=telnet on port 23 (ise-fmc-identity)
+                [Socket]
+                ListenStream=23
+                Accept=yes
+                [Install]
+                WantedBy=sockets.target
+            - path: /etc/systemd/system/mcp-telnet@.service
+              content: |
+                [Unit]
+                Description=telnetd for one connection
+                [Service]
+                ExecStart=-/usr/sbin/telnetd
+                StandardInput=socket
+            - path: /etc/netplan/90-mcp-no-nat.yaml.off
+              permissions: '0600'
+              content: |
+                network:
+                  version: 2
+                  ethernets:
+                    ens2:
+                      routes: [{to: default, via: 172.31.34.1}]
+                    ens3:
+                      dhcp4: false
+                      optional: true
+          runcmd:
+            - systemctl daemon-reload
+            - systemctl enable --now mcp-http.service mcp-telnet.socket
+            # telnetd is installed (inetd): drop the NAT uplink, route via the FTD outside interface
+            - mv /etc/netplan/90-mcp-no-nat.yaml.off /etc/netplan/90-mcp-no-nat.yaml
+            - netplan apply
+            - ip link set ens3 down
+      - name: network-config
+        content: |-
+          network:
+            version: 2
+            ethernets:
+              ens2:
+                addresses: [172.31.34.10/24]
+                optional: true
+              ens3:
+                dhcp4: true
+                optional: true
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n4
+    image_definition: null
+    label: outside-host
+    node_definition: ubuntu
+    parameters: {}
+    priority: null
+    pyats:
+      username: cisco
+      password: cisco
+      enable_password: null
+    ram: null
+    tags: []
+    x: 400
+    y: 160
+    interfaces:
+      - id: i0
+        label: ens2
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i1
+        label: ens3
+        mac_address: null
+        type: physical
+        slot: 1
+  - boot_disk_size: null
+    configuration:
+      - name: user-data
+        content: |-
+          #cloud-config
+          hostname: identity-client
+          manage_etc_hosts: true
+          system_info:
+            default_user:
+              name: cisco
+              groups: [adm, sudo]
+              sudo: ['ALL=(ALL) NOPASSWD:ALL']
+              shell: /bin/bash
+              lock_passwd: false
+          password: cisco
+          chpasswd: {expire: false}
+          ssh_pwauth: true
+          package_update: true
+          packages: [wpasupplicant]
+          write_files:
+            - path: /etc/mcp-dot1x/mitchcloud-CA.pem
+              permissions: '0644'
+              content: |
+                -----BEGIN CERTIFICATE-----
+                MIIFbTCCA1WgAwIBAgIQIZO0leLk1btJeQSQzoqnxTANBgkqhkiG9w0BAQsFADBJMRMwEQYKCZIm
+                iZPyLGQBGRYDbGFiMRowGAYKCZImiZPyLGQBGRYKbWl0Y2hjbG91ZDEWMBQGA1UEAxMNbWl0Y2hj
+                bG91ZC1DQTAeFw0yNjEwMTYwMDMwMzRaFw0zNjEwMTYwMDQwMzJaMEkxEzARBgoJkiaJk/IsZAEZ
+                FgNsYWIxGjAYBgoJkiaJk/IsZAEZFgptaXRjaGNsb3VkMRYwFAYDVQQDEw1taXRjaGNsb3VkLUNB
+                MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA3hxepSovqvgUVKQb2BMAu81IsGRYWDLu
+                ErkjvMA3IDV/I3F6KOrfTw/qivJ93V5RNlPIINQNgbfEYOKb7zn9mMb/RPiHzQeUgSYLBYdiWKDK
+                AiHf2a2Ql62eqdmBa5puEK7CyV9o7tIucXGvkCoNVDEpehb+/pkqD12jX3tXyunbnVZ3t3Kk06OF
+                ghE8R3JR5O+QKpMZ1GlptdZcE7rgwy+HYhCBUv4be636Jf54MtGpXZ0p4ufjEzSEXRw2Y2gPX/Hk
+                V6wcATjIIRNG533uh+4qxPtIOSCcBGTTrjk41IDPPKiZIZU0aORZ6OYiUlamSBTHpwvCn/UWUT1T
+                brZ2IjYsDCPUW5dwb9vMBl/ZRQ2SumAPetwoaUjI1ywCaMOCJJT4uOKQEhsItWEfH/+gEekkaSTB
+                CHmyl4EtMtU3LGIGKL3v/VC/Cp9XlVqCL8jHiGBmf8t3te43z/4cnM56Kz+0ptyGyknQGEXB13gk
+                uhbOYDLROOhI0rkZ50bZbhx4k9q936sylYQfgXZ+HrJM89jyAp/Q/XCFJCcteErQSf5Ad5fbRBcB
+                oz9PazZcvDtNsQzhIlRNQNERzGgb1xQTsfHP52Yd3prLIrJ/lNeyzvFroGGneLwC2cPJC2+hGSuV
+                4+Dvlv5ChYaHCXJr2InuaWn/mH6QehlTG0by41Q0j6ECAwEAAaNRME8wCwYDVR0PBAQDAgGGMA8G
+                A1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFNXpaN+0s64dH5XygARYoEi9c2UvMBAGCSsGAQQBgjcV
+                AQQDAgEAMA0GCSqGSIb3DQEBCwUAA4ICAQBpZOH3TI+8W6zing4JnaMiz70bMtVx0qTXItJRZbBG
+                pd/Upqdn+wUWfVBmDYdBWl8ufBw/piuyKd67tq3koXyl38vOEzmOxZVexAtV/VVkq3irxc/6OrZD
+                X2hjEeO4nYJDgL5GySTUvh6VGoV8v3y26voEBQXK8cnBkInUsDiM/JHgidYyncq+qiiGniAZOl3h
+                0/Jv+2mFdCRs1VVnwEu6Uhj6T/jun2M9klFBLBJ0wPuNsQuXvyDENOtuNGoMssqoL6Iu7+JWarTV
+                a8sWdgZW8ydKTb7uoLt5726PnN+WPHNMc2oDzZcsrCyf+Ugnhz/+TU2aWhFuvoC/JqMVF7dNhDjU
+                3eHBjwb8xXXWp8WlpePIT2PUqRmb1Kn8d7H3Khq7ikfg+kaXmVjOLbdUPHk0LsMpD5zFarMVlK3E
+                FBb3Yi+fxp3rJwytBN7/+MdJRcLGa2NSoFFRcWij6VWdTtGmNpcwp3hrmUtSYs9YVzM4+9/8Mjc9
+                TXtdVbIVWfvqBkr1bD4WXCGrZKtUQMOrm2puEW+72OuFaL5rjZvidE6BPt+QJw2upkReAPR8jdNZ
+                39qtkrRRRnjGhrqL4hyo26oo8yPjZNJTB6OJmZ7A2EUVCo8nstc8p9X2ZIj/kQZMratA7CztcSsK
+                0tcBxaATp23lceK9bTgpzKclwf69sqnhww==
+                -----END CERTIFICATE-----
+            - path: /etc/mcp-dot1x/mcp-alice.conf
+              permissions: '0600'
+              content: |
+                ctrl_interface=DIR=/run/wpa_supplicant GROUP=sudo
+                ap_scan=0
+                network={
+                  key_mgmt=IEEE8021X
+                  eap=PEAP
+                  identity="mcp-alice"
+                  password="${LAB_AD_TEST_USER_PASSWORD}"
+                  phase2="auth=MSCHAPV2"
+                  ca_cert="/etc/mcp-dot1x/mitchcloud-CA.pem"
+                  eapol_flags=0
+                }
+            - path: /etc/mcp-dot1x/mcp-bob.conf
+              permissions: '0600'
+              content: |
+                ctrl_interface=DIR=/run/wpa_supplicant GROUP=sudo
+                ap_scan=0
+                network={
+                  key_mgmt=IEEE8021X
+                  eap=PEAP
+                  identity="mcp-bob"
+                  password="${LAB_AD_TEST_USER_PASSWORD}"
+                  phase2="auth=MSCHAPV2"
+                  ca_cert="/etc/mcp-dot1x/mitchcloud-CA.pem"
+                  eapol_flags=0
+                }
+            - path: /usr/local/sbin/mcp-dot1x-login
+              permissions: '0755'
+              content: |
+                #!/bin/sh
+                # Switch the 802.1X user on ens2 (cml-mcp-server recipe ise-fmc-identity):
+                #   mcp-dot1x-login alice|bob|logoff|status
+                conf=/etc/wpa_supplicant/wpa_supplicant-wired-ens2.conf
+                u=${1#mcp-}
+                case "$u" in
+                  alice|bob)
+                    wpa_cli -i ens2 logoff >/dev/null 2>&1
+                    sleep 2
+                    install -m 600 /etc/mcp-dot1x/mcp-$u.conf $conf
+                    systemctl restart wpa_supplicant-wired@ens2
+                    i=0
+                    while [ $i -lt 60 ]; do
+                      wpa_cli -i ens2 status 2>/dev/null | grep -q '^suppPortStatus=Authorized' && break
+                      sleep 2; i=$((i+2))
+                    done
+                    networkctl renew ens2 >/dev/null 2>&1
+                    sleep 4 ;;
+                  logoff)
+                    wpa_cli -i ens2 logoff >/dev/null 2>&1 && echo "logged off"
+                    exit 0 ;;
+                  status) ;;
+                  *) echo "usage: mcp-dot1x-login alice|bob|logoff|status" >&2; exit 2 ;;
+                esac
+                st=$(wpa_cli -i ens2 status 2>/dev/null)
+                user=$(sed -n 's/^ *identity="\(.*\)"/\1/p' $conf 2>/dev/null)
+                port=$(echo "$st" | sed -n 's/^suppPortStatus=//p')
+                eap=$(echo "$st" | sed -n 's/^EAP state=//p')
+                ip=$(ip -4 -o addr show ens2 | awk '{print $4}')
+                echo "user=$user port=${port:-unknown} eap=${eap:-unknown} ip=${ip:-none}"
+            - path: /usr/local/bin/mcp-check
+              permissions: '0755'
+              content: |
+                #!/bin/bash
+                # Read-only checks for cml_verify_recipe (recipe ise-fmc-identity):
+                #   mcp-check dot1x | tcp HOST PORT | http URL
+                case "$1" in
+                  dot1x)
+                    st=$(wpa_cli -i ens2 status 2>/dev/null)
+                    echo "port=$(echo "$st" | sed -n 's/^suppPortStatus=//p') eap=$(echo "$st" | sed -n 's/^EAP state=//p')" ;;
+                  tcp)
+                    if timeout 5 bash -c 'exec 3<>"/dev/tcp/$0/$1"' "$2" "$3" 2>/dev/null; then echo "tcp $2:$3 open"; else echo "tcp $2:$3 closed"; fi ;;
+                  http)
+                    curl -s -o /dev/null -m 8 -w "http %{http_code} from %{remote_ip}\n" "$2" || echo "http failed ($2)" ;;
+                  *) echo "usage: mcp-check dot1x | tcp HOST PORT | http URL" >&2; exit 2 ;;
+                esac
+            - path: /etc/netplan/90-mcp-no-nat.yaml.off
+              permissions: '0600'
+              content: |
+                network:
+                  version: 2
+                  ethernets:
+                    ens3:
+                      dhcp4: false
+                      optional: true
+          runcmd:
+            - install -m 600 /etc/mcp-dot1x/mcp-alice.conf /etc/wpa_supplicant/wpa_supplicant-wired-ens2.conf
+            - systemctl enable --now wpa_supplicant-wired@ens2
+            # wpasupplicant is installed: drop the NAT uplink so the only way out is the FTD
+            - mv /etc/netplan/90-mcp-no-nat.yaml.off /etc/netplan/90-mcp-no-nat.yaml
+            - netplan apply
+            - ip link set ens3 down
+      - name: network-config
+        content: |-
+          network:
+            version: 2
+            ethernets:
+              ens2:
+                dhcp4: true
+                dhcp4-overrides: {route-metric: 100}
+                optional: true
+              ens3:
+                dhcp4: true
+                dhcp4-overrides: {route-metric: 500}
+                optional: true
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n5
+    image_definition: null
+    label: client
+    node_definition: ubuntu
+    parameters: {}
+    priority: null
+    pyats:
+      username: cisco
+      password: cisco
+      enable_password: null
+    ram: null
+    tags: []
+    x: -200
+    y: 320
+    interfaces:
+      - id: i0
+        label: ens2
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i1
+        label: ens3
+        mac_address: null
+        type: physical
+        slot: 1
+  - boot_disk_size: null
+    configuration:
+      - name: default
+        content: NAT
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n6
+    image_definition: null
+    label: ext-nat
+    node_definition: external_connector
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: -400
+    y: 320
+    interfaces:
+      - id: i0
+        label: port
+        mac_address: null
+        type: physical
+        slot: 0
+  - boot_disk_size: null
+    configuration:
+      - name: default
+        content: NAT
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n7
+    image_definition: null
+    label: ext-nat2
+    node_definition: external_connector
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 600
+    y: 160
+    interfaces:
+      - id: i0
+        label: port
+        mac_address: null
+        type: physical
+        slot: 0
+links:
+  - id: l0
+    n1: n0
+    n2: n1
+    i1: i0
+    i2: i0
+    conditioning: {}
+    label: ext-port<->mgmt-sw-port0
+  - id: l1
+    n1: n2
+    n2: n1
+    i1: i2
+    i2: i1
+    conditioning: {}
+    label: sw1-GigabitEthernet1/0/1<->mgmt-sw-port1
+  - id: l2
+    n1: n3
+    n2: n1
+    i1: i0
+    i2: i2
+    conditioning: {}
+    label: ftd-Management0/0<->mgmt-sw-port2
+  - id: l3
+    n1: n2
+    n2: n5
+    i1: i3
+    i2: i0
+    conditioning: {}
+    label: sw1-GigabitEthernet1/0/2<->client-ens2
+  - id: l4
+    n1: n2
+    n2: n3
+    i1: i4
+    i2: i3
+    conditioning: {}
+    label: sw1-GigabitEthernet1/0/3<->ftd-GigabitEthernet0/1
+  - id: l5
+    n1: n3
+    n2: n4
+    i1: i2
+    i2: i0
+    conditioning: {}
+    label: ftd-GigabitEthernet0/0<->outside-host-ens2
+  - id: l6
+    n1: n5
+    n2: n6
+    i1: i1
+    i2: i0
+    conditioning: {}
+    label: client-ens3<->ext-nat-port
+  - id: l7
+    n1: n4
+    n2: n7
+    i1: i1
+    i2: i0
+    conditioning: {}
+    label: outside-host-ens3<->ext-nat2-port
+lab:
+  description: 802.1X AD-user client behind an FMC-managed FTDv, ISE RADIUS on a cat9000v,
+    outside telnet/http host (cml-mcp-server recipe ise-fmc-identity)
+  notes: 'cml-mcp-recipe: {"recipe": "ise-fmc-identity", "substitute": {}}'
+  title: mcp-cml-identity
+  node_staging:
+    enabled: false
+    start_remaining: true
+    abort_on_failure: false
+  version: 0.3.1

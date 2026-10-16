@@ -1,0 +1,504 @@
+# User-based firewalling end to end (Wave 3 theme A): an 802.1X client authenticates to ISE as an AD user
+# (mcp-alice or mcp-bob, PEAP-MSCHAPv2) on a cat9000v access switch, and its traffic leaves through an
+# FMC-managed FTDv (inside = the client VLAN's gateway) to an outside host offering telnet and http.
+# ISE -> FMC (pxGrid) maps the client's IP to the user, so FMC access rules can match AD users/groups.
+# Build with scripts/recipes.py or cml_build_recipe; FTDv boots in 15-30 min.
+name: ise-fmc-identity
+summary: 802.1X PEAP client (AD user mcp-alice / mcp-bob) on a cat9000v (RADIUS to ISE 198.18.134.35) whose VLAN gateway is FTDv mcp-ftd-identity (FMC 198.18.134.76) in front of an outside host (telnet 23, http 80)
+address_plan:
+  sw1 GigabitEthernet1/0/1: 198.18.128.194/18 routed uplink to dCloud (RADIUS source = ISE NAD mcp-test-cml-identity-sw, gateway 198.18.128.1)
+  sw1 Vlan34: 10.10.34.2/24 (DHCP server for the client VLAN 34, pool 10.10.34.100-.199, default router 10.10.34.1 = the FTD)
+  ftd Management0/0: 198.18.128.157/18 (gateway 198.18.128.1), managed by FMC 198.18.134.76 as mcp-ftd-identity
+  ftd GigabitEthernet0/1 (FMC Ethernet0/1): inside 10.10.34.1/24, zone mcp-test-identity-inside (sw1 Gi1/0/3, access VLAN 34)
+  ftd GigabitEthernet0/0 (FMC Ethernet0/0): outside 172.31.34.1/24, zone mcp-test-identity-outside
+  outside-host ens2: 172.31.34.10/24 (gateway 172.31.34.1); telnet 23 (telnetd via a systemd socket, login cisco / cisco) and http 80 (python http.server)
+  outside-host ens3: DHCP from a NAT connector (ext-nat2), only to install telnetd at first boot, then disabled
+  client ens2 (sw1 Gi1/0/2, 802.1X, access VLAN 34): DHCP, normally 10.10.34.100; default route via 10.10.34.1 (the FTD)
+  client ens3: DHCP from the controller's NAT connector (ext-nat), only to install wpasupplicant at first boot, then disabled
+credentials:
+  cli: netadmin / ${LAB_CLI_PASSWORD} on sw1 (enable secret ${LAB_CLI_PASSWORD})
+  outside_host: Ubuntu, login cisco / cisco (console and telnet)
+  ftd_cli: admin / ${LAB_FTD_ADMIN_PASSWORD}
+  fmc_registration: host 198.18.134.76, registration key ${LAB_FTD_REG_KEY}, no NAT id
+  radius_shared_secret: ${LAB_RADIUS_SECRET} (ISE NAD 198.18.128.194, CoA port 1700)
+  client: Ubuntu, login cisco / cisco; 802.1X users mcp-alice and mcp-bob (lab Active Directory, see notes/contracts.md), password ${LAB_AD_TEST_USER_PASSWORD}
+  ise_api: ${LAB_ISE_USERNAME} / ${LAB_ISE_PASSWORD} (verify reads ISE's live sessions over MnT)
+ise_side: >-
+  Network device mcp-test-cml-identity-sw (198.18.128.194, RADIUS secret ${LAB_RADIUS_SECRET}, CoA 1700) in device group
+  Location#All Locations#mcp-test-lab, so the existing policy set mcp-test-wired matches (802.1X via mcp_test_eaptls_seq =
+  Internal Users + the AD join point; mcp-alice -> rule mcp-test-ad-employees, SGT Employees; mcp-bob -> mcp-test-ad-contractors,
+  SGT Contractors; profile mcp-test-permit). The client validates ISE's EAP certificate against mitchcloud-CA.
+  sw1 does device tracking on the client port, so ISE's session carries the client's framed IP (what pxGrid gives FMC).
+fmc_side: >-
+  The FTD's day 0 points at FMC 198.18.134.76 with ${LAB_FTD_REG_KEY}. Register it as mcp-ftd-identity (access policy
+  mcp-test-identity-acp), then Ethernet0/0 outside 172.31.34.1/24 zone mcp-test-identity-outside, Ethernet0/1 inside
+  10.10.34.1/24 zone mcp-test-identity-inside, NAT policy mcp-test-identity-nat (dynamic PAT of 10.10.34.0/24 to the outside
+  interface) and deploy. ACP rule mcp-test-identity-baseline allows inside -> outside tcp/23 and tcp/80 for any user; FMC
+  identity rules (AD users/groups from ISE pxGrid) go above it. See notes/contracts.md 'Wave 3 / A'.
+actions:
+  login-alice:
+    description: 802.1X log in as mcp-alice (AD group mcp-employees) on the client; prints user, port state and IP
+    node: client
+    command: sudo /usr/local/sbin/mcp-dot1x-login alice
+    expect: 'user=mcp-alice port=Authorized'
+    timeout: 150
+  login-bob:
+    description: 802.1X log in as mcp-bob (AD group mcp-contractors) on the client; prints user, port state and IP
+    node: client
+    command: sudo /usr/local/sbin/mcp-dot1x-login bob
+    expect: 'user=mcp-bob port=Authorized'
+    timeout: 150
+  logoff:
+    description: EAPOL-Logoff on the client (the switch ends the session; ISE gets an accounting stop)
+    node: client
+    command: sudo /usr/local/sbin/mcp-dot1x-login logoff
+    expect: 'logged off'
+    timeout: 60
+boot_minutes: 20-30 (FTDv 15-30 min; cat9000v ~10, its routed uplink forwards 2-3 min after BOOTED; the client needs ~3 min of apt; then register the FTD in FMC)
+verify:
+  booted: [sw1, ftd, client, outside-host]
+  nodes: [sw1]
+  targets: [198.18.128.1, 198.18.134.35]
+  addresses: {sw1: [198.18.128.194, 10.10.34.2]}
+  probes:
+    - name: sw1 RADIUS server ISE is UP
+      node: sw1
+      command: 'show aaa servers | include State: current'
+      expect: 'current UP'
+    - name: sw1 client port authorized by 802.1X as mcp-alice or mcp-bob
+      node: sw1
+      command: show access-session interface GigabitEthernet1/0/2 details
+      expect: '(?s)User-Name:\s+mcp-(alice|bob).*Status:\s+Authorized.*dot1x\s+Authc Success'
+    - name: ISE has a live session for the user from sw1 (MnT)
+      ise_session:
+        url: https://198.18.134.35
+        username: ${LAB_ISE_USERNAME}
+        password: ${LAB_ISE_PASSWORD}
+        user: '^mcp-(alice|bob)$'
+        nas_ip: 198.18.128.194
+        framed_ip: '^10\.10\.34\.\d+$'
+        verify_tls: false
+    - name: client supplicant authorized (wpa_supplicant)
+      node: client
+      command: mcp-check dot1x
+      expect: 'port=Authorized'
+    - name: client has an address behind the FTD (10.10.34.0/24 on ens2)
+      node: client
+      command: ip -4 addr show ens2
+      expect: 'inet 10\.10\.34\.\d+/24'
+    - name: client routes to the outside host via the FTD inside 10.10.34.1
+      node: client
+      command: ip route get 172.31.34.10
+      expect: 'via 10\.10\.34\.1 dev ens2'
+    - name: client reaches the FTD inside interface
+      node: client
+      command: ping -c 2 -W 2 10.10.34.1
+      expect: '[12] received'
+    - name: client reaches the outside host on http (80) through the FTD
+      node: client
+      command: mcp-check http http://172.31.34.10/
+      expect: 'http [1-5]\d\d from'
+    - name: client reaches the outside host on telnet (23) through the FTD
+      node: client
+      command: mcp-check tcp 172.31.34.10 23
+      expect: 'tcp 172\.31\.34\.10:23 open'
+    - name: ftd manager is FMC 198.18.134.76
+      node: ftd
+      command: show managers
+      expect: '198\.18\.134\.76'
+    - {name: sw1 SSH (22) from the server, tcp: 198.18.128.194:22}
+    - {name: ftd management SSH (22) from the server, tcp: 198.18.128.157:22}
+build:
+  title: mcp-cml-identity
+  description: 802.1X AD-user client behind an FMC-managed FTDv, ISE RADIUS on a cat9000v, outside telnet/http host (cml-mcp-server recipe ise-fmc-identity)
+  nodes:
+    - label: ext
+      definition: external_connector
+      config: System Bridge
+      x: 0
+      y: -160
+    - label: mgmt-sw
+      definition: unmanaged_switch
+      x: 0
+      y: 0
+    - label: sw1
+      definition: cat9000v-uadp
+      x: -200
+      y: 160
+      credentials: {username: netadmin, password: "${LAB_CLI_PASSWORD}", enable_password: "${LAB_CLI_PASSWORD}"}
+      config: |
+        hostname mcp-identity-sw1
+        ip domain name mcp.lab
+        no ip domain lookup
+        username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+        enable secret ${LAB_CLI_PASSWORD}
+        aaa new-model
+        aaa authentication login default local
+        aaa authentication login CONSOLE local
+        aaa authorization exec default local
+        aaa authentication dot1x default group radius
+        aaa authorization network default group radius
+        aaa accounting dot1x default start-stop group radius
+        aaa accounting update newinfo periodic 2880
+        aaa server radius dynamic-author
+         client 198.18.134.35 server-key ${LAB_RADIUS_SECRET}
+        radius server ISE
+         address ipv4 198.18.134.35 auth-port 1812 acct-port 1813
+         key ${LAB_RADIUS_SECRET}
+        radius-server attribute 6 on-for-login-auth
+        radius-server attribute 8 include-in-access-req
+        radius-server attribute 25 access-request include
+        radius-server dead-criteria time 5 tries 3
+        ip radius source-interface GigabitEthernet1/0/1
+        dot1x system-auth-control
+        device-tracking policy MCP-DT
+         tracking enable
+        class-map type control subscriber match-all MCP-DOT1X-FAILED
+         match method dot1x
+         match result-type method dot1x authoritative
+        policy-map type control subscriber MCP-DOT1X
+         event session-started match-all
+          10 class always do-until-failure
+           10 authenticate using dot1x priority 10
+         event authentication-failure match-first
+          10 class MCP-DOT1X-FAILED do-until-failure
+           10 terminate dot1x
+           20 authentication-restart 30
+          20 class always do-until-failure
+           10 terminate dot1x
+           20 authentication-restart 30
+         event agent-found match-all
+          10 class always do-until-failure
+           10 authenticate using dot1x priority 10
+        vlan 34
+         name IDENTITY-CLIENTS
+        ip dhcp excluded-address 10.10.34.1 10.10.34.99
+        ip dhcp excluded-address 10.10.34.200 10.10.34.254
+        ip dhcp pool IDENTITY-CLIENTS
+         network 10.10.34.0 255.255.255.0
+         default-router 10.10.34.1
+        interface GigabitEthernet1/0/1
+         description uplink to dCloud 198.18.128.0/18 (RADIUS to ISE)
+         no switchport
+         ip address 198.18.128.194 255.255.192.0
+         no shutdown
+        interface Vlan34
+         description client VLAN (gateway is the FTD inside 10.10.34.1)
+         ip address 10.10.34.2 255.255.255.0
+         no shutdown
+        interface GigabitEthernet1/0/2
+         description client (802.1X PEAP, AD user)
+         switchport mode access
+         switchport access vlan 34
+         device-tracking attach-policy MCP-DT
+         access-session host-mode single-host
+         access-session port-control auto
+         dot1x pae authenticator
+         dot1x timeout tx-period 5
+         spanning-tree portfast
+         service-policy type control subscriber MCP-DOT1X
+         no shutdown
+        interface GigabitEthernet1/0/3
+         description ftd inside (Ethernet0/1)
+         switchport mode access
+         switchport access vlan 34
+         spanning-tree portfast
+         no shutdown
+        ip route 0.0.0.0 0.0.0.0 198.18.128.1
+        crypto key generate rsa modulus 2048
+        ip ssh version 2
+        snmp-server community ${LAB_SNMP_RO} RO
+        snmp-server community ${LAB_SNMP_RW} RW
+        line con 0
+         exec-timeout 0 0
+         logging synchronous
+         login authentication CONSOLE
+        line vty 0 15
+         transport input ssh
+        end
+    - label: ftd
+      definition: ftdv
+      x: 200
+      y: 160
+      credentials: {username: admin, password: "${LAB_FTD_ADMIN_PASSWORD}"}
+      config: |
+        {
+          "EULA": "accept",
+          "Hostname": "mcp-ftd-identity",
+          "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+          "FirewallMode": "routed",
+          "DNS1": "198.18.133.1",
+          "DNS2": "",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "198.18.128.157",
+          "IPv4Mask": "255.255.192.0",
+          "IPv4Gw": "198.18.128.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "198.18.134.76",
+          "FmcRegKey": "${LAB_FTD_REG_KEY}",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+        }
+    - label: outside-host
+      definition: ubuntu
+      x: 400
+      y: 160
+      credentials: {username: cisco, password: cisco}
+      config: |
+        #cloud-config
+        hostname: outside-host
+        manage_etc_hosts: true
+        system_info:
+          default_user:
+            name: cisco
+            groups: [adm, sudo]
+            sudo: ['ALL=(ALL) NOPASSWD:ALL']
+            shell: /bin/bash
+            lock_passwd: false
+        password: cisco
+        chpasswd: {expire: false}
+        ssh_pwauth: true
+        package_update: true
+        packages: [telnetd]
+        write_files:
+          - path: /srv/www/index.html
+            permissions: '0644'
+            content: |
+              mcp outside-host (cml-mcp-server recipe ise-fmc-identity)
+          - path: /etc/systemd/system/mcp-http.service
+            content: |
+              [Unit]
+              Description=http on port 80 for the ise-fmc-identity recipe
+              After=network-online.target
+              [Service]
+              ExecStart=/usr/bin/python3 -m http.server 80 --bind 0.0.0.0 --directory /srv/www
+              Restart=always
+              [Install]
+              WantedBy=multi-user.target
+          # Ubuntu 24.04's telnetd comes without an inetd: a systemd socket starts it per connection
+          - path: /etc/systemd/system/mcp-telnet.socket
+            content: |
+              [Unit]
+              Description=telnet on port 23 (ise-fmc-identity)
+              [Socket]
+              ListenStream=23
+              Accept=yes
+              [Install]
+              WantedBy=sockets.target
+          - path: /etc/systemd/system/mcp-telnet@.service
+            content: |
+              [Unit]
+              Description=telnetd for one connection
+              [Service]
+              ExecStart=-/usr/sbin/telnetd
+              StandardInput=socket
+          - path: /etc/netplan/90-mcp-no-nat.yaml.off
+            permissions: '0600'
+            content: |
+              network:
+                version: 2
+                ethernets:
+                  ens2:
+                    routes: [{to: default, via: 172.31.34.1}]
+                  ens3:
+                    dhcp4: false
+                    optional: true
+        runcmd:
+          - systemctl daemon-reload
+          - systemctl enable --now mcp-http.service mcp-telnet.socket
+          # telnetd is installed (inetd): drop the NAT uplink, route via the FTD outside interface
+          - mv /etc/netplan/90-mcp-no-nat.yaml.off /etc/netplan/90-mcp-no-nat.yaml
+          - netplan apply
+          - ip link set ens3 down
+      files:
+        network-config: |
+          network:
+            version: 2
+            ethernets:
+              ens2:
+                addresses: [172.31.34.10/24]
+                optional: true
+              ens3:
+                dhcp4: true
+                optional: true
+    - label: client
+      definition: ubuntu
+      x: -200
+      y: 320
+      credentials: {username: cisco, password: cisco}
+      config: |
+        #cloud-config
+        hostname: identity-client
+        manage_etc_hosts: true
+        system_info:
+          default_user:
+            name: cisco
+            groups: [adm, sudo]
+            sudo: ['ALL=(ALL) NOPASSWD:ALL']
+            shell: /bin/bash
+            lock_passwd: false
+        password: cisco
+        chpasswd: {expire: false}
+        ssh_pwauth: true
+        package_update: true
+        packages: [wpasupplicant]
+        write_files:
+          - path: /etc/mcp-dot1x/mitchcloud-CA.pem
+            permissions: '0644'
+            content: |
+              -----BEGIN CERTIFICATE-----
+              MIIFbTCCA1WgAwIBAgIQIZO0leLk1btJeQSQzoqnxTANBgkqhkiG9w0BAQsFADBJMRMwEQYKCZIm
+              iZPyLGQBGRYDbGFiMRowGAYKCZImiZPyLGQBGRYKbWl0Y2hjbG91ZDEWMBQGA1UEAxMNbWl0Y2hj
+              bG91ZC1DQTAeFw0yNjEwMTYwMDMwMzRaFw0zNjEwMTYwMDQwMzJaMEkxEzARBgoJkiaJk/IsZAEZ
+              FgNsYWIxGjAYBgoJkiaJk/IsZAEZFgptaXRjaGNsb3VkMRYwFAYDVQQDEw1taXRjaGNsb3VkLUNB
+              MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA3hxepSovqvgUVKQb2BMAu81IsGRYWDLu
+              ErkjvMA3IDV/I3F6KOrfTw/qivJ93V5RNlPIINQNgbfEYOKb7zn9mMb/RPiHzQeUgSYLBYdiWKDK
+              AiHf2a2Ql62eqdmBa5puEK7CyV9o7tIucXGvkCoNVDEpehb+/pkqD12jX3tXyunbnVZ3t3Kk06OF
+              ghE8R3JR5O+QKpMZ1GlptdZcE7rgwy+HYhCBUv4be636Jf54MtGpXZ0p4ufjEzSEXRw2Y2gPX/Hk
+              V6wcATjIIRNG533uh+4qxPtIOSCcBGTTrjk41IDPPKiZIZU0aORZ6OYiUlamSBTHpwvCn/UWUT1T
+              brZ2IjYsDCPUW5dwb9vMBl/ZRQ2SumAPetwoaUjI1ywCaMOCJJT4uOKQEhsItWEfH/+gEekkaSTB
+              CHmyl4EtMtU3LGIGKL3v/VC/Cp9XlVqCL8jHiGBmf8t3te43z/4cnM56Kz+0ptyGyknQGEXB13gk
+              uhbOYDLROOhI0rkZ50bZbhx4k9q936sylYQfgXZ+HrJM89jyAp/Q/XCFJCcteErQSf5Ad5fbRBcB
+              oz9PazZcvDtNsQzhIlRNQNERzGgb1xQTsfHP52Yd3prLIrJ/lNeyzvFroGGneLwC2cPJC2+hGSuV
+              4+Dvlv5ChYaHCXJr2InuaWn/mH6QehlTG0by41Q0j6ECAwEAAaNRME8wCwYDVR0PBAQDAgGGMA8G
+              A1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFNXpaN+0s64dH5XygARYoEi9c2UvMBAGCSsGAQQBgjcV
+              AQQDAgEAMA0GCSqGSIb3DQEBCwUAA4ICAQBpZOH3TI+8W6zing4JnaMiz70bMtVx0qTXItJRZbBG
+              pd/Upqdn+wUWfVBmDYdBWl8ufBw/piuyKd67tq3koXyl38vOEzmOxZVexAtV/VVkq3irxc/6OrZD
+              X2hjEeO4nYJDgL5GySTUvh6VGoV8v3y26voEBQXK8cnBkInUsDiM/JHgidYyncq+qiiGniAZOl3h
+              0/Jv+2mFdCRs1VVnwEu6Uhj6T/jun2M9klFBLBJ0wPuNsQuXvyDENOtuNGoMssqoL6Iu7+JWarTV
+              a8sWdgZW8ydKTb7uoLt5726PnN+WPHNMc2oDzZcsrCyf+Ugnhz/+TU2aWhFuvoC/JqMVF7dNhDjU
+              3eHBjwb8xXXWp8WlpePIT2PUqRmb1Kn8d7H3Khq7ikfg+kaXmVjOLbdUPHk0LsMpD5zFarMVlK3E
+              FBb3Yi+fxp3rJwytBN7/+MdJRcLGa2NSoFFRcWij6VWdTtGmNpcwp3hrmUtSYs9YVzM4+9/8Mjc9
+              TXtdVbIVWfvqBkr1bD4WXCGrZKtUQMOrm2puEW+72OuFaL5rjZvidE6BPt+QJw2upkReAPR8jdNZ
+              39qtkrRRRnjGhrqL4hyo26oo8yPjZNJTB6OJmZ7A2EUVCo8nstc8p9X2ZIj/kQZMratA7CztcSsK
+              0tcBxaATp23lceK9bTgpzKclwf69sqnhww==
+              -----END CERTIFICATE-----
+          - path: /etc/mcp-dot1x/mcp-alice.conf
+            permissions: '0600'
+            content: |
+              ctrl_interface=DIR=/run/wpa_supplicant GROUP=sudo
+              ap_scan=0
+              network={
+                key_mgmt=IEEE8021X
+                eap=PEAP
+                identity="mcp-alice"
+                password="${LAB_AD_TEST_USER_PASSWORD}"
+                phase2="auth=MSCHAPV2"
+                ca_cert="/etc/mcp-dot1x/mitchcloud-CA.pem"
+                eapol_flags=0
+              }
+          - path: /etc/mcp-dot1x/mcp-bob.conf
+            permissions: '0600'
+            content: |
+              ctrl_interface=DIR=/run/wpa_supplicant GROUP=sudo
+              ap_scan=0
+              network={
+                key_mgmt=IEEE8021X
+                eap=PEAP
+                identity="mcp-bob"
+                password="${LAB_AD_TEST_USER_PASSWORD}"
+                phase2="auth=MSCHAPV2"
+                ca_cert="/etc/mcp-dot1x/mitchcloud-CA.pem"
+                eapol_flags=0
+              }
+          - path: /usr/local/sbin/mcp-dot1x-login
+            permissions: '0755'
+            content: |
+              #!/bin/sh
+              # Switch the 802.1X user on ens2 (cml-mcp-server recipe ise-fmc-identity):
+              #   mcp-dot1x-login alice|bob|logoff|status
+              conf=/etc/wpa_supplicant/wpa_supplicant-wired-ens2.conf
+              u=${1#mcp-}
+              case "$u" in
+                alice|bob)
+                  wpa_cli -i ens2 logoff >/dev/null 2>&1
+                  sleep 2
+                  install -m 600 /etc/mcp-dot1x/mcp-$u.conf $conf
+                  systemctl restart wpa_supplicant-wired@ens2
+                  i=0
+                  while [ $i -lt 60 ]; do
+                    wpa_cli -i ens2 status 2>/dev/null | grep -q '^suppPortStatus=Authorized' && break
+                    sleep 2; i=$((i+2))
+                  done
+                  networkctl renew ens2 >/dev/null 2>&1
+                  sleep 4 ;;
+                logoff)
+                  wpa_cli -i ens2 logoff >/dev/null 2>&1 && echo "logged off"
+                  exit 0 ;;
+                status) ;;
+                *) echo "usage: mcp-dot1x-login alice|bob|logoff|status" >&2; exit 2 ;;
+              esac
+              st=$(wpa_cli -i ens2 status 2>/dev/null)
+              user=$(sed -n 's/^ *identity="\(.*\)"/\1/p' $conf 2>/dev/null)
+              port=$(echo "$st" | sed -n 's/^suppPortStatus=//p')
+              eap=$(echo "$st" | sed -n 's/^EAP state=//p')
+              ip=$(ip -4 -o addr show ens2 | awk '{print $4}')
+              echo "user=$user port=${port:-unknown} eap=${eap:-unknown} ip=${ip:-none}"
+          - path: /usr/local/bin/mcp-check
+            permissions: '0755'
+            content: |
+              #!/bin/bash
+              # Read-only checks for cml_verify_recipe (recipe ise-fmc-identity):
+              #   mcp-check dot1x | tcp HOST PORT | http URL
+              case "$1" in
+                dot1x)
+                  st=$(wpa_cli -i ens2 status 2>/dev/null)
+                  echo "port=$(echo "$st" | sed -n 's/^suppPortStatus=//p') eap=$(echo "$st" | sed -n 's/^EAP state=//p')" ;;
+                tcp)
+                  if timeout 5 bash -c 'exec 3<>"/dev/tcp/$0/$1"' "$2" "$3" 2>/dev/null; then echo "tcp $2:$3 open"; else echo "tcp $2:$3 closed"; fi ;;
+                http)
+                  curl -s -o /dev/null -m 8 -w "http %{http_code} from %{remote_ip}\n" "$2" || echo "http failed ($2)" ;;
+                *) echo "usage: mcp-check dot1x | tcp HOST PORT | http URL" >&2; exit 2 ;;
+              esac
+          - path: /etc/netplan/90-mcp-no-nat.yaml.off
+            permissions: '0600'
+            content: |
+              network:
+                version: 2
+                ethernets:
+                  ens3:
+                    dhcp4: false
+                    optional: true
+        runcmd:
+          - install -m 600 /etc/mcp-dot1x/mcp-alice.conf /etc/wpa_supplicant/wpa_supplicant-wired-ens2.conf
+          - systemctl enable --now wpa_supplicant-wired@ens2
+          # wpasupplicant is installed: drop the NAT uplink so the only way out is the FTD
+          - mv /etc/netplan/90-mcp-no-nat.yaml.off /etc/netplan/90-mcp-no-nat.yaml
+          - netplan apply
+          - ip link set ens3 down
+      files:
+        network-config: |
+          network:
+            version: 2
+            ethernets:
+              ens2:
+                dhcp4: true
+                dhcp4-overrides: {route-metric: 100}
+                optional: true
+              ens3:
+                dhcp4: true
+                dhcp4-overrides: {route-metric: 500}
+                optional: true
+    - label: ext-nat
+      definition: external_connector
+      config: NAT
+      x: -400
+      y: 320
+    - label: ext-nat2
+      definition: external_connector
+      config: NAT
+      x: 600
+      y: 160
+  links:
+    - ext mgmt-sw
+    - sw1:GigabitEthernet1/0/1 mgmt-sw
+    - ftd:Management0/0 mgmt-sw
+    - sw1:GigabitEthernet1/0/2 client:ens2
+    - sw1:GigabitEthernet1/0/3 ftd:GigabitEthernet0/1
+    - ftd:GigabitEthernet0/0 outside-host:ens2
+    - client:ens3 ext-nat
+    - outside-host:ens3 ext-nat2

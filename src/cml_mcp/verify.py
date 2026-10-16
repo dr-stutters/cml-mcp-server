@@ -11,9 +11,12 @@ A contract (in the recipe YAML) lists what a known-good lab looks like:
         - {name: radius-server-up, node: sw1, command: "show aaa servers", expect: "current UP"}
         - {name: netconf, tcp: "198.18.128.152:830"}
         - {name: snmp, snmp: {host: 198.18.128.152, community: ${LAB_SNMP_RO}}}
+        - {name: ise-session, ise_session: {url: https://198.18.134.35, username: ${LAB_ISE_USERNAME},
+           password: ${LAB_ISE_PASSWORD}, user: '^mcp-alice$', nas_ip: 198.18.128.194}}
 
 Console probes run commands written in the packaged recipe (never caller input) over the node's
-console; tcp and snmp probes run from the MCP server's host, like the product server would.
+console; tcp, snmp and ise_session probes run from the MCP server's host, like the product server would
+(ise_session reads ISE's live sessions from MnT: proof that ISE itself authenticated the user).
 Every check is pass/fail with a short detail; nothing in the lab is changed.
 """
 
@@ -23,9 +26,12 @@ import asyncio
 import contextlib
 import re
 import time
+import xml.etree.ElementTree as ET
 from typing import Any
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+import httpx
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from stutters_mcp_core import InvalidRequest, UpstreamError
 
 from cml_mcp.build import VSWITCH_FILE, is_cat9kv, serial_of
@@ -52,17 +58,53 @@ TCP_TARGET = re.compile(r"^(?P<host>[A-Za-z0-9.:-]+):(?P<port>\d{1,5})$")
 
 
 class SnmpProbe(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)  # resolved ${LAB_*} values
+
     host: str
     community: str
     port: int = 161
 
 
+class IseSessionProbe(BaseModel):
+    """A live ISE session (MnT ActiveList) whose user matches `user` (regex), optionally from NAS `nas_ip`
+    and with a framed IP matching `framed_ip` (regex)."""
+
+    model_config = ConfigDict(hide_input_in_errors=True)  # resolved ${LAB_*} values
+
+    url: str = Field(description="ISE base URL, https://host[:port]")
+    username: str
+    password: str = Field(repr=False)
+    user: str = Field(description="regex the session's user name must match")
+    nas_ip: str | None = None
+    framed_ip: str | None = Field(default=None, description="regex the session's framed IP must match")
+    verify_tls: bool = True
+
+    @model_validator(mode="after")
+    def _check(self) -> IseSessionProbe:
+        u = urlsplit(self.url)
+        if u.scheme != "https" or not u.hostname or u.path not in ("", "/") or u.query or u.username:
+            raise ValueError("ise_session url must be https://host[:port]")
+        for rx in (self.user, self.framed_ip):
+            if rx:
+                re.compile(rx)
+        return self
+
+    @property
+    def host(self) -> str:
+        return str(urlsplit(self.url).hostname)
+
+
 # Console probes run outside the read-tier allow-list (they come only from packaged recipes), but
 # they must still be read-only or one of these known side-effect-free tests.
-PROBE_COMMAND_PREFIXES = ("test aaa group radius ",)  # sends one RADIUS request, changes no config
+PROBE_COMMAND_PREFIXES = (
+    "test aaa group radius ",  # sends one RADIUS request, changes no config
+    "mcp-check ",  # read-only check script a recipe installs on its Linux nodes (ise-fmc-identity)
+)
 
 
 class Probe(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)  # resolved ${LAB_*} values
+
     name: str
     node: str | None = None
     command: str | None = None
@@ -72,17 +114,21 @@ class Probe(BaseModel):
     interrupt_after: float | None = None
     tcp: str | None = None
     snmp: SnmpProbe | None = None
+    ise_session: IseSessionProbe | None = None
 
     @model_validator(mode="after")
     def _check(self) -> Probe:
-        actions = [a for a in (self.command, self.tcp, self.snmp) if a]
+        actions = [a for a in (self.command, self.tcp, self.snmp, self.ise_session) if a]
         if len(actions) != 1:
-            raise ValueError(f"probe {self.name!r}: give exactly one of command, tcp, snmp")
+            raise ValueError(f"probe {self.name!r}: give exactly one of command, tcp, snmp, ise_session")
         if self.command:
             if not self.node:
                 raise ValueError(f"probe {self.name!r}: a command needs a node")
-            if read_only_problem(self.command) and not self.command.startswith(PROBE_COMMAND_PREFIXES):
+            prefixed = self.command.startswith(PROBE_COMMAND_PREFIXES)
+            if read_only_problem(self.command) and not prefixed:
                 raise ValueError(f"probe {self.name!r}: {self.command!r} is not a read-only command")
+            if prefixed and "|" in self.command:
+                raise ValueError(f"probe {self.name!r}: no '|' after a probe-only command")
             if any(ch in FORBIDDEN_CHARS for ch in self.command):  # also for the allowed prefixes
                 raise ValueError(f"probe {self.name!r}: control or shell characters in {self.command!r}")
         if self.tcp:
@@ -99,6 +145,8 @@ class Probe(BaseModel):
 
 
 class Contract(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)  # resolved ${LAB_*} values
+
     booted: list[str] | None = None
     nodes: list[str] = []
     targets: list[str] = []
@@ -245,6 +293,73 @@ async def snmp_probe(p: SnmpProbe, timeout: float = 4.0) -> tuple[bool, str]:  #
         transport.close()
         if got.done() and not got.cancelled():
             got.exception()  # retrieved, so asyncio doesn't log it
+
+
+MNT_ACTIVE_LIST = "/admin/API/mnt/Session/ActiveList"
+MAX_MNT_BYTES = 4_000_000
+
+
+def active_sessions(xml_text: str) -> list[dict[str, str]]:
+    """ISE MnT ActiveList XML -> [{user_name, calling_station_id, nas_ip_address, framed_ip_address, ...}]."""
+    root = ET.fromstring(xml_text)
+    return [
+        {child.tag: (child.text or "").strip() for child in s}
+        for s in root.iter()
+        if s.tag.endswith("activeSession")
+    ]
+
+
+async def ise_session_probe(p: IseSessionProbe, timeout: float = 20.0) -> tuple[bool, Any]:  # noqa: ASYNC109
+    try:
+        async with (
+            httpx.AsyncClient(verify=p.verify_tls, timeout=timeout, follow_redirects=False) as client,
+            client.stream(
+                "GET",
+                p.url.rstrip("/") + MNT_ACTIVE_LIST,
+                auth=httpx.BasicAuth(p.username, p.password),
+                headers={"Accept": "application/xml"},
+            ) as r,
+        ):
+            if r.status_code in (401, 403):
+                return False, f"ISE MnT refused the API login (HTTP {r.status_code})"
+            if r.status_code != 200:
+                return False, f"ISE MnT answered HTTP {r.status_code}"
+            body = bytearray()
+            async for chunk in r.aiter_bytes():
+                body += chunk
+                if len(body) > MAX_MNT_BYTES:
+                    return False, "ISE MnT active list too large to check"
+    except httpx.HTTPError as e:
+        return False, f"ISE MnT at {p.host} not reachable: {type(e).__name__}"
+    text = body.decode("utf-8", "replace")
+    if "<!DOCTYPE" in text or "<!ENTITY" in text:  # MnT never sends them; refuse entity tricks
+        return False, "ISE MnT answered XML with a DOCTYPE/ENTITY; not parsed"
+    try:
+        sessions = active_sessions(text)
+    except ET.ParseError:
+        return False, "ISE MnT answered something that is not its session XML"
+    from_nas = [s for s in sessions if not p.nas_ip or s.get("nas_ip_address") == p.nas_ip]
+    users = [s for s in from_nas if re.search(p.user, s.get("user_name", ""))]
+    matches = [s for s in users if not p.framed_ip or re.search(p.framed_ip, s.get("framed_ip_address", ""))]
+
+    def row(s: dict[str, str]) -> dict[str, str]:
+        keys = ("user_name", "calling_station_id", "framed_ip_address", "nas_ip_address")
+        return {k: s[k] for k in keys if s.get(k)}
+
+    if matches:
+        return True, {"sessions": [row(s) for s in matches[:5]]}
+    where = f" from NAS {p.nas_ip}" if p.nas_ip else ""
+    if users:
+        return False, {
+            "problem": f"session{where} for the user, but its framed IP does not match {p.framed_ip!r} "
+            "(no device tracking / accounting yet?)",
+            "sessions": [row(s) for s in users[:5]],
+        }
+    return False, {
+        "problem": f"no live ISE session{where} with a user matching {p.user!r}",
+        "users_seen": sorted({s.get("user_name", "") for s in from_nas})[:10],
+        "active_sessions": len(sessions),
+    }
 
 
 # --- cat9000v serials ----------------------------------------------------------------------------
@@ -466,19 +581,32 @@ async def _verify_recipe(
             )
     # Notes are writable by any lab editor: substitutions read from them never redirect a network
     # probe (an SNMP probe sends the real community) to another host; the caller can pass them explicitly.
-    packaged = {p.name: p for p in contract_of(get_recipe(name)).probes} if from_notes else {}
+    # Probes are compared by position with the packaged recipe (a substitution can rename a probe, never
+    # add or drop one); a network probe whose target differs, or that has no packaged twin, is skipped.
+    packaged = contract_of(get_recipe(name)).probes if from_notes else None
     skipped: list[str] = []
-    for p in contract.probes:
-        was = packaged.get(p.name)
-        if was and (p.tcp != was.tcp or (p.snmp and was.snmp and p.snmp.host != was.snmp.host)):
-            skipped.append(p.name)
-            continue
+    for i, p in enumerate(contract.probes):
+        if packaged is not None and (p.tcp or p.snmp or p.ise_session):
+            was = packaged[i] if i < len(packaged) else None
+            if (
+                was is None
+                or p.tcp != was.tcp
+                or (p.snmp is None) != (was.snmp is None)
+                or (p.snmp and was.snmp and (p.snmp.host, p.snmp.port) != (was.snmp.host, was.snmp.port))
+                or (p.ise_session is None) != (was.ise_session is None)
+                or (p.ise_session and was.ise_session and p.ise_session.url != was.ise_session.url)
+            ):
+                skipped.append(p.name)
+                continue
         if p.tcp:
             ok, detail = await tcp_probe(p.tcp)
             checks.append(check(p.name, "tcp", ok, detail))
         elif p.snmp:
             ok, detail = await snmp_probe(p.snmp)
             checks.append(check(p.name, "snmp", ok, detail))
+        elif p.ise_session:
+            ok, detail = await ise_session_probe(p.ise_session)
+            checks.append(check(p.name, "ise_session", ok, detail))
     if skipped:
         out["skipped"] = {
             "checks": skipped,

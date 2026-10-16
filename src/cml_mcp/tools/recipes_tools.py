@@ -10,6 +10,8 @@ from fastmcp.tools import ToolResult
 from pydantic import Field
 from stutters_mcp_core import (
     Confirm,
+    InvalidRequest,
+    Plan,
     ResponseFormat,
     Tier,
     ToolRegistrar,
@@ -23,9 +25,12 @@ from stutters_mcp_core.http import page_of
 from cml_mcp.build import NodeSpec
 from cml_mcp.client import CmlApp
 from cml_mcp.console import mask_secrets
+from cml_mcp.netops import console_batch
 from cml_mcp.recipes import (
     get_recipe,
     placeholders,
+    read_recipe_marker,
+    recipe_actions,
     recipe_licensed_nodes,
     recipe_marker,
     recipe_names,
@@ -33,6 +38,7 @@ from cml_mcp.recipes import (
     secret_names_by_value,
     substituted,
 )
+from cml_mcp.safety import guarded_preview_or_apply
 from cml_mcp.tools.build_tool import build_lab_flow
 from cml_mcp.tools.common import shaped
 from cml_mcp.tools.lab_writes import Wait
@@ -123,6 +129,9 @@ def recipe_detail(name: str) -> Any:
                 "environment variables or the file named by CML_LAB_SECRETS_FILE (never returned by tools)",
                 "references": sorted(placeholders(r)),
                 "keys": sorted((r.get("credentials") or {}).keys()),
+            },
+            "actions": {
+                k: {"node": a["node"], "description": a["description"]} for k, a in recipe_actions(r).items()
             },
             "verify": {
                 "pings": f"{verify.get('nodes', [])} -> {verify.get('targets', [])}",
@@ -280,13 +289,106 @@ def register(reg: ToolRegistrar) -> None:
             lab_notes=recipe_marker(recipe, substitute),
         )
 
+    @reg.write(title="Run a recipe action")
+    async def cml_run_recipe_action(
+        ctx: Context,
+        recipe: RecipeName,
+        action: Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=64,
+                description="Action name from cml_list_recipes(recipe=...) -> actions, e.g. 'login-bob'",
+            ),
+        ],
+        lab: Annotated[
+            str | None,
+            Field(
+                description="A copy of the recipe's lab (cml_build_recipe(title=...)); default: its own lab"
+            ),
+        ] = None,
+        confirm: Confirm = None,
+    ) -> dict[str, Any]:
+        """Run one of a recipe's packaged actions on its running lab, e.g. ise-fmc-identity 'login-alice' /
+        'login-bob' (802.1X log-in on the client as that AD user, so ISE, and through pxGrid FMC, see the
+        other user) or 'logoff'. The command comes from the recipe, never from the caller; the result has
+        the node's output and whether it matched the action's expected result (ok). Preview-first."""
+        app: CmlApp = get_client(ctx)
+        r = get_recipe(recipe)
+        actions = recipe_actions(r)
+        if action not in actions:
+            raise InvalidRequest(
+                f"Recipe {recipe!r} has no action {action!r}; actions: {', '.join(actions) or 'none'}"
+            )
+        a = actions[action]
+        title = lab or r["build"]["title"]
+        info = await app.resolve_lab(title, exact=True)
+        marker = read_recipe_marker(
+            info.get("lab_notes") or (await app.api.get(f"/labs/{info['id']}")).get("lab_notes")
+        )
+        nodes = {str(n.get("label")): n for n in await app.list_nodes(str(info["id"]))}
+        node = nodes.get(a["node"])
+        blockers = []
+        if marker and marker["recipe"] != recipe:
+            blockers.append(f"Lab {title!r} was built from recipe {marker['recipe']!r}, not {recipe!r}")
+        elif not marker and title != r["build"]["title"]:
+            blockers.append(
+                f"Lab {title!r} has no record of being built from recipe {recipe!r} (cml_build_recipe "
+                "writes one); actions only run on the recipe's own lab or its recorded copies"
+            )
+        if node is None:
+            blockers.append(f"Lab {title!r} has no node {a['node']!r}")
+        elif node.get("state") != "BOOTED":
+            blockers.append(f"Node {a['node']!r} is {node.get('state')}; it must be BOOTED")
+        plan = Plan(
+            f"Run recipe action {action!r} on {a['node']!r} in lab {title!r}",
+            details={"description": a["description"], "node": a["node"], "command": a["command"]},
+            fingerprint=(node or {}).get("state"),
+            blockers=blockers,
+        )
+
+        async def apply() -> Any:
+            assert node is not None
+            batch = await console_batch(
+                app,
+                str(info["id"]),
+                [node],
+                lambda n, cred: [a["command"]],
+                timeout=a["timeout"],
+                purpose="cml_run_recipe_action",
+            )
+            res: dict[str, Any] = batch[0] if batch else {"error": "no console result"}
+            if res.get("error"):
+                return {"action": action, "node": a["node"], "ok": False, "error": res["error"]}
+            out: dict[str, Any] = (res.get("outputs") or [{}])[0]
+            text = str(out.get("output") or "")
+            ok = "error" not in out and (not a["expect"] or bool(re.search(a["expect"], text)))
+            result: dict[str, Any] = {
+                "action": action,
+                "node": a["node"],
+                "ok": ok,
+                "output": text.strip()[-1500:],
+            }
+            if "error" in out:
+                result["error"] = out["error"]
+            return result
+
+        return await guarded_preview_or_apply(
+            ctx,
+            tool="cml_run_recipe_action",
+            args={"recipe": recipe, "action": action, "lab": title, "node": a["node"]},
+            confirm=confirm,
+            plan=plan,
+            apply=apply,
+        )
+
     @reg.prompt(title="Build a test lab from a recipe", uses=["cml"], tier=Tier.WRITE)
     def cml_build_test_lab(
         recipe: Annotated[
             str,
             Field(
                 description="Recipe name: ftd-fmc (for FMC), ftd-ha (FMC HA pair), catc-routers (Catalyst "
-                "Center), ise-access (ISE)"
+                "Center), ise-access (ISE), ise-fmc-identity (ISE + FMC user-based firewall)"
             ),
         ],
         reuse: Annotated[

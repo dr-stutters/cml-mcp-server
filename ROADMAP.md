@@ -129,4 +129,4 @@ See the [suite roadmap](https://github.com/dr-stutters/stutters-mcp-core/blob/ma
 
 | # | Item | Milestone |
 |---|---|---|
-| [L34](https://github.com/dr-stutters/cml-mcp-server/issues/81) | `ise-fmc-identity` recipe (802.1X client behind the FTD) | Next |
+| [L34](https://github.com/dr-stutters/cml-mcp-server/issues/81) | `ise-fmc-identity` recipe (802.1X client behind the FTD) | ✅ v0.10.0 |

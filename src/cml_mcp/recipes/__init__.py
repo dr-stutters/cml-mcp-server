@@ -208,3 +208,39 @@ def read_recipe_marker(notes: Any) -> dict[str, Any] | None:
     if not isinstance(data.get("recipe"), str) or not isinstance(sub, dict):
         return None
     return {"recipe": data["recipe"], "substitute": {str(k): str(v) for k, v in sub.items()}}
+
+
+# Recipe actions (L34): named, packaged console commands that change a recipe lab's state the way a
+# test needs (e.g. log the 802.1X client in as another user). Callers pick an action by name; the
+# command itself always comes from the packaged recipe, never from tool input.
+def recipe_actions(recipe: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """{name: {description, node, command, expect, timeout}} of a recipe, validated."""
+    raw = recipe.get("actions") or {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"recipe {recipe.get('name')!r}: actions must be a mapping")
+    labels = {n.get("label") for n in recipe["build"].get("nodes") or []}
+    out: dict[str, dict[str, Any]] = {}
+    for name, a in raw.items():
+        if not isinstance(a, dict) or not isinstance(a.get("command"), str) or not a["command"].strip():
+            raise ValueError(f"recipe {recipe.get('name')!r}: action {name!r} needs a command")
+        if a.get("node") not in labels:
+            raise ValueError(f"recipe {recipe.get('name')!r}: action {name!r} names an unknown node")
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in a["command"]):
+            raise ValueError(f"recipe {recipe.get('name')!r}: action {name!r} has control characters")
+        if PLACEHOLDER.search(a["command"]):  # actions are sent as written: no secrets in them
+            raise ValueError(
+                f"recipe {recipe.get('name')!r}: action {name!r} must not carry ${{LAB_*}} references"
+            )
+        if a.get("expect"):
+            re.compile(a["expect"])
+        timeout = float(a.get("timeout") or 60)
+        if not 1 <= timeout <= 600:
+            raise ValueError(f"recipe {recipe.get('name')!r}: action {name!r} timeout must be 1-600 s")
+        out[str(name)] = {
+            "description": str(a.get("description") or ""),
+            "node": a["node"],
+            "command": a["command"],
+            "expect": a.get("expect"),
+            "timeout": timeout,
+        }
+    return out
