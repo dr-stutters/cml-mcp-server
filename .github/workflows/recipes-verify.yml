@@ -64,6 +64,9 @@ jobs:
           LAB_FTD_REG_KEY: ${{ secrets.LAB_FTD_REG_KEY }}
           LAB_FTD_ADMIN_PASSWORD: ${{ secrets.LAB_FTD_ADMIN_PASSWORD }}
           LAB_FTD_HA_ADMIN_PASSWORD: ${{ secrets.LAB_FTD_HA_ADMIN_PASSWORD }}
+          LAB_AD_TEST_USER_PASSWORD: ${{ secrets.LAB_AD_TEST_USER_PASSWORD }}
+          LAB_ISE_USERNAME: ${{ secrets.LAB_ISE_USERNAME }}
+          LAB_ISE_PASSWORD: ${{ secrets.LAB_ISE_PASSWORD }}
           RECIPES: ${{ inputs.recipes }}
           BUILD_MISSING: ${{ inputs.build_missing && '--build-missing' || '' }}
         run: |

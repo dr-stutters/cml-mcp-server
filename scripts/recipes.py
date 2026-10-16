@@ -7,6 +7,7 @@
     uv run python scripts/recipes.py stop catc-routers            # stop (keep the lab defined)
     uv run python scripts/recipes.py plan ise-access              # which labs would have to stop
     uv run python scripts/recipes.py swap ise-access [--yes]      # stop those (asks first), start/build it
+    uv run python scripts/recipes.py run ise-fmc-identity login-bob # a recipe action (cml_run_recipe_action)
     uv run python scripts/recipes.py ci [recipe ...] [--summary FILE] [--build-missing]
                                     # verify each recipe in turn; stops only the labs it started
 
@@ -196,7 +197,8 @@ def ci_markdown(rows: list[dict[str, Any]]) -> str:
 async def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
-        "action", choices=["list", "show", "build", "start", "wait", "verify", "stop", "plan", "swap", "ci"]
+        "action",
+        choices=["list", "show", "build", "start", "wait", "verify", "stop", "plan", "swap", "ci", "run"],
     )
     ap.add_argument("recipe", nargs="*")
     ap.add_argument("--start", action="store_true", help="build: start the lab after building it")
@@ -235,6 +237,16 @@ async def main() -> None:
             )
             else 1
         )
+    if args.action == "run":
+        if len(args.recipe) != 2:
+            sys.exit("usage: recipes.py run <recipe> <action>  (actions: recipes.py show <recipe>)")
+        name, action = args.recipe
+        load(name)
+        settings = live_settings(Settings, "CML_", mcp_enable_writes=True)
+        async with Client(create_server(settings), timeout=args.timeout + 120) as c:
+            out = await call(c, "cml_run_recipe_action", {"recipe": name, "action": action}, write=True)
+        print(json.dumps(out, indent=1, default=str))
+        raise SystemExit(0 if (out.get("result") or {}).get("ok") else 1)
     if len(args.recipe) > 1:
         sys.exit("give one recipe name")
     args.recipe = args.recipe[0] if args.recipe else None

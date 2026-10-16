@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.0 - 2026-10-16
+
+Wave 3 theme A (user-based firewalling end to end), L34. 73 tools (+1 write).
+
+### Added
+- Recipe `ise-fmc-identity` (lab `mcp-cml-identity`): an Ubuntu 802.1X client (wpa_supplicant, PEAP-MSCHAPv2, validates ISE
+  against mitchcloud-CA) logs in as AD user mcp-alice or mcp-bob on a cat9000v access switch (IBNS 2.0 dot1x, RADIUS + CoA to
+  ISE, device tracking so ISE's session carries the framed IP); the client VLAN's gateway is an FMC-managed FTDv
+  (`mcp-ftd-identity`, inside 10.10.34.1, outside 172.31.34.1, interface PAT) in front of an Ubuntu outside host with telnet (telnetd) and
+  http. Verify (21 checks): ISE live session for the user from the switch, client address behind the FTD, telnet + http to the
+  outside host through the FTD, FTD managed by FMC. `scripts/identity_lab.py up` creates the ISE NAD and the FMC side (zones,
+  ACP + baseline rule, NAT policy, registration, interfaces, deploy) through the ise/fmc servers' own tools; `--delete` removes it.
+- `cml_run_recipe_action` (write): run a recipe's packaged action, e.g. `ise-fmc-identity` `login-alice` / `login-bob` /
+  `logoff`; the command always comes from the recipe. `scripts/recipes.py run <recipe> <action>`. `cml_list_recipes(recipe=...)`
+  lists a recipe's actions.
+- Verify probe `ise_session`: a live session in ISE's MnT ActiveList (user regex, NAS IP, framed IP regex), credentials as
+  `${LAB_ISE_USERNAME}` / `${LAB_ISE_PASSWORD}`; never sent to a host substituted from lab notes. Console probes may run the
+  recipe-installed read-only `mcp-check` helper.
+
 ## 0.9.2 - 2026-10-15
 
 ### Fixed
