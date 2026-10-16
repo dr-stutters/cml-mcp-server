@@ -15,9 +15,17 @@
   builds the image from the bundled wheel.
 - `recipes-verify.yml` builds the bundled wheel and runs `scripts/recipes.py` with it installed (no token).
 
+- CI: the lab-secrets check (`ci.yml`) and `recipes-verify.yml` also get `LAB_DEFAULT_PASSWORD` (the lab's default
+  node password, now long enough to be searched for).
+- Docs: README "Live tests" lists the optional `CML_LIVE_*` / `CML_IMAGE_DIR` / least-privilege inputs (also in
+  `.env.example`); lab-only paths in `labs/README.md`, `docs/least-privilege.md` and `.env.example` made generic.
+
 ### Removed
 - The git source for stutters-mcp-core and `CORE_READ_TOKEN` (Dockerfile build secret, compose, workflows,
   `docs/ci-runner.md`).
+- `scripts/identity_lab.py` (product side of the `ise-fmc-identity` recipe for one specific lab: fixed addresses,
+  drives the ise/fmc servers through the suite's lab tooling). It moved to the suite's private lab repo; the
+  recipe's `ise_side` / `fmc_side` and `src/cml_mcp/recipes/README.md` describe what must exist on ISE and FMC.
 
 ## 0.10.0 - 2026-10-16
 
