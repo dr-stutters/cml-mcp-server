@@ -35,24 +35,88 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
   OpenAPI document. `cml_api_call` reaches any endpoint: GET in the read tier, other methods in the
   dangerous tier.
 
-## Quick start
+## Quickstart (5 minutes)
+
+You need: a CML account for the server, a regular (non-admin) user is enough (read-only to start: labs shared
+with it as `lab_view` + `lab_exec` and a resource pool with 0 node licences, see
+[docs/least-privilege.md](docs/least-privilege.md)). Never the built-in `admin`.
+
+**A. On your laptop (stdio), from a release wheel.** Every [GitHub release](https://github.com/dr-stutters/cml-mcp-server/releases)
+has a wheel with stutters-mcp-core bundled in; it needs only PyPI dependencies.
+
+```bash
+WHEEL=https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.11.0/cml_mcp_server-0.11.0-py3-none-any.whl
+export CML_URL=https://cml.example.com CML_USERNAME=mcp-cml-viewer CML_PASSWORD='...'
+uvx --from "$WHEEL" cml-mcp-server check            # preflight: reachability, TLS, login, version, admin flag
+claude mcp add cml -e CML_URL=$CML_URL -e CML_USERNAME=$CML_USERNAME -e CML_PASSWORD="$CML_PASSWORD" \
+  -- uvx --from "$WHEEL" cml-mcp-server              # stdio is the default transport
+```
+
+Claude Desktop (`claude_desktop_config.json`), same idea:
+
+```json
+{
+  "mcpServers": {
+    "cml": {
+      "command": "uvx",
+      "args": ["--from", "https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.11.0/cml_mcp_server-0.11.0-py3-none-any.whl", "cml-mcp-server"],
+      "env": {"CML_URL": "https://cml.example.com", "CML_USERNAME": "mcp-cml-viewer", "CML_PASSWORD": "..."}
+    }
+  }
+}
+```
+
+**B. On a shared host (HTTP), from the image.** Multi-arch (amd64/arm64), signed, with an SBOM:
+`ghcr.io/dr-stutters/cml-mcp-server:<version>` (or `:latest`).
+
+```bash
+docker run --rm -e CML_URL=https://cml.example.com -e CML_USERNAME=mcp-cml-viewer -e CML_PASSWORD='...' \
+  ghcr.io/dr-stutters/cml-mcp-server cml-mcp-server check
+docker run --rm ghcr.io/dr-stutters/cml-mcp-server cml-mcp-server token alice   # one token per person
+cp .env.example .env && chmod 600 .env    # CML_*, MCP_AUTH_TOKENS=alice:sha256:...
+docker compose up -d                      # pulls the image; http://localhost:8032/mcp
+```
+
+For a team, use [docs/deploying.md](docs/deploying.md): read-only by default, per-user tokens in the audit
+log, several controllers, the shared node-licence budget, TLS with Caddy, upgrades.
+
+**`check`** runs without an MCP client and exits 1 on a failure (`--json` for scripts, `--strict` to fail on
+warnings, `--instance training` for one controller). It reports reachability and TLS trust of the controller
+API, the login, the CML version against the tested matrix (2.10; 2.7 minimum), the API user's admin flag
+against the enabled tiers (an admin behind a read-only server warns; a regular user with the dangerous tier on
+warns that admin-only tools will fail) and, with writes on, the node licences the account may start (its
+resource pool, else the controller licence):
+
+```text
+  OK    config                 https://cml.example.com; tiers enabled: read, write
+  OK    reachability[api]      CML API answered; logged in as mcp-cml-operator (41 ms)
+  OK    tls                    certificate verified against the system trust store
+  OK    auth                   credentials accepted
+  OK    role                   role 'mcp-cml-operator (regular user)' allows the enabled tier(s): read, write
+  OK    version                Cisco Modeling Labs 2.10.0+build.13: tested
+  WARN  licences               resource pool 'mcp-cml-operator-pool' leaves 0 node licences free (12 of 12 in use): ...
+                               -> Raise the pool's licences (Tools > Resource Pools; ...) or stop labs (cml_plan_licences says which).
+```
+
+`cml-mcp-server serve --http` serves HTTP (needs `MCP_AUTH_TOKENS`); `cml-mcp-server config` shows the
+effective settings and where each came from, without contacting CML.
+
+### From source
 
 ```bash
 git clone https://github.com/dr-stutters/cml-mcp-server && cd cml-mcp-server
 python3 scripts/bundle_core.py vendor       # bundles the pinned stutters-mcp-core as cml_mcp._core (needs git)
 cp .env.example .env && chmod 600 .env      # set CML_URL, CML_USERNAME, CML_PASSWORD
 uv sync
-uv run cml-mcp-server check                 # connects and prints cml_status as JSON
-uv run cml-mcp-server config                # effective settings and where each came from (no CML contact)
+uv run cml-mcp-server check
 ```
 
 The shared [stutters-mcp-core](https://github.com/dr-stutters/stutters-mcp-core) library (with its `tasks` extra) is
 **bundled** into the package as `cml_mcp._core` (core ADR-005): the wheel, the sdist and the Docker image need
-nothing but their PyPI dependencies, with no git dependency and no token. `uv build` writes a wheel that installs on
-its own (`pip install dist/cml_mcp_server-*.whl`); every GitHub release has one attached. The pinned core tag is
-`[tool.bundle-core]` in `pyproject.toml` and `cml_status` reports it as `core_version`. The vendored copy is
-generated, not committed: `scripts/bundle_core.py vendor` writes it, `check` reports drift, and
-`update --tag vX.Y.Z` moves the pin (then `uv lock`). A plain git checkout has no `cml_mcp/_core`, so install
+nothing but their PyPI dependencies, with no git dependency and no token. `uv build` writes the wheel to `dist/`.
+The pinned core tag is `[tool.bundle-core]` in `pyproject.toml` and `cml_status` reports it as `core_version`.
+The vendored copy is generated, not committed: `scripts/bundle_core.py vendor` writes it, `check` reports drift,
+and `update --tag vX.Y.Z` moves the pin (then `uv lock`). A plain git checkout has no `cml_mcp/_core`, so install
 from a release wheel rather than `git+https://...`.
 
 ### Claude Code: stdio (local)
@@ -180,6 +244,7 @@ tool that fixes it.
 | `CML_URL` | (required) | Controller URL, e.g. `https://cml.example.com` |
 | `CML_USERNAME` / `CML_PASSWORD` | | API user (JWT login via `/api/v0/auth_extended`) |
 | `CML_TOKEN` | | A pre-issued JWT instead of username/password |
+| `CML_INSTANCES` | | More controllers, each with `CML_<NAME>_URL`, `_USERNAME`, `_PASSWORD`...; tools take an `instance` argument ([docs/deploying.md](docs/deploying.md)) |
 | `CML_VERIFY_SSL` | `true` | `false` for self-signed lab controllers (logged as a warning) |
 | `CML_CA_BUNDLE` | | CA file to verify the controller certificate |
 | `CML_TIMEOUT` / `CML_RETRIES` | `30` / `2` | Per-request timeout (s) and retries for idempotent calls |
@@ -220,13 +285,14 @@ created by `scripts/seed_lab.py --least-privilege`. Full guide: [docs/least-priv
 ## Docker (HTTP)
 
 ```bash
-uv run cml-mcp-server token alice      # copy the "name:sha256:..." line into .env as MCP_AUTH_TOKENS
-docker compose up -d --build           # no token: the image is built from the bundled wheel
+docker compose up -d                   # pulls ghcr.io/dr-stutters/cml-mcp-server (MCP_IMAGE_TAG, default latest)
+docker compose up -d --build           # or build from this checkout (no token: core is bundled)
 curl -s http://localhost:8032/health   # {"status":"ok"}
 ```
 
 The container runs as non-root on a read-only root filesystem with all capabilities dropped. The
-spec cache lives in a named volume.
+spec cache lives in a named volume. Shared hosts (TLS, several controllers, per-user tokens, the shared licence
+budget, upgrades): [docs/deploying.md](docs/deploying.md).
 
 ## Development
 

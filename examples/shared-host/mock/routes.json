@@ -1,0 +1,9 @@
+{
+  "POST /api/v0/authenticate": {"json": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTQwMDAtYTAwMC0wMDAwMDAwMGMwZGUiLCJleHAiOjQxMDI0NDQ4MDAsImlzcyI6ImNvbS5jaXNjby52aXJsIn0.mock"},
+  "GET /api/v0/system_information": {"json": {"version": "2.10.0+build.13", "ready": true, "allow_ssh_pubkey_auth": false}},
+  "GET /api/v0/users/00000000-0000-4000-a000-00000000c0de": {"json": {"id": "00000000-0000-4000-a000-00000000c0de", "username": "mcp-cml-viewer", "fullname": "mcp-cml-viewer (__NAME__)", "admin": false, "resource_pool": "00000000-0000-4000-a000-0000000000b0", "groups": []}},
+  "GET /api/v0/resource_pool_usage/00000000-0000-4000-a000-0000000000b0": {"json": {"id": "00000000-0000-4000-a000-0000000000b0", "label": "mcp-cml-viewer-pool", "limit": {"licenses": 0, "cpus": 0, "ram": 0}, "usage": {"licenses": 0, "cpus": 0, "ram": 0}}},
+  "GET /api/v0/system_health": {"json": {"valid": true, "computes": {"c1": {"hostname": "__NAME__", "is_controller": true, "kvm_vmx_enabled": true, "enough_cpus": true, "lld_connected": true, "valid": true, "admission_state": "READY"}}, "controller": {"core_connected": true, "nodes_loaded": true, "images_loaded": true, "valid": true}}},
+  "GET /api/v0/licensing": {"status": 403, "json": {"code": 403, "description": "User does not have administrator rights"}},
+  "GET /api/v0/labs": {"json": []}
+}
