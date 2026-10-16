@@ -2,7 +2,29 @@
 
 ## 0.11.0 (unreleased)
 
+### Added
+- **`cml-mcp-server check` preflight (L37, #4; core C21).** Runs without an MCP client: reachability and TLS
+  trust of the controller API, the login (the client's own `/auth_extended` login, falling back to
+  `/authenticate`; a CML 403 on login is reported as bad credentials), the CML version against the tested matrix
+  (2.10; 2.7 minimum), the API user's admin flag (`GET /users/<id>`) against the enabled tiers (warns when an
+  admin sits behind a read-only server, and when the dangerous tier is on for a regular user: image upload and
+  other users' labs need an admin) and, with writes on, the node licences the account may start (its resource
+  pool, else the controller licence; warns at 0 free or unknown). Text or `--json`, `--strict`, `--instance`;
+  exit 1 on a failure; every `CML_INSTANCES` controller. `serve --http` / `serve --stdio`. README quickstart
+  for a release wheel (`uvx --from`) and for the image, with Claude Code / Claude Desktop config. PyPI
+  publishing stays open (deferred).
+- **Published image (L36, #3; core C22).** `release.yml` calls core `publish-image.yml`:
+  `ghcr.io/dr-stutters/cml-mcp-server` for amd64 and arm64, cosign keyless signature, SPDX SBOM attestation;
+  `<version>` + `latest` on releases, `<version>-rcN` + `rc` on pre-release tags. `docker-compose.yml` pulls it
+  (`MCP_IMAGE_TAG`; `--build` still builds locally).
+- **Shared-host guide and example (L38, #5).** `docs/deploying.md` (read-only defaults, per-user tokens and the
+  audit log, the least-privilege account step by step, the node-licence budget shared by everyone using the
+  server, several controllers with `CML_INSTANCES`, console access, Caddy TLS, upgrades and verifying
+  signatures) and `examples/shared-host/` (server + Caddy, and a test override with two mocked controllers).
+  Contract tests pin the tier defaults (`tests/unit/test_tier_defaults.py`).
+
 ### Changed
+- Bundled core v0.14.0.
 - **stutters-mcp-core is bundled into the package (L35, #1; core C20 / ADR-005).** The wheel, sdist and image
   carry core v0.13.0 (with the `tasks` extra's dependencies) as `cml_mcp._core`, so installing needs no git
   dependency and Docker needs no `CORE_READ_TOKEN`. The pin is `[tool.bundle-core]` (tag + commit + extras) in

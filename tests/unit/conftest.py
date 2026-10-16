@@ -185,3 +185,10 @@ def lab_api(api: respx.MockRouter) -> respx.MockRouter:
         return_value=ok([i for i in fixture("image_definitions.json") if i["node_definition_id"] == "iol-xe"])
     )
     return api
+
+
+def make_server(**kw: Any) -> Any:
+    """A server from make_settings(**kw) (no controller contact until a tool runs)."""
+    from cml_mcp.server import create_server
+
+    return create_server(make_settings(**kw))

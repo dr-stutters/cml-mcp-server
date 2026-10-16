@@ -12,11 +12,12 @@ except ModuleNotFoundError as e:  # a source tree or git checkout without the bu
     ) from None
 
 from cml_mcp.config import Settings
+from cml_mcp.preflight import preflight
 from cml_mcp.server import SPEC, create_server
 
 
 def main() -> None:
-    run_cli(SPEC, Settings, create_server)
+    run_cli(SPEC, Settings, create_server, preflight=preflight)
 
 
 __all__ = ["SPEC", "Settings", "create_server", "main"]
