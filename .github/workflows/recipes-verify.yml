@@ -44,12 +44,14 @@ jobs:
         with:
           version: "0.10.9"
           python-version: "3.12"
-      - name: Install (private core via a per-step token, never written to the runner's git config)
-        env:
-          GIT_CONFIG_COUNT: "1"
-          GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.CORE_READ_TOKEN }}@github.com/.insteadOf
-          GIT_CONFIG_VALUE_0: https://github.com/
-        run: uv sync --locked
+      - name: Install the bundled wheel (L35; core vendored from the pinned tag, no token)
+        run: |
+          python3 scripts/bundle_core.py vendor
+          python3 scripts/bundle_core.py check
+          rm -rf dist && uv build --wheel
+          python3 scripts/bundle_core.py check --offline --dist dist
+          uv sync --locked --no-dev --no-install-project
+          uv pip install --no-deps dist/*.whl
       - name: Verify recipes
         env:
           CML_URL: ${{ secrets.CML_URL }}
@@ -75,4 +77,4 @@ jobs:
             echo "recipes: plain recipe names separated by spaces" >&2; exit 2
           fi
           # shellcheck disable=SC2086 - RECIPES is a word list on purpose
-          uv run python scripts/recipes.py ci $RECIPES $BUILD_MISSING --summary "$GITHUB_STEP_SUMMARY"
+          .venv/bin/python scripts/recipes.py ci $RECIPES $BUILD_MISSING --summary "$GITHUB_STEP_SUMMARY"

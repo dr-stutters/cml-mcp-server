@@ -39,11 +39,21 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 
 ```bash
 git clone https://github.com/dr-stutters/cml-mcp-server && cd cml-mcp-server
+python3 scripts/bundle_core.py vendor       # bundles the pinned stutters-mcp-core as cml_mcp._core (needs git)
 cp .env.example .env && chmod 600 .env      # set CML_URL, CML_USERNAME, CML_PASSWORD
 uv sync
 uv run cml-mcp-server check                 # connects and prints cml_status as JSON
 uv run cml-mcp-server config                # effective settings and where each came from (no CML contact)
 ```
+
+The shared [stutters-mcp-core](https://github.com/dr-stutters/stutters-mcp-core) library (with its `tasks` extra) is
+**bundled** into the package as `cml_mcp._core` (core ADR-005): the wheel, the sdist and the Docker image need
+nothing but their PyPI dependencies, with no git dependency and no token. `uv build` writes a wheel that installs on
+its own (`pip install dist/cml_mcp_server-*.whl`); every GitHub release has one attached. The pinned core tag is
+`[tool.bundle-core]` in `pyproject.toml` and `cml_status` reports it as `core_version`. The vendored copy is
+generated, not committed: `scripts/bundle_core.py vendor` writes it, `check` reports drift, and
+`update --tag vX.Y.Z` moves the pin (then `uv lock`). A plain git checkout has no `cml_mcp/_core`, so install
+from a release wheel rather than `git+https://...`.
 
 ### Claude Code: stdio (local)
 
@@ -211,12 +221,12 @@ created by `scripts/seed_lab.py --least-privilege`. Full guide: [docs/least-priv
 
 ```bash
 uv run cml-mcp-server token alice      # copy the "name:sha256:..." line into .env as MCP_AUTH_TOKENS
-CORE_READ_TOKEN=$(gh auth token) docker compose up -d --build
+docker compose up -d --build           # no token: the image is built from the bundled wheel
 curl -s http://localhost:8032/health   # {"status":"ok"}
 ```
 
 The container runs as non-root on a read-only root filesystem with all capabilities dropped. The
-spec cache lives in a named volume. `CORE_READ_TOKEN` is only needed while the core repo is private.
+spec cache lives in a named volume.
 
 ## Development
 

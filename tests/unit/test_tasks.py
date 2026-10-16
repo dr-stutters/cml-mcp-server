@@ -2,8 +2,8 @@
 
 import respx
 from fastmcp import Client
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.server import create_server
 
 from .conftest import make_settings

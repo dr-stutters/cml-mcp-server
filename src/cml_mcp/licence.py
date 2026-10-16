@@ -13,8 +13,7 @@ import time
 from collections import Counter
 from typing import Any
 
-from stutters_mcp_core import AuthError, InvalidRequest, NotFound, UpstreamError
-
+from cml_mcp._core import AuthError, InvalidRequest, NotFound, UpstreamError
 from cml_mcp.build import UNLICENSED_DEFINITIONS
 from cml_mcp.client import CmlApp
 

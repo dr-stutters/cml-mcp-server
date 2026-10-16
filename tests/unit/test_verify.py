@@ -6,8 +6,8 @@ from typing import Any
 import httpx
 import pytest
 import respx
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.console import ConsoleServer, ConsoleSession, Credentials
 from cml_mcp.recipes import get_recipe, recipe_names
 from cml_mcp.server import create_server
@@ -202,7 +202,7 @@ async def test_snmp_probe_against_loopback_responder() -> None:
 async def test_console_failure_fails_every_planned_check(
     lab_api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from stutters_mcp_core import Unreachable
+    from cml_mcp._core import Unreachable
 
     class Broken:
         async def __aenter__(self) -> ConsoleSession:
@@ -250,8 +250,7 @@ def test_substituted_rewrites_every_string() -> None:
     ],
 )
 def test_substitute_rejects_unsafe_mappings(mapping: dict[str, str]) -> None:
-    from stutters_mcp_core import InvalidRequest
-
+    from cml_mcp._core import InvalidRequest
     from cml_mcp.recipes import substituted
 
     with pytest.raises(InvalidRequest):

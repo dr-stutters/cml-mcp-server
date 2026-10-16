@@ -8,7 +8,8 @@ from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from pydantic import Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     Confirm,
     Plan,
     ToolRegistrar,
@@ -18,7 +19,6 @@ from stutters_mcp_core import (
     get_settings,
     poll_until,
 )
-
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
 from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed

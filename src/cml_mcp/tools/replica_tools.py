@@ -9,8 +9,8 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field
-from stutters_mcp_core import Tier, ToolRegistrar, get_client, tool_ref
 
+from cml_mcp._core import Tier, ToolRegistrar, get_client, tool_ref
 from cml_mcp.client import CmlApp
 from cml_mcp.licence import licence_usage
 from cml_mcp.replica import plan_replica

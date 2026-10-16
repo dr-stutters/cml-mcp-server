@@ -32,8 +32,8 @@ from urllib.parse import urlsplit
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-from stutters_mcp_core import InvalidRequest, UpstreamError
 
+from cml_mcp._core import InvalidRequest, UpstreamError
 from cml_mcp.build import VSWITCH_FILE, is_cat9kv, serial_of
 from cml_mcp.client import CmlApp
 from cml_mcp.console import FORBIDDEN_CHARS, Credentials, mask_secrets, read_only_problem

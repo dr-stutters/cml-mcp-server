@@ -7,7 +7,8 @@ from typing import Annotated, Any
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     Confirm,
     Plan,
     ResponseFormat,
@@ -15,8 +16,7 @@ from stutters_mcp_core import (
     get_client,
     list_result,
 )
-from stutters_mcp_core.http import page_of
-
+from cml_mcp._core.http import page_of
 from cml_mcp.client import CmlApp, pick_one
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.lab_writes import known_definitions

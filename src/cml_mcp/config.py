@@ -1,4 +1,4 @@
-"""Settings: CML_* for the controller, MCP_* for this server (see stutters_mcp_core.settings)."""
+"""Settings: CML_* for the controller, MCP_* for this server (see cml_mcp._core.settings)."""
 
 import re
 import ssl
@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Self
 
 from pydantic import Field, model_validator
-from stutters_mcp_core import BaseServerSettings, server_config
+
+from cml_mcp._core import BaseServerSettings, server_config
 
 
 class Settings(BaseServerSettings):

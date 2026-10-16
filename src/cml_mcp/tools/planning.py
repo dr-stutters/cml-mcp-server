@@ -7,8 +7,8 @@ from typing import Annotated, Any
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import NotFound, ToolRegistrar, get_client
 
+from cml_mcp._core import NotFound, ToolRegistrar, get_client
 from cml_mcp.client import CmlApp
 from cml_mcp.licence import (
     RUNNING_STATES,

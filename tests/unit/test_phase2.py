@@ -7,9 +7,9 @@ import httpx
 import pytest
 import respx
 from fastmcp import Client
-from stutters_mcp_core import AuthError, InvalidRequest, UpstreamError, UpstreamTimeout
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core import AuthError, InvalidRequest, UpstreamError, UpstreamTimeout
+from cml_mcp._core.testing import call_tool
 from cml_mcp.build import BuildError, NodeCredentials, NodeSpec, build_topology
 from cml_mcp.console import ConsoleSession, Credentials, auto_answer
 from cml_mcp.console import testbed_credentials as parse_testbed

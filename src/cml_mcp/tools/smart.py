@@ -9,7 +9,8 @@ from typing import Annotated, Any
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     InvalidRequest,
     ToolRegistrar,
     UpstreamError,
@@ -17,7 +18,6 @@ from stutters_mcp_core import (
     get_settings,
     poll_until,
 )
-
 from cml_mcp.client import CmlApp
 from cml_mcp.console import clean, mask_secrets
 from cml_mcp.convergence import wait_converged

@@ -5,8 +5,8 @@ from typing import Any
 import httpx
 import pytest
 import respx
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.console import ConsoleServer, ConsoleSession, Credentials
 from cml_mcp.recipes import get_recipe, recipe_actions, recipe_names
 from cml_mcp.server import create_server

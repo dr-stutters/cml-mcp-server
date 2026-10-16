@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 import respx
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.console import ConsoleServer, ConsoleSession, Credentials
 from cml_mcp.diff import diff_configs, normalise_config
 from cml_mcp.server import create_server
@@ -189,7 +189,7 @@ def test_banner_body_is_kept() -> None:
 
 
 def test_bad_ignore_regex() -> None:
-    from stutters_mcp_core import InvalidRequest
+    from cml_mcp._core import InvalidRequest
 
     with pytest.raises(InvalidRequest, match="bad regular expression"):
         diff_configs("a", "b", a_name="a", b_name="b", ignore=["("])

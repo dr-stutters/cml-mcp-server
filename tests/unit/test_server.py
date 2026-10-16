@@ -4,8 +4,8 @@ import httpx
 import pytest
 import respx
 from fastmcp import Client
-from stutters_mcp_core.testing import assert_tool_contract, call_tool
 
+from cml_mcp._core.testing import assert_tool_contract, call_tool
 from cml_mcp.client import cml_error_detail, jwt_claims
 from cml_mcp.server import create_server
 

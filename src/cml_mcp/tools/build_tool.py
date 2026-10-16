@@ -6,7 +6,8 @@ from typing import Annotated, Any
 
 from fastmcp import Context
 from pydantic import Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     Confirm,
     InvalidRequest,
     Plan,
@@ -15,7 +16,6 @@ from stutters_mcp_core import (
     get_client,
     get_settings,
 )
-
 from cml_mcp.build import (
     UNLICENSED_DEFINITIONS,
     VSWITCH_FILE,

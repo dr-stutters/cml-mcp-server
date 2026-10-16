@@ -28,8 +28,8 @@ from typing import Any
 
 import yaml
 from fastmcp import Client
-from stutters_mcp_core.testing import live_settings
 
+from cml_mcp._core.testing import live_settings
 from cml_mcp.config import Settings
 from cml_mcp.recipes import get_recipe, recipe_names
 from cml_mcp.server import create_server

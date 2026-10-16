@@ -8,8 +8,8 @@ import httpx
 import pytest
 import respx
 from fastmcp import Client
-from stutters_mcp_core import InvalidRequest
 
+from cml_mcp._core import InvalidRequest
 from cml_mcp.images import check_name, list_image_files, multipart, resolve_image_file
 from cml_mcp.server import create_server
 
