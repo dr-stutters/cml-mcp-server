@@ -1,12 +1,16 @@
-# cml-mcp-server over streamable HTTP on port 8032.
+# cml-mcp-server over streamable HTTP on port 8032. Shared hosts: docs/deploying.md.
 #
-#   cp .env.example .env    # set CML_URL/USERNAME/PASSWORD and MCP_AUTH_TOKENS (cml-mcp-server token <name>)
-#   docker compose up -d --build
+#   cp .env.example .env && chmod 600 .env   # CML_URL/USERNAME/PASSWORD and MCP_AUTH_TOKENS (one token per person)
+#   docker compose up -d            # pulls ghcr.io/dr-stutters/cml-mcp-server (MCP_IMAGE_TAG, default latest)
+#   docker compose up -d --build    # or build from this checkout (MCP_PULL_POLICY=build keeps the local image)
+#
+# Read-only unless .env sets MCP_ENABLE_WRITES=true (and MCP_ENABLE_DANGEROUS=true for wipes, deletes, uploads).
 services:
   cml-mcp-server:
+    image: ghcr.io/dr-stutters/cml-mcp-server:${MCP_IMAGE_TAG:-latest}
+    pull_policy: ${MCP_PULL_POLICY:-always}
     build:
       context: .
-    image: cml-mcp-server:latest
     container_name: cml-mcp-server
     restart: unless-stopped
     env_file:
