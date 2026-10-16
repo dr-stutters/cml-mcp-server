@@ -244,8 +244,20 @@ Note: CML caps running licensed nodes across all labs (an unregistered controlle
 mode allows 5; the test controller is now Enterprise with 20 + 50 expansion = 70). Unmanaged
 switches and external connectors don't count. `cml_plan_licences` shows the cap and which labs to stop.
 
+### Live tests
+
 Live tests build throwaway labs named `mcp-test-*` from fast-booting IOL nodes, run every tool,
-and always delete what they created.
+and always delete what they created. They read the controller from `.env` (`CML_URL` plus a login) and skip
+without one. Optional inputs (commented in `.env.example`); the tests that need them skip when they are unset:
+
+| Variable | Example | Used by |
+|---|---|---|
+| `CML_IMAGE_DIR` | `/srv/cml-images` | `test_live_images.py`: local directory the image is uploaded from |
+| `CML_LIVE_IMAGE_FILE` | `cat8000v-universalk9_16G_serial.17.16.01a.qcow2` | `test_live_images.py`: a disk image file in `CML_IMAGE_DIR` |
+| `CML_LIVE_IMAGE_NODE_DEFINITION` | `cat8000v` (the default) | `test_live_images.py`: node definition for that image |
+| `CML_RO_USERNAME` / `CML_RO_PASSWORD`, `CML_RW_USERNAME` / `CML_RW_PASSWORD` | `mcp-cml-viewer`, `mcp-cml-operator` | `test_least_privilege.py` (`scripts/seed_lab.py --least-privilege`) |
+
+`-m live_recipes` verifies only recipe labs that are already running on the controller.
 
 ## Licence
 

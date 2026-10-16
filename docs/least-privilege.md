@@ -110,5 +110,5 @@ tests/live/test_live_write.py tests/live/test_live_dangerous.py tests/live/test_
 
 ## 6. Lab rebuild
 
-`scripts/seed_lab.py --least-privilege` recreates both users, groups and pools; `~/MCP-Suite/LAB-REBUILD.md`
-lists it under CML, and `rebuild-lab.sh` step 7 runs it.
+`scripts/seed_lab.py --least-privilege` recreates both users, groups and pools; run it (as the admin in `.env`)
+after rebuilding a controller. The suite's lab rebuild runbook (private stutters-mcp-lab repo) does.
