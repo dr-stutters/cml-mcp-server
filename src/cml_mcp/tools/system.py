@@ -6,8 +6,8 @@ from typing import Any
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
-from stutters_mcp_core import AuthError, NotFound, ToolRegistrar, UpstreamError, get_client
 
+from cml_mcp._core import AuthError, NotFound, ToolRegistrar, UpstreamError, get_client
 from cml_mcp.client import CmlApp, health_summary, licensing_summary
 from cml_mcp.licence import RUNNING_STATES, licensed, running_nodes
 from cml_mcp.tools.common import gib, shaped

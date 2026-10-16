@@ -5,8 +5,8 @@ from collections.abc import Callable
 
 import pytest
 import respx
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.console import ConsoleBusy, ConsoleServer, ConsoleSession, Credentials, OpenConsole, SessionLost
 from cml_mcp.convergence import slow_forwarding_hint
 from cml_mcp.server import create_server

@@ -5,9 +5,9 @@ from typing import Any
 import httpx
 from fastmcp import FastMCP
 from fastmcp.server.auth import AuthProvider
-from stutters_mcp_core import ServerSpec, build_server
-from stutters_mcp_core.spec import SpecSource
 
+from cml_mcp._core import ServerSpec, build_server
+from cml_mcp._core.spec import SpecSource
 from cml_mcp.client import CmlApp
 from cml_mcp.config import Settings
 from cml_mcp.redaction import LabSecretRedactor

@@ -7,8 +7,8 @@ Only labs that are already running are verified: this suite never starts or stop
 """
 
 import pytest
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.config import Settings
 from cml_mcp.recipes import get_recipe, recipe_names
 from cml_mcp.server import create_server

@@ -26,8 +26,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastmcp import Context
-from stutters_mcp_core import NotFound, Plan, get_client, get_settings, preview_or_apply
 
+from cml_mcp._core import NotFound, Plan, get_client, get_settings, preview_or_apply
 from cml_mcp.client import RESOLVED_LABS, CmlApp
 
 # Tools that act on every node of a lab (blast radius = node count).

@@ -44,10 +44,7 @@ dispatch only (the nightly schedule is commented out in the workflow).
 - Consider registering the runner with `--ephemeral` (one job per registration, clean `_work`);
   it then needs re-registering after every run, so it suits an automated re-register script.
 - **Least-privilege tokens:**
-  - `CORE_READ_TOKEN`: a fine-grained PAT with *Contents: read* on `dr-stutters/stutters-mcp-core`
-    only. The workflow passes it to `git` through per-step environment variables
-    (`GIT_CONFIG_COUNT`), so it is never written to the runner's `~/.gitconfig` (the reusable
-    `python-ci` workflow uses `git config --global`, which would persist on a self-hosted runner).
+  - No token for core: it is bundled into the wheel the job builds (L35, core ADR-005).
   - CML account: today the admin account (licence planning reads `/system` and every lab's nodes).
     Once roadmap L17 (non-admin support) lands, use a dedicated CML user instead.
 - `actions/checkout` runs with `persist-credentials: false`, so the job's `GITHUB_TOKEN` is not
@@ -95,7 +92,7 @@ dispatch only (the nightly schedule is commented out in the workflow).
 
 1. Settings > Environments > **New environment** `cml-lab`:
    - secrets `CML_URL` (`https://198.18.128.10`), `CML_USERNAME`, `CML_PASSWORD` (from
-     `~/MCP-Suite/cml-mcp-server/.env`), `CORE_READ_TOKEN` (the fine-grained PAT above);
+     `~/MCP-Suite/cml-mcp-server/.env`);
    - *Deployment branches and tags* = **Selected branches: `main`** (required);
    - recommended: *Required reviewers* = you (paid plan for private repositories).
 2. Settings > Secrets and variables > Actions > **Variables** > `RECIPE_CI_ENABLED` = `true`.

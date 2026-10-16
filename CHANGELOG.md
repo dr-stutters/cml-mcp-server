@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.11.0 (unreleased)
+
+### Changed
+- **stutters-mcp-core is bundled into the package (L35, #1; core C20 / ADR-005).** The wheel, sdist and image
+  carry core v0.13.0 (with the `tasks` extra's dependencies) as `cml_mcp._core`, so installing needs no git
+  dependency and Docker needs no `CORE_READ_TOKEN`. The pin is `[tool.bundle-core]` (tag + commit + extras) in
+  `pyproject.toml`; core's runtime dependencies are listed in the server's own. `scripts/bundle_core.py` vendors it
+  (`vendor`, after a clone), checks for drift (`check`) and moves the pin (`update --tag`). Code, tests and scripts
+  import `cml_mcp._core`; importing the package without the bundle says how to fix it.
+- `cml_status` reports the bundled core version (`server.core_version`).
+- CI: the core `bundle-core.yml` job vendors, fails on drift, builds the wheel and sdist, installs the wheel
+  with `pip install --no-index` in a clean venv and runs the unit + contract suite against it. The release
+  builds the image from the bundled wheel.
+- `recipes-verify.yml` builds the bundled wheel and runs `scripts/recipes.py` with it installed (no token).
+
+### Removed
+- The git source for stutters-mcp-core and `CORE_READ_TOKEN` (Dockerfile build secret, compose, workflows,
+  `docs/ci-runner.md`).
+
 ## 0.10.0 - 2026-10-16
 
 Wave 3 theme A (user-based firewalling end to end), L34. 73 tools (+1 write).

@@ -19,7 +19,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from stutters_mcp_core.writes import field_changes
+from cml_mcp._core.writes import field_changes
 
 log = logging.getLogger(__name__)
 

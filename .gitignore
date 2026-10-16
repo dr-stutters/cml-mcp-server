@@ -25,3 +25,6 @@ tests/fixtures/raw/
 .vscode/
 .idea/
 .DS_Store
+
+# stutters-mcp-core, vendored at build time (scripts/bundle_core.py vendor)
+src/cml_mcp/_core/

@@ -4,8 +4,8 @@ from collections.abc import Iterator
 
 import pytest
 from fastmcp import Client
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.config import Settings
 from cml_mcp.server import create_server
 

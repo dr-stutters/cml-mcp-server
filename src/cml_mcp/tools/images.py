@@ -11,8 +11,8 @@ from urllib.parse import quote
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import Confirm, InvalidRequest, NotFound, Plan, ToolRegistrar, get_client, get_settings
 
+from cml_mcp._core import Confirm, InvalidRequest, NotFound, Plan, ToolRegistrar, get_client, get_settings
 from cml_mcp.client import CmlApp
 from cml_mcp.images import (
     check_name,

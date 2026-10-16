@@ -19,7 +19,7 @@ TITLE = "mcp-test-live-scenarios"
 
 @pytest.fixture(scope="module")
 def lab() -> Iterator[str]:
-    from stutters_mcp_core.testing import live_settings
+    from cml_mcp._core.testing import live_settings
 
     from .conftest import ROOT
 

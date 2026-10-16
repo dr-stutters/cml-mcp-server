@@ -7,8 +7,8 @@ from typing import Any
 import httpx
 import pytest
 import respx
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.pcap import PcapError, matches, read_pcap, summarise
 from cml_mcp.server import create_server
 

@@ -82,7 +82,7 @@ async def test_wake_logs_in() -> None:
 
 
 async def test_wake_without_credentials_fails_cleanly() -> None:
-    from stutters_mcp_core import AuthError
+    from cml_mcp._core import AuthError
 
     s = ConsoleSession(FakeDevice(lambda t: "\r\nUsername: "), Credentials(), timeout=2)
     with pytest.raises(AuthError, match="pyATS username"):
@@ -98,7 +98,7 @@ async def test_run_ignores_late_syslog_prompt() -> None:
 
 
 async def test_run_times_out() -> None:
-    from stutters_mcp_core import UpstreamTimeout
+    from cml_mcp._core import UpstreamTimeout
 
     dev = FakeDevice(ios())
     s = ConsoleSession(dev, Credentials(enable="cisco"), timeout=2)
@@ -191,8 +191,7 @@ def fake_console(monkeypatch: pytest.MonkeyPatch) -> list[Credentials]:
 
 
 async def test_run_commands_tool(lab_api: object, fake_console: list[Credentials]) -> None:
-    from stutters_mcp_core.testing import call_tool
-
+    from cml_mcp._core.testing import call_tool
     from cml_mcp.server import create_server
 
     from .conftest import LID, make_settings
@@ -265,7 +264,7 @@ def test_show_filters_allowed_and_secrets_masked() -> None:
 
 
 async def test_errors_redact_passwords() -> None:
-    from stutters_mcp_core import UpstreamTimeout
+    from cml_mcp._core import UpstreamTimeout
 
     s = ConsoleSession(
         FakeDevice(lambda t: "", banner="Password: hunter2 echoed"), Credentials("u", "hunter2"), 1

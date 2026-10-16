@@ -14,9 +14,9 @@ from typing import Any
 import pytest
 from dotenv import dotenv_values
 from fastmcp import Client
-from stutters_mcp_core.testing import as_caller, live_settings
-from stutters_mcp_core.testing.least_privilege import read_tier_report
 
+from cml_mcp._core.testing import as_caller, live_settings
+from cml_mcp._core.testing.least_privilege import read_tier_report
 from cml_mcp.client import CmlApp
 from cml_mcp.config import Settings
 from cml_mcp.least_privilege import seed_least_privilege

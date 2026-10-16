@@ -12,9 +12,9 @@ from contextvars import ContextVar
 from typing import Any
 
 import httpx
-from stutters_mcp_core import InvalidRequest, NotFound, UpstreamError
-from stutters_mcp_core.http import ApiClient, LoginTokenAuth, NoPaging, RateLimiter, StaticHeaderAuth, Token
 
+from cml_mcp._core import InvalidRequest, NotFound, UpstreamError
+from cml_mcp._core.http import ApiClient, LoginTokenAuth, NoPaging, RateLimiter, StaticHeaderAuth, Token
 from cml_mcp.config import Settings
 from cml_mcp.console import ConsoleServer
 from cml_mcp.scenarios import FlapManager

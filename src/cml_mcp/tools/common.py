@@ -10,8 +10,8 @@ from typing import Annotated, Any
 import yaml
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import InvalidRequest, compact, object_result
 
+from cml_mcp._core import InvalidRequest, compact, object_result
 from cml_mcp.client import CmlApp
 
 LabRef = Annotated[str, Field(description="Lab title or id (see cml_list_labs)")]

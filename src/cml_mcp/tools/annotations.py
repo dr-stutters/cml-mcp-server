@@ -9,7 +9,8 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import BaseModel, Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     Confirm,
     Plan,
     ResponseFormat,
@@ -17,8 +18,7 @@ from stutters_mcp_core import (
     get_client,
     list_result,
 )
-from stutters_mcp_core.http import page_of
-
+from cml_mcp._core.http import page_of
 from cml_mcp.client import CmlApp
 from cml_mcp.licence import licensed
 from cml_mcp.netops import address_commands, console_batch, parse_addresses

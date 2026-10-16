@@ -2,8 +2,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from stutters_mcp_core.testing import live_settings
 
+from cml_mcp._core.testing import live_settings
 from cml_mcp.config import Settings
 
 ROOT = Path(__file__).resolve().parents[2]

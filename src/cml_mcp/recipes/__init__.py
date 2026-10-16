@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from stutters_mcp_core import InvalidRequest
 
+from cml_mcp._core import InvalidRequest
 from cml_mcp.build import UNLICENSED_DEFINITIONS
 
 RECIPE_DIR = Path(__file__).resolve().parent
