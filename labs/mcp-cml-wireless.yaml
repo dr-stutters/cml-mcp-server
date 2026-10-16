@@ -179,7 +179,7 @@ nodes:
           aaa accounting identity MCP-ISE start-stop group radius
           radius server ISE
            address ipv4 198.18.134.35 auth-port 1812 acct-port 1813
-           key ${LAB_FTD_REG_KEY}
+           key ${LAB_RADIUS_SECRET}
           interface GigabitEthernet1
            description management to dCloud 198.18.128.0/18
            no switchport
@@ -276,10 +276,10 @@ nodes:
                 nas_identifier=mcp-cml-ap
                 auth_server_addr=198.18.134.35
                 auth_server_port=1812
-                auth_server_shared_secret=${LAB_FTD_REG_KEY}
+                auth_server_shared_secret=${LAB_RADIUS_SECRET}
                 acct_server_addr=198.18.134.35
                 acct_server_port=1813
-                acct_server_shared_secret=${LAB_FTD_REG_KEY}
+                acct_server_shared_secret=${LAB_RADIUS_SECRET}
                 ctrl_interface=/var/run/hostapd
             - path: /etc/systemd/system/mcp-hostapd.service
               content: |

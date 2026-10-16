@@ -2,6 +2,12 @@
 
 ## 0.11.0 (unreleased)
 
+### Fixed
+- `labs/mcp-cml-wireless.yaml`: the WLC's RADIUS key and the hostapd AP's RADIUS shared secrets referenced
+  `${LAB_FTD_REG_KEY}` instead of `${LAB_RADIUS_SECRET}` (the two held the same value until the lab rotated them).
+  A unit test (`tests/unit/test_lab_secret_refs.py`) now checks that lab exports and recipes use
+  `LAB_FTD_REG_KEY` only for FMC registration and `LAB_RADIUS_SECRET` never for it.
+
 ### Added
 - **`cml-mcp-server check` preflight (L37, #4; core C21).** Runs without an MCP client: reachability and TLS
   trust of the controller API, the login (the client's own `/auth_extended` login, falling back to
