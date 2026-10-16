@@ -4,7 +4,7 @@
 
 ### Changed
 - **stutters-mcp-core is bundled into the package (L35, #1; core C20 / ADR-005).** The wheel, sdist and image
-  carry core v0.12.4 (with the `tasks` extra's dependencies) as `cml_mcp._core`, so installing needs no git
+  carry core v0.13.0 (with the `tasks` extra's dependencies) as `cml_mcp._core`, so installing needs no git
   dependency and Docker needs no `CORE_READ_TOKEN`. The pin is `[tool.bundle-core]` (tag + commit + extras) in
   `pyproject.toml`; core's runtime dependencies are listed in the server's own. `scripts/bundle_core.py` vendors it
   (`vendor`, after a clone), checks for drift (`check`) and moves the pin (`update --tag`). Code, tests and scripts
