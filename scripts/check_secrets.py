@@ -1,7 +1,7 @@
 """Fail when lab secrets appear in tracked files (L21). Run in CI and before committing recipe changes.
 
     uv run python scripts/check_secrets.py                       # values from LAB_* environment variables
-    uv run python scripts/check_secrets.py --secrets-file ~/MCP-Suite/lab-secrets.env
+    uv run python scripts/check_secrets.py --secrets-file /path/to/lab-secrets.env
 
 Two checks over `git ls-files`:
 1. **Known values**: every LAB_* value (from the environment and/or the dotenv file) must not occur in any
