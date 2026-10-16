@@ -122,3 +122,11 @@ Core gate items that also apply to this server: [G1](https://github.com/dr-stutt
 - **Syslog from lab devices into this server:** console logs cover test labs. Product-side syslog belongs to the fmc server.
 - **pyATS/Genie as a dependency:** the console path stays dependency-light (asyncssh). Parsers are added per need.
 - **Sharing labs with groups:** now testable (Enterprise licence). Revisit with L17.
+
+
+## Wave 3 (planned 2026-10-16)
+See the [suite roadmap](https://github.com/dr-stutters/stutters-mcp-core/blob/main/ROADMAP.md#wave-3-planned-2026-10-16).
+
+| # | Item | Milestone |
+|---|---|---|
+| [L34](https://github.com/dr-stutters/cml-mcp-server/issues/81) | `ise-fmc-identity` recipe (802.1X client behind the FTD) | Next |
