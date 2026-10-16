@@ -6,7 +6,8 @@ from typing import Annotated, Any
 
 from fastmcp import Context
 from pydantic import Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     Confirm,
     Plan,
     ToolRegistrar,
@@ -14,7 +15,6 @@ from stutters_mcp_core import (
     get_settings,
     poll_until,
 )
-
 from cml_mcp.client import CmlApp
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, LinkRef, NodeRef, load_topo, state_counts

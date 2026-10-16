@@ -19,7 +19,8 @@ from urllib.parse import urlparse
 
 import asyncssh
 import yaml
-from stutters_mcp_core import AuthError, InvalidRequest, Unreachable, UpstreamError, UpstreamTimeout
+
+from cml_mcp._core import AuthError, InvalidRequest, Unreachable, UpstreamError, UpstreamTimeout
 
 log = logging.getLogger(__name__)
 

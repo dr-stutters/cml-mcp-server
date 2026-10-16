@@ -6,8 +6,8 @@ import pytest
 import respx
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.server import create_server
 
 from .conftest import LAB, LID, LINK, R1, make_settings

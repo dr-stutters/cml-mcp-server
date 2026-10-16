@@ -8,9 +8,9 @@ import yaml
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import ResponseFormat, ToolRegistrar, get_client, list_result
-from stutters_mcp_core.http import page_of
 
+from cml_mcp._core import ResponseFormat, ToolRegistrar, get_client, list_result
+from cml_mcp._core.http import page_of
 from cml_mcp.client import CmlApp
 from cml_mcp.tools.common import shaped
 

@@ -6,8 +6,7 @@ import difflib
 import re
 from typing import Any, Literal
 
-from stutters_mcp_core import InvalidRequest
-
+from cml_mcp._core import InvalidRequest
 from cml_mcp.console import mask_secrets
 
 NODE_FIELDS = ("node_definition", "image_definition", "ram", "cpus", "cpu_limit", "boot_disk_size", "tags")

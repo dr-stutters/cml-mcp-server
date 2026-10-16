@@ -5,8 +5,8 @@ from typing import Any
 import httpx
 import respx
 from fastmcp import Client
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.licence import compact_usage, nodes_ram_mb, ram_check
 from cml_mcp.server import create_server
 

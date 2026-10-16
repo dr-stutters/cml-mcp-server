@@ -19,8 +19,8 @@ from typing import Any
 
 import anyio
 import httpx
-from stutters_mcp_core import InvalidRequest, UpstreamError
 
+from cml_mcp._core import InvalidRequest, UpstreamError
 from cml_mcp.client import CmlApp
 
 # What CML's upload accepts (virl2_client EXTENSION_LIST, CML 2.10).

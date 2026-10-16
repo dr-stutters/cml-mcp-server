@@ -8,7 +8,8 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     InvalidRequest,
     ResponseFormat,
     ToolRegistrar,
@@ -17,8 +18,7 @@ from stutters_mcp_core import (
     object_result,
     text_result,
 )
-from stutters_mcp_core.http import page_of
-
+from cml_mcp._core.http import page_of
 from cml_mcp.client import CmlApp
 from cml_mcp.console import clean
 from cml_mcp.licence import licensed

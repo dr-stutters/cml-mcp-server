@@ -6,8 +6,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from stutters_mcp_core import NotFound
-
+from cml_mcp._core import NotFound
 from cml_mcp.client import CmlApp
 
 # Least-privilege accounts (L17, docs/least-privilege.md). Passwords come from the server's .env

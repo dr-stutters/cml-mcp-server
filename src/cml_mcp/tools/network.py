@@ -10,9 +10,9 @@ from typing import Annotated, Any
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import InvalidRequest, ResponseFormat, ToolRegistrar, get_client, list_result
-from stutters_mcp_core.http import page_of
 
+from cml_mcp._core import InvalidRequest, ResponseFormat, ToolRegistrar, get_client, list_result
+from cml_mcp._core.http import page_of
 from cml_mcp.client import CmlApp
 from cml_mcp.console import read_only_problem
 from cml_mcp.netops import Command, console_batch, ping_command, ping_result

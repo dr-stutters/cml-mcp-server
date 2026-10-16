@@ -4,8 +4,8 @@ from typing import Any
 
 import httpx
 import respx
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core.testing import call_tool
 from cml_mcp.licence import capacity_from_licensing, licence_blocker, plan_stops, preferred_to_stop
 from cml_mcp.recipes import get_recipe, recipe_for_lab, recipe_licensed_nodes, recipe_names
 from cml_mcp.server import create_server

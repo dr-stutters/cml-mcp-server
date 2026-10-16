@@ -10,8 +10,7 @@ import re
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from stutters_mcp_core import InvalidRequest, UpstreamError, UpstreamTimeout
-
+from cml_mcp._core import InvalidRequest, UpstreamError, UpstreamTimeout
 from cml_mcp.client import CmlApp
 from cml_mcp.console import ConsoleSession, Credentials, mask_secrets, testbed_credentials
 

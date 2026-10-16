@@ -6,8 +6,8 @@ import httpx
 import pytest
 import respx
 from fastmcp import Client
-from stutters_mcp_core.testing import assert_prompt_contract, call_tool
 
+from cml_mcp._core.testing import assert_prompt_contract, call_tool
 from cml_mcp.recipes import get_recipe, recipe_names
 from cml_mcp.server import create_server
 from cml_mcp.tools.recipes_tools import recipe_detail, recipe_secrets

@@ -1,6 +1,8 @@
 """L20: CML safety rails (protected/managed labs, blast radius, device command deny-list, TLS pinning)."""
 
 import importlib.metadata
+import importlib.resources
+import json
 import ssl
 from pathlib import Path
 from typing import Any
@@ -9,8 +11,9 @@ import pytest
 import respx
 from fastmcp import Client
 from pydantic import ValidationError
-from stutters_mcp_core.testing import call_tool
 
+from cml_mcp._core import __version__ as core_version
+from cml_mcp._core.testing import call_tool
 from cml_mcp.safety import denied_lines, lab_matches
 from cml_mcp.server import create_server
 
@@ -267,8 +270,7 @@ async def test_recipe_lab_config_reads_are_redacted(lab_api: respx.MockRouter) -
 
 
 def test_substitute_cannot_repoint_secret_references(monkeypatch: pytest.MonkeyPatch) -> None:
-    from stutters_mcp_core import InvalidRequest
-
+    from cml_mcp._core import InvalidRequest
     from cml_mcp.recipes import check_substitute, resolve_secrets
 
     with pytest.raises(InvalidRequest):
@@ -323,4 +325,7 @@ async def test_status_reports_server_version(api: respx.MockRouter) -> None:
     data = await call_tool(create_server(make_settings()), "cml_status")
     assert "server_version" not in data["cml"]  # core reports it under server
     assert data["server"]["server_version"] == importlib.metadata.version("cml-mcp-server")
-    assert data["server"]["core_version"] == importlib.metadata.version("stutters-mcp-core")
+    # L35: core is bundled as cml_mcp._core; status reports that copy's version
+    bundle = json.loads((importlib.resources.files("cml_mcp._core") / "BUNDLE.json").read_text())
+    assert data["server"]["core_version"] == core_version == bundle["version"]
+    assert "tasks" in bundle["extras"]

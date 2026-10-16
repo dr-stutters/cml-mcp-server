@@ -12,7 +12,7 @@ import re
 from typing import Any
 from xml.sax.saxutils import quoteattr
 
-from stutters_mcp_core import InvalidRequest
+from cml_mcp._core import InvalidRequest
 
 MCP_Z = 42  # marker z_index of annotations written by cml-mcp-server
 

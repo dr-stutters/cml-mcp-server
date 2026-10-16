@@ -3,8 +3,8 @@
 import httpx
 import pytest
 import respx
-from stutters_mcp_core.testing import assert_prompt_contract, call_tool, load_tool_manifests
 
+from cml_mcp._core.testing import assert_prompt_contract, call_tool, load_tool_manifests
 from cml_mcp.replica import map_platform, plan_replica
 from cml_mcp.server import create_server
 

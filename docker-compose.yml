@@ -1,13 +1,11 @@
 # cml-mcp-server over streamable HTTP on port 8032.
 #
 #   cp .env.example .env    # set CML_URL/USERNAME/PASSWORD and MCP_AUTH_TOKENS (cml-mcp-server token <name>)
-#   CORE_READ_TOKEN=... docker compose up -d --build
+#   docker compose up -d --build
 services:
   cml-mcp-server:
     build:
       context: .
-      secrets:
-        - core_read_token
     image: cml-mcp-server:latest
     container_name: cml-mcp-server
     restart: unless-stopped
@@ -33,10 +31,6 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-
-secrets:
-  core_read_token:
-    environment: CORE_READ_TOKEN
 
 volumes:
   spec-cache:

@@ -10,7 +10,8 @@ from typing import Annotated, Any
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     Confirm,
     InvalidRequest,
     NotFound,
@@ -19,7 +20,6 @@ from stutters_mcp_core import (
     UpstreamError,
     get_client,
 )
-
 from cml_mcp.client import CmlApp
 from cml_mcp.pcap import PcapError, matches, pcap_truncated, read_pcap, summarise
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply

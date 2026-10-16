@@ -6,8 +6,8 @@ import time
 from typing import Any
 
 from fastmcp import Context
-from stutters_mcp_core import InvalidRequest, poll_until
 
+from cml_mcp._core import InvalidRequest, poll_until
 from cml_mcp.client import CmlApp
 from cml_mcp.tools.common import state_counts
 

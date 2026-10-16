@@ -8,7 +8,8 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     Confirm,
     InvalidRequest,
     Plan,
@@ -17,7 +18,6 @@ from stutters_mcp_core import (
     get_client,
     get_settings,
 )
-
 from cml_mcp.client import CmlApp
 from cml_mcp.console import Credentials, mask_secrets, read_only_problem, strip_route_legend
 from cml_mcp.netops import console_batch, lab_credentials, prepare

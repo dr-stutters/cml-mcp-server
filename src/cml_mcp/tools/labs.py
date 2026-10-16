@@ -8,16 +8,16 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
-from stutters_mcp_core import (
+
+from cml_mcp._core import (
     ResponseFormat,
     ToolRegistrar,
     get_client,
     list_result,
     text_result,
 )
-from stutters_mcp_core.formatting import MASK
-from stutters_mcp_core.http import page_of
-
+from cml_mcp._core.formatting import MASK
+from cml_mcp._core.http import page_of
 from cml_mcp.client import CmlApp
 from cml_mcp.tools.common import ACCESS_KEYS, LabRef, Topo, drop_keys, load_topo, shaped, state_counts
 
