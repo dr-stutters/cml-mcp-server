@@ -200,6 +200,24 @@ def test_lab_secrets_file_and_env_override(
     assert lab_secrets(str(tmp_path / "missing.env"))["LAB_SNMP_RO"] == "from-env"  # type: ignore[operator]
 
 
+def test_lab_ca_pem_from_file(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cml_mcp._core import InvalidRequest
+    from cml_mcp.recipes import lab_secrets, resolve_secrets
+
+    pem = tmp_path / "lab-ca.pem"  # type: ignore[operator]
+    pem.write_text("-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n")
+    with pytest.raises(InvalidRequest, match="LAB_CA_PEM_FILE"):
+        resolve_secrets("  ${LAB_CA_PEM}", None)
+    monkeypatch.setenv("LAB_CA_PEM_FILE", str(pem))
+    values = lab_secrets(None)
+    assert "LAB_CA_PEM_FILE" not in values  # a path, not a value to fill in or redact
+    assert resolve_secrets("  ${LAB_CA_PEM}", None) == (
+        "  -----BEGIN CERTIFICATE-----\n  AAAA\n  -----END CERTIFICATE-----"
+    )
+    monkeypatch.setenv("LAB_CA_PEM", "inline wins")
+    assert lab_secrets(None)["LAB_CA_PEM"] == "inline wins"
+
+
 async def test_list_recipes_shows_secret_names_not_values(api: respx.MockRouter) -> None:
     detail = await call_tool(create_server(make_settings()), "cml_list_recipes", {"recipe": "ftd-fmc"})
     assert detail["credentials"]["references"] == ["LAB_FTD_ADMIN_PASSWORD", "LAB_FTD_REG_KEY"]

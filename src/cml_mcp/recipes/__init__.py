@@ -44,8 +44,28 @@ def placeholders(value: Any) -> set[str]:
     return set(PLACEHOLDER.findall(value)) if isinstance(value, str) else set()
 
 
+# A placeholder alone on its line (a multi-line value is filled there, at the line's indent).
+PLACEHOLDER_LINE = re.compile(r"^([ \t]*)\$\{(LAB_[A-Z0-9_]+)\}[ \t]*$", re.M)
+FILL = re.compile(f"{PLACEHOLDER_LINE.pattern}|{PLACEHOLDER.pattern}", re.M)
+
+
+def _strings(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        return [s for v in value.values() for s in _strings(v)]
+    if isinstance(value, list):
+        return [s for v in value for s in _strings(v)]
+    return [value] if isinstance(value, str) else []
+
+
+def _inline_placeholders(text: str) -> set[str]:
+    """${LAB_*} names used somewhere other than alone on their line."""
+    return placeholders(PLACEHOLDER_LINE.sub("", text))
+
+
 def lab_secrets(secrets_file: str | None) -> dict[str, str]:
-    """LAB_* values: the dotenv-style `secrets_file` (if given and present), overridden by LAB_* env vars."""
+    """LAB_* values: the dotenv-style `secrets_file` (if given and present), overridden by LAB_* env vars.
+    LAB_CA_PEM (the lab CA certificate) can instead come from the file named by LAB_CA_PEM_FILE, as for
+    the lab import script; that path is not itself a value."""
     values: dict[str, str] = {}
     if secrets_file:
         path = Path(os.path.expanduser(secrets_file))
@@ -54,6 +74,10 @@ def lab_secrets(secrets_file: str | None) -> dict[str, str]:
 
             values.update({k: v for k, v in dotenv_values(path).items() if k.startswith("LAB_") and v})
     values.update({k: v for k, v in os.environ.items() if k.startswith("LAB_") and v})
+    if (ca_file := values.pop("LAB_CA_PEM_FILE", None)) and "LAB_CA_PEM" not in values:
+        path = Path(os.path.expanduser(ca_file))
+        if path.is_file():
+            values["LAB_CA_PEM"] = path.read_text().strip()
     return values
 
 
@@ -89,21 +113,36 @@ def redact_values(value: Any, mapping: dict[str, str]) -> Any:
 def resolve_secrets(value: Any, secrets_file: str | None, *, what: str = "this recipe") -> Any:
     """`value` with every ${LAB_*} placeholder filled in. Raises InvalidRequest naming the missing
     variables (never any value). Only call this on what is sent to CML or used by a probe; previews,
-    listings and annotations keep the placeholders."""
+    listings and annotations keep the placeholders.
+
+    A multi-line value (e.g. LAB_CA_PEM, a PEM certificate) is only filled where its placeholder stands
+    alone on its line, as inside a YAML block scalar: each of its lines at that line's indent."""
     names = placeholders(value)
     if not names:
         return value
     values = lab_secrets(secrets_file)
     missing = sorted(n for n in names if n not in values)
-    multiline = sorted(n for n in names if n in values and ("\n" in values[n] or "\r" in values[n]))
-    if multiline:
-        raise InvalidRequest(f"Lab secret(s) {', '.join(multiline)} contain a line break; one line each.")
     if missing:
         raise InvalidRequest(
             f"{what} needs the lab secret(s) {', '.join(missing)}: set them as environment variables of "
             "the cml-mcp-server process or in the file named by CML_LAB_SECRETS_FILE (dotenv format, e.g. "
             "/path/to/lab-secrets.env). Recipes never store the values."
+            + (" LAB_CA_PEM_FILE can name the lab CA's PEM file instead." if "LAB_CA_PEM" in missing else "")
         )
+    multiline = {n for n in names if "\n" in values[n] or "\r" in values[n]}
+    inline = set().union(*(_inline_placeholders(s) for s in _strings(value)))
+    if bad := sorted(multiline & inline):
+        raise InvalidRequest(
+            f"Lab secret(s) {', '.join(bad)} contain a line break: a multi-line value must stand alone on "
+            "its line (inside a YAML block scalar)."
+        )
+
+    def fill(m: re.Match[str]) -> str:
+        if m.group(2) in multiline:  # alone on its line: every line of the value at that line's indent
+            return "\n".join(
+                m.group(1) + line.strip() if line.strip() else "" for line in values[m.group(2)].splitlines()
+            )
+        return PLACEHOLDER.sub(lambda p: values[p.group(1)], m.group(0))
 
     def walk(v: Any) -> Any:
         if isinstance(v, dict):
@@ -111,7 +150,7 @@ def resolve_secrets(value: Any, secrets_file: str | None, *, what: str = "this r
         if isinstance(v, list):
             return [walk(x) for x in v]
         if isinstance(v, str):
-            return PLACEHOLDER.sub(lambda m: values[m.group(1)], v)
+            return FILL.sub(fill, v)  # one pass: a filled value is never scanned again
         return v
 
     return walk(value)
