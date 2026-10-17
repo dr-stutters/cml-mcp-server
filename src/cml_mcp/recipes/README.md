@@ -66,11 +66,18 @@ Gotchas found while building them:
 Recipes never contain secret values. Device passwords, the FMC registration key, RADIUS keys and SNMP
 communities are written as `${LAB_*}` references, the same names as `labs/*.yaml`:
 `LAB_CLI_PASSWORD`, `LAB_SNMP_RO`, `LAB_SNMP_RW`, `LAB_RADIUS_SECRET`, `LAB_FTD_REG_KEY`,
-`LAB_FTD_ADMIN_PASSWORD`, `LAB_FTD_HA_ADMIN_PASSWORD`. `cml_build_recipe` and `cml_verify_recipe` fill them
+`LAB_FTD_ADMIN_PASSWORD`, `LAB_FTD_HA_ADMIN_PASSWORD`, `LAB_CA_PEM`. `cml_build_recipe` and `cml_verify_recipe` fill them
 in from `LAB_*` environment variables, or from the dotenv file named by `CML_LAB_SECRETS_FILE`. A missing value
 is an error that names the variable. Previews, `cml_list_recipes` and the lab annotations show only the
 references, and every tool result or error that would contain a resolved value (e.g. reading back a
-built lab's day-0 config) shows the reference instead. `scripts/check_secrets.py` (CI) fails if a value or a literal credential is committed.
+built lab's day-0 config) shows the reference instead.
+
+The lab CA certificate is a reference too: `${LAB_CA_PEM}` stands alone on a line inside a YAML block scalar
+(`ise-fmc-identity`'s client writes it to `/etc/mcp-dot1x/mitchcloud-CA.pem` to validate ISE's PEAP
+certificate). Every DC rebuild makes a new root, so no recipe embeds one. Set `LAB_CA_PEM` to the PEM, or
+`LAB_CA_PEM_FILE` to its path (the variable `import_lab.py` uses for `labs/*.yaml`). A multi-line value is only
+filled where its placeholder is alone on its line: each PEM line goes in at that line's indent, so the
+surrounding cloud-init stays valid YAML. Anywhere else it is an error. `scripts/check_secrets.py` (CI) fails if a value or a literal credential is committed.
 
 ## Verify contracts
 

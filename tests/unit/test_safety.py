@@ -278,6 +278,35 @@ def test_substitute_cannot_repoint_secret_references(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("LAB_X", "two\nlines")
     with pytest.raises(InvalidRequest, match="line break"):
         resolve_secrets("x ${LAB_X}", None)
+    with pytest.raises(InvalidRequest, match="stand alone on its line"):  # even if also used alone elsewhere
+        resolve_secrets(["a:\n  ${LAB_X}\n", "secret ${LAB_X}"], None)
+
+
+def test_multiline_secret_fills_a_block_scalar_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    import yaml
+
+    from cml_mcp.recipes import resolve_secrets
+
+    monkeypatch.setenv(
+        "LAB_CA_PEM", "-----BEGIN CERTIFICATE-----\r\nAAAA\r\n\r\nBBBB\n-----END CERTIFICATE-----\n"
+    )
+    doc = "files:\n  - content: |\n      ${LAB_CA_PEM}  \n    path: /ca.pem\nkey: ${LAB_SNMP_RO}\n"
+    out = resolve_secrets({"cfg": doc}, None)["cfg"]
+    assert (
+        "      -----BEGIN CERTIFICATE-----\n      AAAA\n\n      BBBB\n      -----END CERTIFICATE-----\n"
+        in out
+    )
+    parsed = yaml.safe_load(out)
+    assert parsed["files"][0]["content"].startswith("-----BEGIN CERTIFICATE-----\nAAAA\n")
+    assert parsed["files"][0]["path"] == "/ca.pem" and parsed["key"] == "fake-ro"
+
+
+def test_filled_values_are_not_scanned_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    from cml_mcp.recipes import resolve_secrets
+
+    monkeypatch.setenv("LAB_CA_PEM", "line1\n${LAB_SNMP_RO}")
+    monkeypatch.setenv("LAB_X", "${LAB_SNMP_RW}")
+    assert resolve_secrets("  ${LAB_CA_PEM}\n${LAB_X}", None) == "  line1\n  ${LAB_SNMP_RO}\n${LAB_SNMP_RW}"
 
 
 async def test_wireless_capture_refuses_wired_nodes(lab_api: respx.MockRouter) -> None:

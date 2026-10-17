@@ -10,7 +10,12 @@ not running configs) with two changes:
   environment or a lab secrets dotenv file (not in git) and imports the lab.
   Placeholders: `LAB_CLI_PASSWORD`, `LAB_DEFAULT_PASSWORD`, `LAB_SNMP_RO`, `LAB_SNMP_RW`,
   `LAB_RADIUS_SECRET`, `LAB_FTD_ADMIN_PASSWORD`, `LAB_FTD_HA_ADMIN_PASSWORD`, `LAB_FTD_REG_KEY`,
-  `LAB_AD_ADMIN_PASSWORD`.
+  `LAB_AD_ADMIN_PASSWORD`, `LAB_AD_TEST_USER_PASSWORD`.
+- **Lab CA certificate as a placeholder**: `${LAB_CA_PEM}` stands alone on a line inside a YAML block scalar
+  (`mcp-cml-identity`'s client writes it to `/etc/mcp-dot1x/mitchcloud-CA.pem` for PEAP server validation).
+  `import_lab.py` replaces that line with the lab AD CS root certificate (`lab-ca/mitchcloud-CA.pem` in the
+  private lab repo), each PEM line at the placeholder's indent. Every DC rebuild makes a new root, so no export
+  embeds one.
 - **Interface MAC addresses pinned** to the live values. ISE endpoints learned by MAB (client
   `52:54:00:61:3D:9E`) and the CatC PnP DHCP binding depend on them; without pinning CML assigns new
   MACs. Import each lab only once per controller.
@@ -25,7 +30,7 @@ CML .190-.199.
 | Start | Lab | Owner | Purpose | Nodes (licensed) | Addresses | Boot |
 |---:|---|---|---|---|---|---|
 | 1 | `mcp-ise-infra` | ISE | Samba AD DC `MCP.LAB` + OpenSSL lab CA on Ubuntu `dc1` (cloud-init installs Samba; needs internet via .1) | dc1 ubuntu (1) | dc1 198.18.128.180 | ~10 min incl. apt |
-| 2 | `mcp-cml-ise` | ISE (recipe `ise-access`) | cat9000v access switch, 802.1X/MAB to ISE (TACACS+ lines are added after boot by the rebuild), Alpine client (DHCP on VLAN 10) + NAT connector on client eth1 | sw1 cat9000v-uadp, client alpine (2) | sw1 198.18.128.154; client 10.10.10.x (DHCP), MAC 52:54:00:61:3D:9E | ~8-10 min |
+| 2 | `mcp-cml-ise` | ISE (recipe `ise-access`) | cat9000v access switch, 802.1X/MAB to ISE (TACACS+ lines are added after boot by the rebuild), Alpine client (DHCP on VLAN 10) + NAT connector on client eth1, Ubuntu `eaptls-client` on Gi1/0/3 (802.1X EAP-TLS with a CA it makes at first boot, as in the recipe) + NAT connector `ext-nat` on its ens3 | sw1 cat9000v-uadp, client alpine, eaptls-client ubuntu (3) | sw1 198.18.128.154; client 10.10.10.x (DHCP), MAC 52:54:00:61:3D:9E; eaptls-client 10.10.10.50 | ~8-10 min (eaptls-client +3 min apt) |
 | 3 | `mcp-cml-catc` | CatC (recipe `catc-routers`) | two cat8000v discovered/provisioned by Catalyst Center | r1, r2 cat8000v (2) | r1 198.18.128.152, r2 .153 | ~6 min |
 | 4 | `mcp-cml-ftd` | FMC (recipe `ftd-fmc` + additions) | FTDv managed by FMC; inside host and IOL BGP/OSPF peer | ftd1 ftdv, inside-host alpine, peer1 iol-xe (3) | ftd1 mgmt .151, outside .155; inside 10.99.1.1/24, inside-host .10, peer1 .2 | 15-30 min |
 | 5 | `mcp-fmc-ha` | FMC (F8/F10/F11) | FTDv HA pair for FMC, failover link Gi0/2 <-> Gi0/2 | ftd2, ftd3 ftdv, inside-host2 alpine (3) | ftd2 mgmt .161, ftd3 .162, outside .163/.164; inside 10.99.2.0/24, host .10 | 15-30 min |

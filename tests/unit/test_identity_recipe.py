@@ -46,11 +46,27 @@ def test_recipe_shape() -> None:
     assert "ftd:GigabitEthernet0/0 outside-host:ens2" in links
     client = next(n for n in r["build"]["nodes"] if n["label"] == "client")["config"]
     assert "${LAB_AD_TEST_USER_PASSWORD}" in client and 'identity="mcp-alice"' in client
-    assert 'identity="mcp-bob"' in client and "BEGIN CERTIFICATE" in client  # validates ISE via mitchcloud-CA
+    assert 'identity="mcp-bob"' in client and "${LAB_CA_PEM}" in client  # validates ISE via mitchcloud-CA
     sw1 = next(n for n in r["build"]["nodes"] if n["label"] == "sw1")["config"]
     assert "default-router 10.10.34.1" in sw1 and "device-tracking attach-policy" in sw1
     kinds = {k for p in contract_of(r).probes for k in ("command", "tcp", "ise_session") if getattr(p, k)}
     assert kinds == {"command", "tcp", "ise_session"}
+
+
+def test_client_gets_the_lab_ca_at_build(monkeypatch: pytest.MonkeyPatch) -> None:
+    import yaml
+
+    from cml_mcp.recipes import placeholders, resolve_secrets
+
+    pem = "-----BEGIN CERTIFICATE-----\nMIIFake\n-----END CERTIFICATE-----\n"
+    monkeypatch.setenv("LAB_CA_PEM", pem)
+    client = next(n for n in get_recipe("ise-fmc-identity")["build"]["nodes"] if n["label"] == "client")[
+        "config"
+    ]
+    for name in placeholders(client) - {"LAB_CA_PEM"}:
+        monkeypatch.setenv(name, "fake-value")
+    files = {f["path"]: f["content"] for f in yaml.safe_load(resolve_secrets(client, None))["write_files"]}
+    assert files["/etc/mcp-dot1x/mitchcloud-CA.pem"] == pem  # cloud-init still parses; the PEM is intact
 
 
 def test_actions_switch_users() -> None:

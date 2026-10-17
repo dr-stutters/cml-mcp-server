@@ -27,7 +27,8 @@ ise_side: >-
   Network device mcp-test-cml-identity-sw (198.18.128.194, RADIUS secret ${LAB_RADIUS_SECRET}, CoA 1700) in device group
   Location#All Locations#mcp-test-lab, so the existing policy set mcp-test-wired matches (802.1X via mcp_test_eaptls_seq =
   Internal Users + the AD join point; mcp-alice -> rule mcp-test-ad-employees, SGT Employees; mcp-bob -> mcp-test-ad-contractors,
-  SGT Contractors; profile mcp-test-permit). The client validates ISE's EAP certificate against mitchcloud-CA.
+  SGT Contractors; profile mcp-test-permit). The client validates ISE's EAP certificate against mitchcloud-CA,
+  the lab AD CS root, filled in from LAB_CA_PEM (or LAB_CA_PEM_FILE) at build time: every DC rebuild makes a new root.
   sw1 does device tracking on the client port, so ISE's session carries the client's framed IP (what pxGrid gives FMC).
 fmc_side: >-
   The FTD's day 0 points at FMC 198.18.134.76 with ${LAB_FTD_REG_KEY}. Register it as mcp-ftd-identity (access policy
@@ -350,33 +351,7 @@ build:
           - path: /etc/mcp-dot1x/mitchcloud-CA.pem
             permissions: '0644'
             content: |
-              -----BEGIN CERTIFICATE-----
-              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
-              0tcBxaATp23lceK9bTgpzKclwf69sqnhww==
-              -----END CERTIFICATE-----
+              ${LAB_CA_PEM}
           - path: /etc/mcp-dot1x/mcp-alice.conf
             permissions: '0600'
             content: |
