@@ -173,22 +173,22 @@ nodes:
     type: loopback
   - id: i1
     label: Ethernet0/0
-    mac_address: aa:bb:cc:00:19:00
+    mac_address: null
     type: physical
     slot: 0
   - id: i2
     label: Ethernet0/1
-    mac_address: aa:bb:cc:00:19:10
+    mac_address: null
     type: physical
     slot: 1
   - id: i3
     label: Ethernet0/2
-    mac_address: aa:bb:cc:00:19:20
+    mac_address: null
     type: physical
     slot: 2
   - id: i4
     label: Ethernet0/3
-    mac_address: aa:bb:cc:00:19:30
+    mac_address: null
     type: physical
     slot: 3
 - boot_disk_size: null
@@ -241,22 +241,22 @@ nodes:
     type: loopback
   - id: i1
     label: Ethernet0/0
-    mac_address: aa:bb:cc:00:1a:00
+    mac_address: null
     type: physical
     slot: 0
   - id: i2
     label: Ethernet0/1
-    mac_address: aa:bb:cc:00:1a:10
+    mac_address: null
     type: physical
     slot: 1
   - id: i3
     label: Ethernet0/2
-    mac_address: aa:bb:cc:00:1a:20
+    mac_address: null
     type: physical
     slot: 2
   - id: i4
     label: Ethernet0/3
-    mac_address: aa:bb:cc:00:1a:30
+    mac_address: null
     type: physical
     slot: 3
 - boot_disk_size: null
@@ -293,22 +293,22 @@ nodes:
     type: loopback
   - id: i1
     label: Ethernet0/0
-    mac_address: aa:bb:cc:00:1b:00
+    mac_address: null
     type: physical
     slot: 0
   - id: i2
     label: Ethernet0/1
-    mac_address: aa:bb:cc:00:1b:10
+    mac_address: null
     type: physical
     slot: 1
   - id: i3
     label: Ethernet0/2
-    mac_address: aa:bb:cc:00:1b:20
+    mac_address: null
     type: physical
     slot: 2
   - id: i4
     label: Ethernet0/3
-    mac_address: aa:bb:cc:00:1b:30
+    mac_address: null
     type: physical
     slot: 3
 - boot_disk_size: null

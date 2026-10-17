@@ -273,22 +273,22 @@ nodes:
     type: loopback
   - id: i1
     label: Ethernet0/0
-    mac_address: aa:bb:cc:00:34:00
+    mac_address: null
     type: physical
     slot: 0
   - id: i2
     label: Ethernet0/1
-    mac_address: aa:bb:cc:00:34:10
+    mac_address: null
     type: physical
     slot: 1
   - id: i3
     label: Ethernet0/2
-    mac_address: aa:bb:cc:00:34:20
+    mac_address: null
     type: physical
     slot: 2
   - id: i4
     label: Ethernet0/3
-    mac_address: aa:bb:cc:00:34:30
+    mac_address: null
     type: physical
     slot: 3
 links:
