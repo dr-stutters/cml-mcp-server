@@ -9,6 +9,12 @@
   `LAB_FTD_REG_KEY` only for FMC registration and `LAB_RADIUS_SECRET` never for it.
 
 ### Added
+- **Firewall SD-WAN recipes (fmc-mcp-server F52, #109).** `ftd-sdwan-single` (`mcp-sdwan-t1`: hub + 3 spokes),
+  `ftd-sdwan-dual-hub` (`mcp-sdwan-t2`: primary + backup hub, 2 spokes) and `ftd-sdwan-ha-hub` (`mcp-sdwan-t3`: HA-pair
+  hub, 2 spokes). Every FTDv has three WAN transports through IOL carrier routers (mpls, inet, lte) and an Alpine inside
+  host; management 198.18.128.200-211 through the System Bridge; day 0 points each FTD at FMC 198.18.134.76 with
+  `${LAB_FTD_REG_KEY}`. The verify contract checks each FTD's manager and management reachability and that every
+  carrier's access links are up.
 - **`cml-mcp-server check` preflight (L37, #4; core C21).** Runs without an MCP client: reachability and TLS
   trust of the controller API, the login (the client's own `/auth_extended` login, falling back to
   `/authenticate`; a CML 403 on login is reported as bad credentials), the CML version against the tested matrix
