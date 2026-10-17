@@ -44,10 +44,10 @@ def test_radius_secret_not_for_fmc_registration(path: Path) -> None:
     assert not bad, f"{path.name}: LAB_RADIUS_SECRET used as an FMC registration key on lines {bad}"
 
 
-@pytest.mark.parametrize("path", sorted(ROOT.glob("labs/*.yaml")), ids=lambda p: p.name)
+@pytest.mark.parametrize("path", FILES, ids=lambda p: p.relative_to(ROOT).as_posix())
 def test_no_embedded_certificate(path: Path) -> None:
-    """Lab exports reference the lab CA as ${LAB_CA_PEM} (filled in at import): each DC rebuild makes a new
-    root, so an embedded copy goes stale (PEAP then fails server validation)."""
+    """Lab exports and recipes reference the lab CA as ${LAB_CA_PEM} (filled in at import or build): each DC
+    rebuild makes a new root, so an embedded copy goes stale (PEAP then fails server validation)."""
     assert "BEGIN CERTIFICATE" not in path.read_text(), f"{path.name}: embedded PEM, use ${{LAB_CA_PEM}}"
 
 
