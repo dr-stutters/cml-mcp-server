@@ -1,4 +1,4 @@
-"""Lab exports and recipes use the right ${LAB_*} reference for each kind of key.
+"""Lab exports and recipes use the right ${LAB_*} reference for each kind of key, and the lab CA by reference.
 
 LAB_RADIUS_SECRET (RADIUS/TACACS+ shared secrets toward ISE) and LAB_FTD_REG_KEY (the FTD's FMC
 registration key) used to hold the same value, so a mix-up went unnoticed. They now differ, and a
@@ -42,6 +42,19 @@ def test_reg_key_only_for_fmc_registration(path: Path) -> None:
 def test_radius_secret_not_for_fmc_registration(path: Path) -> None:
     bad = [n for n, text in refs(path, "RADIUS_SECRET") if REG_CONTEXT.search(text)]
     assert not bad, f"{path.name}: LAB_RADIUS_SECRET used as an FMC registration key on lines {bad}"
+
+
+@pytest.mark.parametrize("path", sorted(ROOT.glob("labs/*.yaml")), ids=lambda p: p.name)
+def test_no_embedded_certificate(path: Path) -> None:
+    """Lab exports reference the lab CA as ${LAB_CA_PEM} (filled in at import): each DC rebuild makes a new
+    root, so an embedded copy goes stale (PEAP then fails server validation)."""
+    assert "BEGIN CERTIFICATE" not in path.read_text(), f"{path.name}: embedded PEM, use ${{LAB_CA_PEM}}"
+
+
+@pytest.mark.parametrize("path", FILES, ids=lambda p: p.relative_to(ROOT).as_posix())
+def test_ca_pem_placeholder_alone_on_its_line(path: Path) -> None:
+    bad = [n for n, line in refs(path, "CA_PEM") if line.strip()]
+    assert not bad, f"{path.name}: ${{LAB_CA_PEM}} must stand alone on its line (lines {bad})"
 
 
 def test_files_found() -> None:
