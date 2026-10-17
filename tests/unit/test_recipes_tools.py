@@ -291,3 +291,51 @@ def test_scrub_masks_secrets_with_punctuation_edges() -> None:
 
     assert scrub("login admin!Pw9 and pw-2x", {"!Pw9", "pw-2x"}) == "login admin******** and ********"
     assert scrub("node eaptls-client", {"eaptls"}) == "node eaptls-client"
+
+
+SDWAN = {
+    "ftd-sdwan-single": (1, ["hub", "spoke1", "spoke2", "spoke3"], 200),
+    "ftd-sdwan-dual-hub": (2, ["hub", "hub2", "spoke1", "spoke2"], 204),
+    "ftd-sdwan-ha-hub": (3, ["hub", "hub2", "spoke1", "spoke2"], 208),
+}
+
+
+@pytest.mark.parametrize("name", sorted(SDWAN))
+def test_sdwan_recipe_shape(name: str) -> None:
+    """F52 (fmc-mcp-server #109): FTDs on .200-.211 pointed at FMC, three carriers, one host per site."""
+    from cml_mcp.recipes import placeholders, recipe_licensed_nodes
+    from cml_mcp.verify import contract_of
+
+    t, ftds, first = SDWAN[name]
+    r = get_recipe(name)
+    assert r["build"]["title"] == f"mcp-sdwan-t{t}"
+    assert placeholders(r) == {"LAB_FTD_ADMIN_PASSWORD", "LAB_FTD_REG_KEY", "LAB_CLI_PASSWORD"}
+    nodes = {n["label"]: n for n in r["build"]["nodes"]}
+    assert [lbl for lbl, n in nodes.items() if n["definition"] == "ftdv"] == ftds
+    assert {lbl for lbl, n in nodes.items() if n["definition"] == "iol-xe"} == {"mpls", "inet", "lte"}
+    hosts = [lbl for lbl, n in nodes.items() if n["definition"] == "alpine"]
+    assert len(hosts) == len(ftds) - (0 if t == 1 else 1)  # T2/T3 hubs share one DC host
+    assert recipe_licensed_nodes(r) == len(ftds) + 3 + len(hosts)
+    for i, role in enumerate(ftds):
+        day0 = json.loads(nodes[role]["config"])
+        assert day0["IPv4Addr"] == f"198.18.128.{first + i}"
+        assert day0["Hostname"] == f"mcp-sdwan-t{t}-{role}"
+        assert day0["FmcIp"] == "198.18.134.76" and day0["FmcRegKey"] == "${LAB_FTD_REG_KEY}"
+        assert day0["ManageLocally"] == "No"
+    contract = contract_of(r)
+    assert contract.nodes == ftds and contract.vrf == "management"
+    assert {p.node for p in contract.probes if p.command} == {*ftds, "mpls", "inet", "lte"}
+    links = r["build"]["links"]
+    if t == 3:  # HA pair: failover + state cables, and each carrier reaches both hubs through a switch
+        assert "hub:GigabitEthernet0/4 hub2:GigabitEthernet0/4" in links
+        assert "hub:GigabitEthernet0/5 hub2:GigabitEthernet0/5" in links
+        assert "hub2:GigabitEthernet0/0 mpls-hub-sw" in links
+
+
+def test_sdwan_recipes_use_distinct_management_addresses() -> None:
+    seen: list[str] = []
+    for name in SDWAN:
+        for n in get_recipe(name)["build"]["nodes"]:
+            if n["definition"] == "ftdv":
+                seen.append(json.loads(n["config"])["IPv4Addr"])
+    assert sorted(seen) == [f"198.18.128.{i}" for i in range(200, 212)]

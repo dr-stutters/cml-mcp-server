@@ -1,0 +1,369 @@
+# Firewall SD-WAN lab T2: dual hub (primary hub, backup hub2) and spokes, each FTD with three WAN transports through IOL carrier
+# routers (mpls = MPLS-like, inet = internet, lte = LTE-like) and an Alpine inside host. Day 0 points every FTD at
+# FMC 198.18.134.76 ('configure manager add' through the day-0 FmcIp/FmcRegKey), so 'show managers' shows it
+# pending until fmc_register_device. FMC configures the data interfaces; the carriers only route their own
+# connected links. fmc-mcp-server F52 (#109) / F53 SD-WAN matrix. Boot takes 15-30 minutes (start FTDv four at a time).
+name: ftd-sdwan-dual-hub
+summary: SD-WAN T2 dual hub (primary hub, backup hub2) - 4x FTDv 10.0 (management hub .204, hub2 .205, spoke1 .206, spoke2 .207 on 198.18.128.0/18),
+  3 IOL carriers (mpls, inet, lte), Alpine inside hosts; day 0 points each FTD at FMC 198.18.134.76
+address_plan:
+  management: Management0/0 of every FTD on mgmt-sw + ext-mgmt (System Bridge), gateway 198.18.128.1, DNS 198.18.133.1
+  hub Management0/0: 198.18.128.204/18 (register in FMC as mcp-sdwan-t2-hub)
+  hub2 Management0/0: 198.18.128.205/18 (register in FMC as mcp-sdwan-t2-hub2)
+  spoke1 Management0/0: 198.18.128.206/18 (register in FMC as mcp-sdwan-t2-spoke1)
+  spoke2 Management0/0: 198.18.128.207/18 (register in FMC as mcp-sdwan-t2-spoke2)
+  note: CML calls the data ports GigabitEthernet0/0-0/5; FTD 10 and FMC call them Ethernet0/0-0/5
+  data ports (every FTD): GigabitEthernet0/0 mpls WAN, 0/1 inet WAN, 0/2 lte WAN, 0/3 inside
+  mpls (MPLS-like) carrier mpls: hub 10.21.1.0/24 (carrier .1, hub .2); hub2 10.21.2.0/24 (carrier .1, hub2 .2); spoke1 10.21.11.0/24 (carrier .1, spoke1 .2); spoke2 10.21.12.0/24 (carrier .1, spoke2 .2); Loopback0 10.21.255.1
+  inet (internet) carrier inet: hub 10.22.1.0/24 (carrier .1, hub .2); hub2 10.22.2.0/24 (carrier .1, hub2 .2); spoke1 10.22.11.0/24 (carrier .1, spoke1 .2); spoke2 10.22.12.0/24 (carrier .1, spoke2 .2); Loopback0 10.22.255.1
+  lte (LTE-like) carrier lte: hub 10.23.1.0/24 (carrier .1, hub .2); hub2 10.23.2.0/24 (carrier .1, hub2 .2); spoke1 10.23.11.0/24 (carrier .1, spoke1 .2); spoke2 10.23.12.0/24 (carrier .1, spoke2 .2); Loopback0 10.23.255.1
+  inside DC (shared by both hubs on dc-sw): 10.20.1.0/24 (hub .1, hub2 .2, dc-host .10 default via .1;
+    add a route via .2 on dc-host when testing the backup hub alone)
+  inside spoke1: 10.20.11.0/24 (spoke1 .1, host-spoke1 .10)
+  inside spoke2: 10.20.12.0/24 (spoke2 .1, host-spoke2 .10)
+  WAN default routes on the FTDs: next hop is the carrier's .1 on each transport (FMC-side config)
+credentials:
+  cli: admin / ${LAB_FTD_ADMIN_PASSWORD} on every FTD (strong - FTD forces a change of weak day-0 passwords)
+  carriers: netadmin / ${LAB_CLI_PASSWORD} (enable ${LAB_CLI_PASSWORD})
+  fmc_registration: host 198.18.134.76, registration key ${LAB_FTD_REG_KEY}, no NAT id
+  hosts: 'Alpine, login cisco / cisco'
+fmc_side: >-
+  fmc_register_device for each FTD in domain Global with reg key ${LAB_FTD_REG_KEY}, Essentials only: mcp-sdwan-t2-hub (198.18.128.204), mcp-sdwan-t2-hub2 (198.18.128.205), mcp-sdwan-t2-spoke1 (198.18.128.206), mcp-sdwan-t2-spoke2 (198.18.128.207). Then fmc_update_interface for the WAN/inside ports as in the address plan, the SD-WAN topology wizard, and fmc_deploy (only mcp-sdwan-* devices).
+boot_minutes: 15-30
+verify:
+  nodes: [hub, hub2, spoke1, spoke2]
+  targets: [198.18.134.76, 198.18.128.1]
+  vrf: management
+  addresses:
+    hub: [198.18.128.204]
+    hub2: [198.18.128.205]
+    spoke1: [198.18.128.206]
+    spoke2: [198.18.128.207]
+    mpls: [10.21.1.1, 10.21.2.1, 10.21.11.1, 10.21.12.1, 10.21.255.1]
+    inet: [10.22.1.1, 10.22.2.1, 10.22.11.1, 10.22.12.1, 10.22.255.1]
+    lte: [10.23.1.1, 10.23.2.1, 10.23.11.1, 10.23.12.1, 10.23.255.1]
+    dc-host: [10.20.1.10]
+    host-spoke1: [10.20.11.10]
+    host-spoke2: [10.20.12.10]
+  probes:
+    - name: hub manager is FMC 198.18.134.76
+      node: hub
+      command: show managers
+      expect: '198\.18\.134\.76'
+    - name: hub2 manager is FMC 198.18.134.76
+      node: hub2
+      command: show managers
+      expect: '198\.18\.134\.76'
+    - name: spoke1 manager is FMC 198.18.134.76
+      node: spoke1
+      command: show managers
+      expect: '198\.18\.134\.76'
+    - name: spoke2 manager is FMC 198.18.134.76
+      node: spoke2
+      command: show managers
+      expect: '198\.18\.134\.76'
+    - {name: hub management SSH (22) from the server, tcp: '198.18.128.204:22'}
+    - {name: hub2 management SSH (22) from the server, tcp: '198.18.128.205:22'}
+    - {name: spoke1 management SSH (22) from the server, tcp: '198.18.128.206:22'}
+    - {name: spoke2 management SSH (22) from the server, tcp: '198.18.128.207:22'}
+    - name: mpls carrier links to every site are up
+      node: mpls
+      command: show ip interface brief
+      expect: '10\.21\.255\.1\s+YES\s+\S+\s+up\s+up'
+      reject: '(?m)^Ethernet\S+\s+10\.\S+\s+YES\s+\S+\s+(down|administratively down)'
+    - name: inet carrier links to every site are up
+      node: inet
+      command: show ip interface brief
+      expect: '10\.22\.255\.1\s+YES\s+\S+\s+up\s+up'
+      reject: '(?m)^Ethernet\S+\s+10\.\S+\s+YES\s+\S+\s+(down|administratively down)'
+    - name: lte carrier links to every site are up
+      node: lte
+      command: show ip interface brief
+      expect: '10\.23\.255\.1\s+YES\s+\S+\s+up\s+up'
+      reject: '(?m)^Ethernet\S+\s+10\.\S+\s+YES\s+\S+\s+(down|administratively down)'
+build:
+  title: mcp-sdwan-t2
+  description: Firewall SD-WAN T2 dual hub (primary hub, backup hub2), 3 carriers, FTDs pointed at FMC (cml-mcp-server recipe ftd-sdwan-dual-hub)
+  nodes:
+    - label: ext-mgmt
+      definition: external_connector
+      x: -800
+      y: -400
+      config: System Bridge
+    - label: mgmt-sw
+      definition: unmanaged_switch
+      x: -800
+      y: -240
+    - label: mpls
+      definition: iol-xe
+      x: -400
+      y: 0
+      credentials: {username: netadmin, password: "${LAB_CLI_PASSWORD}", enable_password: "${LAB_CLI_PASSWORD}"}
+      config: |
+        hostname mcp-sdwan-t2-mpls
+        no ip domain lookup
+        username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+        enable secret ${LAB_CLI_PASSWORD}
+        interface Loopback0
+         description MPLS-like carrier core
+         ip address 10.21.255.1 255.255.255.255
+        interface Ethernet0/0
+         description hub MPLS-like access
+         ip address 10.21.1.1 255.255.255.0
+         no shutdown
+        interface Ethernet0/1
+         description hub2 MPLS-like access
+         ip address 10.21.2.1 255.255.255.0
+         no shutdown
+        interface Ethernet0/2
+         description spoke1 MPLS-like access
+         ip address 10.21.11.1 255.255.255.0
+         no shutdown
+        interface Ethernet0/3
+         description spoke2 MPLS-like access
+         ip address 10.21.12.1 255.255.255.0
+         no shutdown
+        line con 0
+         exec-timeout 0 0
+         logging synchronous
+        end
+    - label: inet
+      definition: iol-xe
+      x: 0
+      y: 0
+      credentials: {username: netadmin, password: "${LAB_CLI_PASSWORD}", enable_password: "${LAB_CLI_PASSWORD}"}
+      config: |
+        hostname mcp-sdwan-t2-inet
+        no ip domain lookup
+        username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+        enable secret ${LAB_CLI_PASSWORD}
+        interface Loopback0
+         description internet carrier core
+         ip address 10.22.255.1 255.255.255.255
+        interface Ethernet0/0
+         description hub internet access
+         ip address 10.22.1.1 255.255.255.0
+         no shutdown
+        interface Ethernet0/1
+         description hub2 internet access
+         ip address 10.22.2.1 255.255.255.0
+         no shutdown
+        interface Ethernet0/2
+         description spoke1 internet access
+         ip address 10.22.11.1 255.255.255.0
+         no shutdown
+        interface Ethernet0/3
+         description spoke2 internet access
+         ip address 10.22.12.1 255.255.255.0
+         no shutdown
+        line con 0
+         exec-timeout 0 0
+         logging synchronous
+        end
+    - label: lte
+      definition: iol-xe
+      x: 400
+      y: 0
+      credentials: {username: netadmin, password: "${LAB_CLI_PASSWORD}", enable_password: "${LAB_CLI_PASSWORD}"}
+      config: |
+        hostname mcp-sdwan-t2-lte
+        no ip domain lookup
+        username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+        enable secret ${LAB_CLI_PASSWORD}
+        interface Loopback0
+         description LTE-like carrier core
+         ip address 10.23.255.1 255.255.255.255
+        interface Ethernet0/0
+         description hub LTE-like access
+         ip address 10.23.1.1 255.255.255.0
+         no shutdown
+        interface Ethernet0/1
+         description hub2 LTE-like access
+         ip address 10.23.2.1 255.255.255.0
+         no shutdown
+        interface Ethernet0/2
+         description spoke1 LTE-like access
+         ip address 10.23.11.1 255.255.255.0
+         no shutdown
+        interface Ethernet0/3
+         description spoke2 LTE-like access
+         ip address 10.23.12.1 255.255.255.0
+         no shutdown
+        line con 0
+         exec-timeout 0 0
+         logging synchronous
+        end
+    - label: hub
+      definition: ftdv
+      x: -200
+      y: -320
+      credentials: {username: admin, password: "${LAB_FTD_ADMIN_PASSWORD}"}
+      config: |
+        {
+          "EULA": "accept",
+          "Hostname": "mcp-sdwan-t2-hub",
+          "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+          "FirewallMode": "routed",
+          "DNS1": "198.18.133.1",
+          "DNS2": "",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "198.18.128.204",
+          "IPv4Mask": "255.255.192.0",
+          "IPv4Gw": "198.18.128.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "198.18.134.76",
+          "FmcRegKey": "${LAB_FTD_REG_KEY}",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+        }
+    - label: hub2
+      definition: ftdv
+      x: 200
+      y: -320
+      credentials: {username: admin, password: "${LAB_FTD_ADMIN_PASSWORD}"}
+      config: |
+        {
+          "EULA": "accept",
+          "Hostname": "mcp-sdwan-t2-hub2",
+          "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+          "FirewallMode": "routed",
+          "DNS1": "198.18.133.1",
+          "DNS2": "",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "198.18.128.205",
+          "IPv4Mask": "255.255.192.0",
+          "IPv4Gw": "198.18.128.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "198.18.134.76",
+          "FmcRegKey": "${LAB_FTD_REG_KEY}",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+        }
+    - label: spoke1
+      definition: ftdv
+      x: -600
+      y: 320
+      credentials: {username: admin, password: "${LAB_FTD_ADMIN_PASSWORD}"}
+      config: |
+        {
+          "EULA": "accept",
+          "Hostname": "mcp-sdwan-t2-spoke1",
+          "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+          "FirewallMode": "routed",
+          "DNS1": "198.18.133.1",
+          "DNS2": "",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "198.18.128.206",
+          "IPv4Mask": "255.255.192.0",
+          "IPv4Gw": "198.18.128.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "198.18.134.76",
+          "FmcRegKey": "${LAB_FTD_REG_KEY}",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+        }
+    - label: spoke2
+      definition: ftdv
+      x: 600
+      y: 320
+      credentials: {username: admin, password: "${LAB_FTD_ADMIN_PASSWORD}"}
+      config: |
+        {
+          "EULA": "accept",
+          "Hostname": "mcp-sdwan-t2-spoke2",
+          "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}",
+          "FirewallMode": "routed",
+          "DNS1": "198.18.133.1",
+          "DNS2": "",
+          "DNS3": "",
+          "IPv4Mode": "manual",
+          "IPv4Addr": "198.18.128.207",
+          "IPv4Mask": "255.255.192.0",
+          "IPv4Gw": "198.18.128.1",
+          "IPv6Mode": "disabled",
+          "IPv6Addr": "",
+          "IPv6Mask": "",
+          "IPv6Gw": "",
+          "FmcIp": "198.18.134.76",
+          "FmcRegKey": "${LAB_FTD_REG_KEY}",
+          "FmcNatId": "",
+          "ManageLocally": "No"
+        }
+    - label: dc-sw
+      definition: unmanaged_switch
+      x: 0
+      y: -480
+    - label: dc-host
+      definition: alpine
+      x: 0
+      y: -600
+      credentials: {username: cisco, password: cisco}
+      config: |
+        # this is a shell script which will be sourced at boot
+        hostname dc-host
+        USERNAME=cisco
+        PASSWORD=cisco
+        ip link set eth0 up
+        ip addr add 10.20.1.10/24 dev eth0
+        ip route add default via 10.20.1.1
+    - label: host-spoke1
+      definition: alpine
+      x: -600
+      y: 520
+      credentials: {username: cisco, password: cisco}
+      config: |
+        # this is a shell script which will be sourced at boot
+        hostname host-spoke1
+        USERNAME=cisco
+        PASSWORD=cisco
+        ip link set eth0 up
+        ip addr add 10.20.11.10/24 dev eth0
+        ip route add default via 10.20.11.1
+    - label: host-spoke2
+      definition: alpine
+      x: 600
+      y: 520
+      credentials: {username: cisco, password: cisco}
+      config: |
+        # this is a shell script which will be sourced at boot
+        hostname host-spoke2
+        USERNAME=cisco
+        PASSWORD=cisco
+        ip link set eth0 up
+        ip addr add 10.20.12.10/24 dev eth0
+        ip route add default via 10.20.12.1
+  links:
+    - ext-mgmt mgmt-sw
+    - hub:Management0/0 mgmt-sw
+    - hub2:Management0/0 mgmt-sw
+    - spoke1:Management0/0 mgmt-sw
+    - spoke2:Management0/0 mgmt-sw
+    - mpls:Ethernet0/0 hub:GigabitEthernet0/0
+    - mpls:Ethernet0/1 hub2:GigabitEthernet0/0
+    - mpls:Ethernet0/2 spoke1:GigabitEthernet0/0
+    - mpls:Ethernet0/3 spoke2:GigabitEthernet0/0
+    - inet:Ethernet0/0 hub:GigabitEthernet0/1
+    - inet:Ethernet0/1 hub2:GigabitEthernet0/1
+    - inet:Ethernet0/2 spoke1:GigabitEthernet0/1
+    - inet:Ethernet0/3 spoke2:GigabitEthernet0/1
+    - lte:Ethernet0/0 hub:GigabitEthernet0/2
+    - lte:Ethernet0/1 hub2:GigabitEthernet0/2
+    - lte:Ethernet0/2 spoke1:GigabitEthernet0/2
+    - lte:Ethernet0/3 spoke2:GigabitEthernet0/2
+    - hub:GigabitEthernet0/3 dc-sw
+    - hub2:GigabitEthernet0/3 dc-sw
+    - dc-host:eth0 dc-sw
+    - spoke1:GigabitEthernet0/3 host-spoke1:eth0
+    - spoke2:GigabitEthernet0/3 host-spoke2:eth0
