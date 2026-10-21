@@ -34,6 +34,10 @@ class Settings(BaseServerSettings):
     # build/verify time from LAB_* environment variables, else from this dotenv-style file (never logged
     # or returned by tools).
     lab_secrets_file: str | None = Field(default=None, description="CML_LAB_SECRETS_FILE")
+    # More recipe directories (L42), comma- or ':'-separated, e.g. a recipe checkout mounted into the
+    # container to build a PR's new recipes. Trusted like the package: their verify probes and actions run
+    # console commands. A packaged recipe wins over one of the same name.
+    recipe_dirs: str | None = Field(default=None, description="CML_RECIPE_DIRS")
 
     # Image upload (L19): the only directory cml_upload_image reads from (streamed, never sent via MCP)
     image_dir: str | None = Field(default=None, description="CML_IMAGE_DIR")

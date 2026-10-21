@@ -144,7 +144,7 @@ def register(reg: ToolRegistrar) -> None:
         expected addresses on each node (from its CLI), a ping matrix to the appliances, and
         product probes - FTD 'show managers' points at FMC, IOS-XE SSH/NETCONF/SNMP answer from
         this server, the switch's RADIUS server is UP and answers 'test aaa'. Changes no
-        configuration (console probes come only from the packaged recipe and must be read-only),
+        configuration (console probes come only from the recipe file and must be read-only),
         but the RADIUS test leaves a failed authentication for user 'mcp-test-probe' in ISE's logs,
         so it isn't idempotent. Start the lab first (cml_plan_licences, then cml_start_lab). For a
         copy built with cml_build_recipe(title=...), pass `lab`: the substitutions it was built with
