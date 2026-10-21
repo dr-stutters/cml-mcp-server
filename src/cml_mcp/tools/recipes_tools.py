@@ -34,8 +34,10 @@ from cml_mcp.recipes import (
     recipe_licensed_nodes,
     recipe_marker,
     recipe_names,
+    recipe_source,
     resolve_secrets,
     secret_names_by_value,
+    skipped_recipe_files,
     substituted,
 )
 from cml_mcp.safety import guarded_preview_or_apply
@@ -115,9 +117,11 @@ def recipe_detail(name: str) -> Any:
     secrets = recipe_secrets(r)
     product = {k: v for k, v in r.items() if PRODUCT_SIDE.search(k)}
     verify = r.get("verify") or {}
+    source = recipe_source(name)
     return scrub(
         {
             "name": name,
+            **({"source": source} if source != "package" else {}),
             "lab": r["build"]["title"],
             "summary": r.get("summary"),
             "licensed_nodes": recipe_licensed_nodes(r),
@@ -203,7 +207,8 @@ def register(reg: ToolRegistrar) -> None:
         licensed nodes and boot time for each. With `recipe`: its address plan, what to configure on
         the product side (FMC registration, ISE NAD, CatC discovery), nodes, links and the verify
         checks. Credentials are never returned, only where they are kept. Build one with
-        cml_build_recipe, check it with cml_verify_recipe."""
+        cml_build_recipe, check it with cml_verify_recipe. Recipes from the server's CML_RECIPE_DIRS
+        show their `source` file; files there that are not used are listed under `skipped`, with why."""
         app: CmlApp = get_client(ctx)
         states = {lab.get("lab_title"): lab.get("state") for lab in await app.list_labs()}
         if recipe:
@@ -213,9 +218,11 @@ def register(reg: ToolRegistrar) -> None:
         rows = []
         for name in recipe_names():
             r = get_recipe(name)
+            source = recipe_source(name)
             rows.append(
                 {
                     "name": name,
+                    **({"source": source} if source != "package" else {}),
                     "lab": r["build"]["title"],
                     "lab_state": states.get(r["build"]["title"], "not built"),
                     "licensed_nodes": recipe_licensed_nodes(r),
@@ -226,7 +233,12 @@ def register(reg: ToolRegistrar) -> None:
                     "summary": scrub(r.get("summary"), recipe_secrets(r)),
                 }
             )
-        return list_result(page_of(rows, limit=limit, offset=offset), fmt=response_format)
+        skipped = [f"{s['file']}: {s['problem']}" for s in skipped_recipe_files()]
+        return list_result(
+            page_of(rows, limit=limit, offset=offset),
+            fmt=response_format,
+            extra={"skipped": skipped} if skipped else None,
+        )
 
     @reg.write(title="Build a lab recipe", task=True)
     async def cml_build_recipe(
@@ -247,7 +259,7 @@ def register(reg: ToolRegistrar) -> None:
         timeout: Timeout = None,  # noqa: ASYNC109 - overall wait, handled by poll_until
         confirm: Confirm = None,
     ) -> dict[str, Any]:
-        """Build a recipe's lab (see cml_list_recipes) exactly as packaged - nodes, day-0 configs with
+        """Build a recipe's lab (see cml_list_recipes) exactly as written - nodes, day-0 configs with
         their lab credentials, links, and text annotations with the recipe's purpose, address plan and
         where the credentials are kept (never the values) - and by default start it without waiting
         (FTDv and cat9000v take 10-30 minutes: follow up with cml_wait_for_converged, then
@@ -309,7 +321,7 @@ def register(reg: ToolRegistrar) -> None:
         ] = None,
         confirm: Confirm = None,
     ) -> dict[str, Any]:
-        """Run one of a recipe's packaged actions on its running lab, e.g. ise-fmc-identity 'login-alice' /
+        """Run one of a recipe's actions on its running lab, e.g. ise-fmc-identity 'login-alice' /
         'login-bob' (802.1X log-in on the client as that AD user, so ISE, and through pxGrid FMC, see the
         other user) or 'logoff'. The command comes from the recipe, never from the caller; the result has
         the node's output and whether it matched the action's expected result (ok). Preview-first."""

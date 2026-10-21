@@ -10,6 +10,7 @@ from cml_mcp._core import ServerSpec, build_server
 from cml_mcp._core.spec import SpecSource
 from cml_mcp.client import CmlApp
 from cml_mcp.config import Settings
+from cml_mcp.recipes import use_recipe_dirs
 from cml_mcp.redaction import LabSecretRedactor
 from cml_mcp.tools import (
     annotations,
@@ -107,6 +108,7 @@ def create_server(
     auth: AuthProvider | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastMCP[Any]:
+    use_recipe_dirs(settings.recipe_dirs)
     mcp = build_server(
         SPEC,
         settings,

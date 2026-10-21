@@ -24,8 +24,8 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
   Catalyst Center, a Cat9kv 802.1X switch (IBNS 2.0) with MAB and EAP-TLS clients for ISE, an AD-user 802.1X client behind an
   FMC-managed FTD for user-based firewalling: `cml_list_recipes`, `cml_build_recipe`, `cml_verify_recipe` (pass/fail contract,
   incl. ISE live sessions), `cml_run_recipe_action` (e.g. switch the logged-in user)
-  and the prompt `cml_build_test_lab`; `cml_plan_licences` says which labs to stop. See
-  [src/cml_mcp/recipes/README.md](src/cml_mcp/recipes/README.md).
+  and the prompt `cml_build_test_lab`; `cml_plan_licences` says which labs to stop. Recipes not yet released
+  (a PR's checkout) load from `CML_RECIPE_DIRS`. See [src/cml_mcp/recipes/README.md](src/cml_mcp/recipes/README.md).
 - **Test oracles.** `cml_diff_node_config` shows what another server changed on a device;
   `cml_capture` / `cml_summarize_capture` decode RADIUS, EAPOL, OSPF, DHCP and more from a link capture.
 - **Degraded networks and diagrams.** `cml_apply_link_scenario` puts named impairments on a link (wan-good,
@@ -182,7 +182,7 @@ or in `.mcp.json`:
 | `cml_summarize_capture` | Decoded summary of a link capture: protocol mix, conversations, RADIUS/EAPOL/OSPF/DHCP/ARP/ICMP highlights |
 | `cml_plan_licences` | Licences in use per lab, what a lab or recipe needs, which labs to stop |
 | `cml_plan_replica` | Map a real site's devices (Catalyst Center / ISE / FMC inventories) to CML node definitions within a node/RAM budget: ready `cml_build_lab` spec, gaps, dropped devices |
-| `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes (no secrets returned); pass/fail verify contract of a running recipe lab (or a copy: `lab`, `substitute`) |
+| `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes, packaged and from `CML_RECIPE_DIRS` (no secrets returned; unused files there under `skipped`); pass/fail verify contract of a running recipe lab (or a copy: `lab`, `substitute`) |
 | `cml_get_link_scenarios` | Named link scenarios with netem values and expected round-trip ping deltas; with a lab, its conditioned links and flap jobs |
 | `cml_export_topology` | Mermaid, draw.io or JSON diagram of a lab with interface addresses (day-0 config, snooped or CLI) |
 | `cml_list_annotations` | A lab's drawn annotations (text, shapes), marking the ones this server wrote |
@@ -192,7 +192,7 @@ or in `.mcp.json`:
 
 | Tool | What it does |
 |---|---|
-| `cml_build_lab` | Build a lab from `nodes=[{label, definition, config?, files?, credentials?, ...}]` and `links=["r1 r2", "r1:Ethernet0/1 sw1"]`. Interfaces are picked automatically, external connectors and node licences are checked. Optionally start it (and wait) |
+| `cml_build_lab` | Build a lab from `nodes=[{label, definition, config?, files?, credentials?, ...}]` and `links=["r1 r2", "r1:Ethernet0/1 sw1"]`. Interfaces are picked automatically, external connectors and node licences are checked; `${LAB_*}` lab secrets in config, files and credentials are filled in on the server (see below). Optionally start it (and wait) |
 | `cml_load_sample_lab` | Create a lab from a sample lab |
 | `cml_create_lab` / `cml_import_lab` | Create an empty lab, or create one from topology YAML (node definitions are checked; `${LAB_*}` lab secrets in its nodes are filled in on the server, see below) |
 | `cml_start_lab` / `cml_stop_lab` | Start (waits for convergence) or stop a lab |
@@ -208,8 +208,8 @@ or in `.mcp.json`:
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
 | `cml_capture_wireless` | Capture the simulated 802.11 medium at a wireless-ap / wireless-client node and decode it (SSIDs, auth/assoc, deauth reasons, EAPOL 4-way handshake, EAP identity/method) |
-| `cml_build_recipe` | Build a packaged test-lab recipe (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses |
-| `cml_run_recipe_action` | Run one of a recipe's packaged actions on its lab, e.g. `ise-fmc-identity` `login-alice` / `login-bob` / `logoff` (802.1X as another AD user); the command comes from the recipe, never the caller |
+| `cml_build_recipe` | Build a test-lab recipe, packaged or from `CML_RECIPE_DIRS` (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses |
+| `cml_run_recipe_action` | Run one of a recipe's actions on its lab, e.g. `ise-fmc-identity` `login-alice` / `login-bob` / `logoff` (802.1X as another AD user); the command comes from the recipe, never the caller |
 | `cml_apply_link_scenario` | Apply a named scenario to a link: wan-good, wan-satellite, lossy-wifi, brownout, or `flap` (timed down/up cycles in the background, link always restored) |
 | `cml_clear_link_scenarios` | Stop flap jobs and remove conditioning from a lab's links |
 | `cml_annotate_lab` | Add notes, per-node address labels and the recipe's purpose/credential references as text annotations (re-runnable) |
@@ -237,8 +237,8 @@ CML only accepts config, RAM/CPU and new-interface changes while a node is **wip
 (`DEFINED_ON_CORE`). It only deletes wiped nodes and labs. The previews say so and point to the
 tool that fixes it.
 
-**Lab files with secrets.** A topology YAML for `cml_import_lab` can carry `${LAB_*}` references instead of
-passwords and keys, e.g. a CML Cookbook file rendered with
+**Lab files and specs with secrets.** A topology YAML for `cml_import_lab` can carry `${LAB_*}` references
+instead of passwords and keys, e.g. a CML Cookbook file rendered with
 `cookbook render <recipe> --input admin_password='${LAB_FTD_ADMIN_PASSWORD}'`. The server fills them in from the
 same `LAB_*` variables or `CML_LAB_SECRETS_FILE` as recipes, only inside `nodes` (day-0 configs, pyATS logins) and
 only in the YAML it sends to CML. The tool call, the preview, the confirm token, the result and the audit log
@@ -248,6 +248,12 @@ names it. The filled topology is re-serialised, so YAML quoting is handled, but 
 as it is: keep `"` and `\` out of values used inside JSON day-0 configs. Unlike a recipe, the YAML comes from
 the caller, and a node's day-0 config can do anything with the value it gets, so check `lab_secrets` before
 you confirm. YAML without placeholders in its nodes is sent unchanged.
+
+`cml_build_lab` does the same for a node's `config`, `files` and `credentials`, e.g.
+`"config": "username admin privilege 15 secret ${LAB_CLI_PASSWORD}"` with
+`"credentials": {"username": "admin", "password": "${LAB_CLI_PASSWORD}"}`: the preview's `lab_secrets` names
+the nodes per secret, a missing variable blocks the build by name, CML's warnings and errors come back with the
+reference, and the lab description, labels and tags stay as written.
 
 ## Configuration
 
@@ -265,7 +271,8 @@ you confirm. YAML without placeholders in its nodes is sent unchanged.
 | `CML_NODE_LICENSE_LIMIT` | detected | Running licensed-node cap. Detected from `/licensing` when unset (base licence nodes + `CML_NODE_COUNT` expansion; 5 in evaluation mode). Start/build previews refuse to exceed it; `cml_plan_licences` says which labs to stop |
 | `CML_CONSOLE_PORT` | `22` | SSH port of the CML console server (used for device CLI) |
 | `CML_CONSOLE_LOCK_WAIT` | `60` | Seconds a console call waits for another call on the same node before reporting it busy |
-| `CML_LAB_SECRETS_FILE` | | dotenv file with the `LAB_*` values that recipes and `cml_import_lab` files reference as `${LAB_*}` (device passwords, keys, communities). `LAB_*` environment variables override it. Recipe builds and imports name any missing variable |
+| `CML_LAB_SECRETS_FILE` | | dotenv file with the `LAB_*` values that recipes, `cml_import_lab` files and `cml_build_lab` specs reference as `${LAB_*}` (device passwords, keys, communities). `LAB_*` environment variables override it. Recipe builds, imports and lab builds name any missing variable |
+| `CML_RECIPE_DIRS` | | More recipe directories (comma- or `:`-separated), e.g. a recipe checkout mounted read-only into the container, for `cml_list_recipes` / `cml_build_recipe` / `cml_verify_recipe` / `cml_run_recipe_action`. Read on every call (no restart). Trusted like the package (verify probes and actions run console commands). A packaged recipe wins on a name clash; `cml_list_recipes` lists unused files under `skipped` ([recipes README](src/cml_mcp/recipes/README.md#recipes-outside-the-package-cml_recipe_dirs)) |
 | `CML_IMAGE_DIR` | | The only directory `cml_upload_image` reads (images are streamed from it; uploads are off without it) |
 | `CML_PROTECTED_LABS` / `CML_MANAGED_LABS` | | Safety rails ([docs/safety.md](docs/safety.md)): labs no change may touch; labs the dangerous tools may wipe/delete (title globs or ids) |
 | `CML_CONFIG_DENY_DEFAULTS` / `CML_CONFIG_DENY` | `true` / | `cml_configure_node` refuses destructive device commands (write erase, reload, format, delete, ...); one extra regex |
