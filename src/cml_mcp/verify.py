@@ -14,9 +14,10 @@ A contract (in the recipe YAML) lists what a known-good lab looks like:
         - {name: ise-session, ise_session: {url: https://198.18.134.35, username: ${LAB_ISE_USERNAME},
            password: ${LAB_ISE_PASSWORD}, user: '^mcp-alice$', nas_ip: 198.18.128.194}}
 
-Console probes run commands written in the packaged recipe (never caller input) over the node's
-console; tcp, snmp and ise_session probes run from the MCP server's host, like the product server would
-(ise_session reads ISE's live sessions from MnT: proof that ISE itself authenticated the user).
+Console probes run commands written in the recipe file (packaged or from CML_RECIPE_DIRS, never caller
+input) over the node's console; tcp, snmp and ise_session probes run from the MCP server's host, like the
+product server would (ise_session reads ISE's live sessions from MnT: proof that ISE itself authenticated
+the user).
 Every check is pass/fail with a short detail; nothing in the lab is changed.
 """
 
@@ -94,7 +95,7 @@ class IseSessionProbe(BaseModel):
         return str(urlsplit(self.url).hostname)
 
 
-# Console probes run outside the read-tier allow-list (they come only from packaged recipes), but
+# Console probes run outside the read-tier allow-list (they come only from recipe files), but
 # they must still be read-only or one of these known side-effect-free tests.
 PROBE_COMMAND_PREFIXES = (
     "test aaa group radius ",  # sends one RADIUS request, changes no config

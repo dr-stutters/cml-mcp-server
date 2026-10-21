@@ -1,4 +1,5 @@
-"""Build, start, verify and stop the lab recipes (src/cml_mcp/recipes/*.yaml) through the MCP tools.
+"""Build, start, verify and stop the lab recipes (src/cml_mcp/recipes/*.yaml and CML_RECIPE_DIRS) through the
+MCP tools.
 
     uv run python scripts/recipes.py list
     uv run python scripts/recipes.py build catc-routers [--start] [--no-wait] [--recreate]
@@ -21,6 +22,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import signal
 import sys
 from pathlib import Path
@@ -31,7 +33,7 @@ from fastmcp import Client
 
 from cml_mcp._core.testing import live_settings
 from cml_mcp.config import Settings
-from cml_mcp.recipes import get_recipe, recipe_names
+from cml_mcp.recipes import get_recipe, recipe_names, use_recipe_dirs
 from cml_mcp.server import create_server
 
 
@@ -210,6 +212,10 @@ async def main() -> None:
     ap.add_argument("--summary", help="ci: append the Markdown result table to this file")
     ap.add_argument("--build-missing", action="store_true", help="ci: build recipes whose lab doesn't exist")
     args = ap.parse_args()
+    # recipes from CML_RECIPE_DIRS (environment or .env) are known before any name is checked
+    from dotenv import dotenv_values
+
+    use_recipe_dirs(os.environ.get("CML_RECIPE_DIRS") or dotenv_values(".env").get("CML_RECIPE_DIRS"))
     if args.action == "ci":
         names = args.recipe or recipe_names()
         for n in names:
