@@ -194,7 +194,7 @@ or in `.mcp.json`:
 |---|---|
 | `cml_build_lab` | Build a lab from `nodes=[{label, definition, config?, files?, credentials?, ...}]` and `links=["r1 r2", "r1:Ethernet0/1 sw1"]`. Interfaces are picked automatically, external connectors and node licences are checked. Optionally start it (and wait) |
 | `cml_load_sample_lab` | Create a lab from a sample lab |
-| `cml_create_lab` / `cml_import_lab` | Create an empty lab, or create one from topology YAML (node definitions are checked) |
+| `cml_create_lab` / `cml_import_lab` | Create an empty lab, or create one from topology YAML (node definitions are checked; `${LAB_*}` lab secrets in its nodes are filled in on the server, see below) |
 | `cml_start_lab` / `cml_stop_lab` | Start (waits for convergence) or stop a lab |
 | `cml_stop_labs` | Stop several labs (a list, or every running lab except `keep`) with one preview: licences and RAM freed per lab, protected labs refused |
 | `cml_add_node` / `cml_update_node` | Add a node; change its label, tags, position, resources or console login |
@@ -237,6 +237,18 @@ CML only accepts config, RAM/CPU and new-interface changes while a node is **wip
 (`DEFINED_ON_CORE`). It only deletes wiped nodes and labs. The previews say so and point to the
 tool that fixes it.
 
+**Lab files with secrets.** A topology YAML for `cml_import_lab` can carry `${LAB_*}` references instead of
+passwords and keys, e.g. a CML Cookbook file rendered with
+`cookbook render <recipe> --input admin_password='${LAB_FTD_ADMIN_PASSWORD}'`. The server fills them in from the
+same `LAB_*` variables or `CML_LAB_SECRETS_FILE` as recipes, only inside `nodes` (day-0 configs, pyATS logins) and
+only in the YAML it sends to CML. The tool call, the preview, the confirm token, the result and the audit log
+carry only the placeholders, and lab notes and annotations keep them as written. The preview's `lab_secrets`
+lists which secret goes into which node. A variable the server doesn't have blocks the import, and the blocker
+names it. The filled topology is re-serialised, so YAML quoting is handled, but a value lands in a config's text
+as it is: keep `"` and `\` out of values used inside JSON day-0 configs. Unlike a recipe, the YAML comes from
+the caller, and a node's day-0 config can do anything with the value it gets, so check `lab_secrets` before
+you confirm. YAML without placeholders in its nodes is sent unchanged.
+
 ## Configuration
 
 | Variable | Default | Meaning |
@@ -253,7 +265,7 @@ tool that fixes it.
 | `CML_NODE_LICENSE_LIMIT` | detected | Running licensed-node cap. Detected from `/licensing` when unset (base licence nodes + `CML_NODE_COUNT` expansion; 5 in evaluation mode). Start/build previews refuse to exceed it; `cml_plan_licences` says which labs to stop |
 | `CML_CONSOLE_PORT` | `22` | SSH port of the CML console server (used for device CLI) |
 | `CML_CONSOLE_LOCK_WAIT` | `60` | Seconds a console call waits for another call on the same node before reporting it busy |
-| `CML_LAB_SECRETS_FILE` | | dotenv file with the `LAB_*` values that recipes reference as `${LAB_*}` (device passwords, keys, communities). `LAB_*` environment variables override it. Recipe builds name any missing variable |
+| `CML_LAB_SECRETS_FILE` | | dotenv file with the `LAB_*` values that recipes and `cml_import_lab` files reference as `${LAB_*}` (device passwords, keys, communities). `LAB_*` environment variables override it. Recipe builds and imports name any missing variable |
 | `CML_IMAGE_DIR` | | The only directory `cml_upload_image` reads (images are streamed from it; uploads are off without it) |
 | `CML_PROTECTED_LABS` / `CML_MANAGED_LABS` | | Safety rails ([docs/safety.md](docs/safety.md)): labs no change may touch; labs the dangerous tools may wipe/delete (title globs or ids) |
 | `CML_CONFIG_DENY_DEFAULTS` / `CML_CONFIG_DENY` | `true` / | `cml_configure_node` refuses destructive device commands (write erase, reload, format, delete, ...); one extra regex |
