@@ -18,6 +18,22 @@
   The tool call, preview, confirm token, result and audit log carry only the placeholders, and CML's warnings and
   errors are redacted. Lab notes and annotations keep their references, and YAML without node placeholders is sent
   unchanged.
+- **`cml_build_lab` fills `${LAB_*}` lab secrets on the server (L42, #17).** A node's `config`, `files` and
+  `credentials` can carry `${LAB_*}` references (`"username admin privilege 15 secret ${LAB_CLI_PASSWORD}"`), filled
+  from the `LAB_*` environment or `CML_LAB_SECRETS_FILE` only in the topology sent to CML. The preview lists which
+  secret goes into which node (`lab_secrets`) and a missing variable blocks the build by name (also at confirm
+  time). The tool call, preview, confirm token, result and audit log carry only the references; CML's warnings and
+  errors, and preview blockers and notes that quote a filled config (an external connector's name), are redacted.
+  The lab description, labels and tags stay as written. The specs are validated with their references, so a
+  validation error can't quote a value.
+- **Recipes outside the package: `CML_RECIPE_DIRS` (L42, #17).** Comma- or `:`-separated directories of
+  `<name>.yaml` recipes (e.g. a recipe checkout mounted read-only into the container), used by `cml_list_recipes`,
+  `cml_build_recipe`, `cml_verify_recipe`, `cml_run_recipe_action` and `cml_plan_licences`, so a PR's new recipe can
+  be built and verified from the running server with its secrets filled server-side. Read on every call (no
+  restart). Trusted like the package: verify probes and actions run console commands, so only the operator names
+  the directories and no tool takes recipe YAML. A packaged recipe wins on a name clash, and the first directory
+  over a later one; `cml_list_recipes` shows an extra recipe's `source` file and lists unused files under `skipped`
+  with why (a clash, invalid YAML by line number only, not a recipe, a missing directory).
 - **Firewall SD-WAN recipes (fmc-mcp-server F52, #109).** `ftd-sdwan-single` (`mcp-sdwan-t1`: hub + 3 spokes),
   `ftd-sdwan-dual-hub` (`mcp-sdwan-t2`: primary + backup hub, 2 spokes) and `ftd-sdwan-ha-hub` (`mcp-sdwan-t3`: HA-pair
   hub, 2 spokes). Every FTDv has three WAN transports through IOL carrier routers (mpls, inet, lte) and an Alpine inside

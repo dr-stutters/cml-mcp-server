@@ -1,4 +1,5 @@
-"""Lab recipes: ready-made `cml_build_lab` specs shipped with the package (`<name>.yaml` here).
+"""Lab recipes: ready-made `cml_build_lab` specs shipped with the package (`<name>.yaml` here), and from the
+directories in CML_RECIPE_DIRS.
 
 A recipe has a `build:` section (exactly the cml_build_lab arguments), a `verify:` contract, and
 descriptive fields (summary, address plan, credentials, what to configure on the other product).
@@ -9,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from functools import cache
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -19,16 +20,105 @@ from cml_mcp._core import InvalidRequest
 from cml_mcp.build import UNLICENSED_DEFINITIONS
 
 RECIPE_DIR = Path(__file__).resolve().parent
+# CML_RECIPE_DIRS (L42): more directories of <name>.yaml recipes, set by create_server. They are trusted like
+# the package (verify probes and actions run console commands), so only the operator names them; tool callers
+# pick recipes by name and never pass recipe YAML.
+_EXTRA_DIRS: list[Path] = []
+
+
+def use_recipe_dirs(value: str | None) -> None:
+    """Search the comma- or ':'-separated directories in `value` (CML_RECIPE_DIRS) after the package."""
+    _EXTRA_DIRS[:] = [
+        Path(os.path.expanduser(p.strip())) for p in re.split(r"[,:]", value or "") if p.strip()
+    ]
+
+
+def _is_recipe(data: Any) -> bool:
+    return isinstance(data, dict) and isinstance(data.get("build"), dict)
 
 
 @cache
-def _load_all() -> dict[str, dict[str, Any]]:
+def _packaged() -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for path in sorted(RECIPE_DIR.glob("*.yaml")):
         data = yaml.safe_load(path.read_text())
-        if isinstance(data, dict) and isinstance(data.get("build"), dict):
+        if _is_recipe(data):
             out[str(data.get("name") or path.stem)] = data
     return out
+
+
+@lru_cache(maxsize=256)
+def _parse(path: str, mtime_ns: int, size: int) -> Any:
+    """One recipe file's YAML, parsed again only when the file changes."""
+    return yaml.safe_load(Path(path).read_text())
+
+
+def _extras() -> tuple[dict[str, tuple[dict[str, Any], Path]], list[dict[str, str]]]:
+    """({name: (recipe, file)} from CML_RECIPE_DIRS, [{file, problem}] skipped). Read on every call, so a
+    recipe added to a mounted checkout is there without a restart. A packaged recipe wins over one of the same
+    name (an identical copy, e.g. the checkout's own src/cml_mcp/recipes, is skipped silently), and an
+    earlier directory over a later one."""
+    packaged = _packaged()
+    found: dict[str, tuple[dict[str, Any], Path]] = {}
+    skipped: list[dict[str, str]] = []
+    for d in _EXTRA_DIRS:
+        if not d.is_dir():
+            skipped.append({"file": str(d), "problem": "not a directory"})
+            continue
+        for path in sorted(d.glob("*.yaml")):
+            try:
+                st = path.stat()
+                data = _parse(str(path), st.st_mtime_ns, st.st_size)
+            except OSError as e:
+                skipped.append({"file": str(path), "problem": f"can't be read: {e.strerror or e}"})
+                continue
+            except UnicodeDecodeError:
+                skipped.append({"file": str(path), "problem": "not UTF-8 text"})
+                continue
+            except yaml.YAMLError as e:  # the line number only: the parser's excerpt could quote a value
+                mark = getattr(e, "problem_mark", None)
+                where = f" at line {mark.line + 1}" if mark is not None else ""
+                skipped.append({"file": str(path), "problem": f"invalid YAML{where}"})
+                continue
+            if not _is_recipe(data):
+                skipped.append({"file": str(path), "problem": "not a recipe (no build: mapping)"})
+                continue
+            name = str(data.get("name") or path.stem)
+            if name in packaged:
+                if data != packaged[name]:
+                    skipped.append(
+                        {
+                            "file": str(path),
+                            "problem": f"recipe {name!r} is packaged and the packaged one is used; give "
+                            "this one another name to build it",
+                        }
+                    )
+                continue
+            if name in found:
+                skipped.append(
+                    {"file": str(path), "problem": f"recipe {name!r} already comes from {found[name][1]}"}
+                )
+                continue
+            found[name] = (data, path)
+    return found, skipped
+
+
+def _load_all() -> dict[str, dict[str, Any]]:
+    """Every recipe by name: the packaged ones, then CML_RECIPE_DIRS'."""
+    return {**_packaged(), **{name: r for name, (r, _) in _extras()[0].items()}}
+
+
+def recipe_source(name: str) -> str:
+    """'package', or the CML_RECIPE_DIRS file recipe `name` comes from."""
+    if name in _packaged():
+        return "package"
+    extra = _extras()[0].get(name)
+    return str(extra[1]) if extra else "package"
+
+
+def skipped_recipe_files() -> list[dict[str, str]]:
+    """CML_RECIPE_DIRS files that are not used, with why (shown by cml_list_recipes)."""
+    return _extras()[1]
 
 
 # Secrets in recipes are references: ${LAB_CLI_PASSWORD} etc., the same names as cml-mcp-server/labs/*.yaml.
@@ -249,9 +339,9 @@ def read_recipe_marker(notes: Any) -> dict[str, Any] | None:
     return {"recipe": data["recipe"], "substitute": {str(k): str(v) for k, v in sub.items()}}
 
 
-# Recipe actions (L34): named, packaged console commands that change a recipe lab's state the way a
+# Recipe actions (L34): named console commands that change a recipe lab's state the way a
 # test needs (e.g. log the 802.1X client in as another user). Callers pick an action by name; the
-# command itself always comes from the packaged recipe, never from tool input.
+# command itself always comes from the recipe file (packaged or CML_RECIPE_DIRS), never from tool input.
 def recipe_actions(recipe: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """{name: {description, node, command, expect, timeout}} of a recipe, validated."""
     raw = recipe.get("actions") or {}

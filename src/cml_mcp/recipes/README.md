@@ -43,6 +43,27 @@ Copies: `cml_build_recipe(recipe, title='mcp-cml2-...', substitute={'198.18.128.
 next to the recipe's own lab (e.g. to try a recipe change while someone uses the original), and
 `cml_verify_recipe(recipe, lab=..., substitute=...)` verifies it against the same contract.
 
+## Recipes outside the package (`CML_RECIPE_DIRS`)
+
+A new or changed recipe can be built from the running server before it is merged and released: put it in a
+directory named by `CML_RECIPE_DIRS` (comma- or `:`-separated; e.g. a recipe checkout mounted read-only into the
+container) and `cml_list_recipes`, `cml_build_recipe`, `cml_verify_recipe`, `cml_run_recipe_action` and
+`cml_plan_licences` use it like a packaged one. The directories are read again on every call, so a recipe added or
+edited there needs no restart. `cml_list_recipes` shows such a recipe's `source` file, and lists the files it
+doesn't use under `skipped`, with why (invalid YAML, not a recipe, a name clash).
+
+**Packaged recipes win.** A file there whose recipe name is a packaged recipe's is not used (an identical copy,
+e.g. a checkout's own `src/cml_mcp/recipes`, is skipped silently; a different one is listed under `skipped`), and
+of two directories the first wins. To try a change to a packaged recipe, give the copy another `name:` and
+`build.title`. The installed recipes stay what the release ships: `cml_verify_recipe` on a recipe's own lab and
+`cml_plan_licences` can't be redirected by a file someone dropped in a directory.
+
+**Trust.** Verify probes and actions run console commands outside the read-tier allow-list because they come
+from recipe files, so a recipe directory is trusted like the package: only the operator names it, and only those
+who may change the server should be able to write to it (mount it read-only). Tool callers pick recipes by name;
+no tool takes recipe YAML. Recipes there carry `${LAB_*}` references like packaged ones; nothing checks a file
+outside the package for literal secrets, so review it before you mount it.
+
 Gotchas found while building them:
 - FTDv forces a password change at first login when the day-0 `AdminPassword` is weak or a
   dictionary word (a vendor-style default such as `<Name>123!` is rejected); the recipe uses a strong one. `cml_run_commands` reports

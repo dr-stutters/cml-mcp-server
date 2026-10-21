@@ -39,10 +39,41 @@ from cml_mcp.licence import (
     ram_check,
     ram_headroom,
 )
-from cml_mcp.recipes import redact_values
+from cml_mcp.recipes import placeholders, redact_values, resolve_secrets, secret_names_by_value
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.lab_writes import Wait, known_definitions, title_taken
 from cml_mcp.tools.smart import Timeout
+
+# Where cml_build_lab fills ${LAB_*} lab secrets: what reaches the device. Labels, tags and the rest show in
+# the preview and stay as written.
+SECRET_FIELDS = {"config", "files", "credentials"}
+
+
+def node_secret_refs(nodes: list[NodeSpec]) -> dict[str, list[str]]:
+    """{LAB_* name: labels of the nodes whose config, files or credentials reference it}."""
+    refs: dict[str, list[str]] = {}
+    for n in nodes:
+        for name in sorted(placeholders(n.model_dump(include=SECRET_FIELDS))):
+            refs.setdefault(name, []).append(n.label)
+    return dict(sorted(refs.items()))
+
+
+def with_node_secrets(nodes: list[NodeSpec], secrets_file: str | None) -> list[NodeSpec]:
+    """`nodes` with ${LAB_*} filled into their config, files and credentials, for what goes to CML only.
+    Raises InvalidRequest naming every missing variable. The specs were validated with their references;
+    the filled ones are not validated again, since a validation error would quote the value."""
+    parts = [n.model_dump(include=SECRET_FIELDS) for n in nodes]
+    filled = resolve_secrets(parts, secrets_file, what="This lab")
+    return [
+        n.model_copy(
+            update={
+                "config": f["config"],
+                "files": f["files"],
+                "credentials": n.credentials.model_copy(update=f["credentials"]) if n.credentials else None,
+            }
+        )
+        for n, f in zip(nodes, filled, strict=True)
+    ]
 
 
 async def assign_cat9kv_serials(
@@ -108,16 +139,20 @@ async def build_lab_flow(
     annotations: list[dict[str, Any]] | None = None,
     redact: dict[str, str] | None = None,
     lab_notes: str | None = None,
+    lab_secrets: dict[str, list[str]] | None = None,
+    blockers: list[str] | None = None,
 ) -> dict[str, Any]:
     """Preview/apply a lab build (shared by cml_build_lab and cml_build_recipe). `lab_notes` become the
-    lab's notes (cml_build_recipe records the recipe and its substitutions there)."""
+    lab's notes (cml_build_recipe records the recipe and its substitutions there). `lab_secrets` ({LAB_* name:
+    node labels}) were filled into `nodes`; `blockers` are the caller's own (e.g. a missing lab secret).
+    `redact` (lab secret value -> ${LAB_*}) cleans the preview's blockers and notes too."""
     app: CmlApp = get_client(ctx)
     defs = await known_definitions(app)
     nodes, serials = await assign_cat9kv_serials(app, title, nodes)
     connectors = None
     if any(n.definition == "external_connector" for n in nodes):
         connectors = await app.api.get("/system/external_connectors")
-    blockers: list[str] = []
+    blockers = list(blockers or [])
     notes: list[str] = []
     wiring: list[str] = []
     topology: dict[str, Any] = {}
@@ -158,13 +193,25 @@ async def build_lab_flow(
             "licensed_nodes": needed,
             **({"licences": licences} if licences else {}),
             **({"ram": memory} if memory else {}),
-            **({"notes": notes} if notes else {}),
+            **({"notes": redact_values(notes, redact or {})} if notes else {}),
             **({"annotations": len(annotations)} if annotations else {}),
             **({"cat9000v_serials": serials} if serials else {}),
+            **({"lab_secrets": lab_secrets} if lab_secrets else {}),
         },
-        blockers=blockers,
+        # a node's config can reach a blocker or note (e.g. an external connector's name)
+        blockers=redact_values(blockers, redact or {}),
         blast_radius=len(nodes),
-        side_effects=[memory["warning"]] if memory and memory.get("warning") else [],
+        side_effects=[
+            *([memory["warning"]] if memory and memory.get("warning") else []),
+            *(
+                [
+                    "The server fills the lab_secrets into those nodes from its LAB_* variables or "
+                    "CML_LAB_SECRETS_FILE; the values are never shown"
+                ]
+                if lab_secrets
+                else []
+            ),
+        ],
     )
     limit = timeout or get_settings(ctx).wait_timeout
 
@@ -247,19 +294,33 @@ def register(reg: ToolRegistrar) -> None:
         Alpine node.cfg shell lines. If the day-0 config changes the login, pass `credentials` so
         cml_run_commands can log in. Slow images (FTDv 15-30 min, cat9000v ~10 min): use wait=false
         and then cml_wait_for_converged. Example nodes: [{"label": "r1", "definition": "iol-xe"},
-        {"label": "sw1", "definition": "ioll2-xe"}], links: ["r1 sw1"]."""
+        {"label": "sw1", "definition": "ioll2-xe"}], links: ["r1 sw1"].
+        Secrets: write ${LAB_*} references in config, files or credentials (e.g. 'secret
+        ${LAB_CLI_PASSWORD}'), never values; the server fills them in only in what it sends to CML. The
+        preview's lab_secrets lists them per node; a missing one blocks."""
+        tool_args = {
+            "title": title,
+            "nodes": [n.model_dump() for n in nodes],
+            "links": links,
+            "description": description,
+            "start": start,
+            "wait": wait,
+            "timeout": timeout,
+        }
+        # ${LAB_*} secrets are filled only in what goes to CML: the call, preview, confirm token, result and
+        # audit log keep the references (`nodes` arrive validated with them, so no error can quote a value)
+        secrets_file = get_settings(ctx).lab_secrets_file
+        refs = node_secret_refs(nodes)
+        blockers: list[str] = []
+        if refs:
+            try:
+                nodes = with_node_secrets(nodes, secrets_file)
+            except InvalidRequest as e:  # names the missing variables, never a value
+                blockers.append(str(e))
         return await build_lab_flow(
             ctx,
             tool="cml_build_lab",
-            tool_args={
-                "title": title,
-                "nodes": [n.model_dump() for n in nodes],
-                "links": links,
-                "description": description,
-                "start": start,
-                "wait": wait,
-                "timeout": timeout,
-            },
+            tool_args=tool_args,
             title=title,
             nodes=nodes,
             links=links,
@@ -268,4 +329,7 @@ def register(reg: ToolRegistrar) -> None:
             wait=wait,
             timeout=timeout,
             confirm=confirm,
+            redact=secret_names_by_value(secrets_file) if refs else None,
+            lab_secrets=refs,
+            blockers=blockers,
         )
