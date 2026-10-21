@@ -126,7 +126,7 @@ def resolve_secrets(value: Any, secrets_file: str | None, *, what: str = "this r
         raise InvalidRequest(
             f"{what} needs the lab secret(s) {', '.join(missing)}: set them as environment variables of "
             "the cml-mcp-server process or in the file named by CML_LAB_SECRETS_FILE (dotenv format, e.g. "
-            "/path/to/lab-secrets.env). Recipes never store the values."
+            "/path/to/lab-secrets.env). Recipes and lab files carry only the ${LAB_*} references."
             + (" LAB_CA_PEM_FILE can name the lab CA's PEM file instead." if "LAB_CA_PEM" in missing else "")
         )
     multiline = {n for n in names if "\n" in values[n] or "\r" in values[n]}

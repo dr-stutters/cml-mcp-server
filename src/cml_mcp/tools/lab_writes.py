@@ -19,6 +19,7 @@ from cml_mcp._core import (
     get_settings,
     poll_until,
 )
+from cml_mcp.build import to_yaml
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
 from cml_mcp.licence import (
@@ -31,6 +32,7 @@ from cml_mcp.licence import (
     ram_check,
     ram_headroom,
 )
+from cml_mcp.recipes import placeholders, redact_values, resolve_secrets, secret_names_by_value
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, parse_topology_yaml, state_counts
 from cml_mcp.tools.smart import Timeout
@@ -122,13 +124,18 @@ def register(reg: ToolRegistrar) -> None:
         """Create a new lab from CML topology YAML (nodes, interfaces, links, configs, annotations),
         e.g. a copy of an exported lab or a file from a lab repository. The preview checks the YAML,
         lists node definitions used and flags any this controller doesn't have. The lab is created
-        stopped; start it with cml_start_lab."""
+        stopped; start it with cml_start_lab.
+        Lab secrets: write ${LAB_*} references (e.g. "AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}"), never
+        the values. The server fills them into the nodes (day-0 configs, logins) from its LAB_* variables
+        or CML_LAB_SECRETS_FILE only in what it sends to CML; the preview lists which secret goes to which
+        node, and names any the server doesn't have."""
         app: CmlApp = get_client(ctx)
         topo = parse_topology_yaml(topology_yaml)
         final_title = str(title or (topo.get("lab") or {}).get("title") or "Imported lab")[:64]
         defs = await known_definitions(app)
+        nodes = topo.get("nodes") or []
         used: dict[str, int] = {}
-        for n in topo.get("nodes") or []:
+        for n in nodes:
             d = str(n.get("node_definition"))
             used[d] = used.get(d, 0) + 1
         blockers = [
@@ -139,22 +146,59 @@ def register(reg: ToolRegistrar) -> None:
             blockers.append(
                 f"A lab titled {final_title!r} already exists ({', '.join(dupes)}); pass another title"
             )
+        # ${LAB_*} secrets are filled only in the nodes and only in what goes to CML: the preview, the
+        # confirm token and the audit log keep the placeholders, and lab notes and annotations keep them
+        # as written (where a credential is kept, as in recipe annotations)
+        secrets_file = get_settings(ctx).lab_secrets_file
+        filled: dict[str, list[str]] = {}
+        for n in nodes:
+            for name in sorted(placeholders(n)):
+                filled.setdefault(name, []).append(str(n.get("label") or n.get("id")))
+        if filled:
+            try:
+                resolve_secrets(nodes, secrets_file, what="This topology")
+            except InvalidRequest as e:  # names the missing variables, never a value
+                blockers.append(str(e))
         plan = Plan(
-            f"Import lab {final_title!r} ({len(topo.get('nodes') or [])} nodes, "
-            f"{len(topo.get('links') or [])} links)",
-            details={"title": final_title, "node_definitions": used},
+            f"Import lab {final_title!r} ({len(nodes)} nodes, {len(topo.get('links') or [])} links)",
+            details={
+                "title": final_title,
+                "node_definitions": used,
+                **({"lab_secrets": dict(sorted(filled.items()))} if filled else {}),
+            },
+            side_effects=[
+                "The server fills the lab_secrets into those nodes from its LAB_* variables or "
+                "CML_LAB_SECRETS_FILE; the values are never shown"
+            ]
+            if filled
+            else [],
             blockers=blockers,
         )
 
-        async def apply() -> Any:
+        async def post(body: str) -> dict[str, Any]:
             res = await app.api.post(
                 "/import",
                 None,
                 params={"title": final_title},
-                content=topology_yaml,
+                content=body,
                 headers={"Content-Type": "application/x-yaml"},
             )
             return {"id": res.get("id"), "title": final_title, "warnings": res.get("warnings") or []}
+
+        async def apply() -> Any:
+            """Without placeholders the YAML goes to CML as given. With them, the parsed topology is filled
+            and re-serialised (a value is YAML-quoted wherever it lands); CML's warnings and errors may
+            echo configs, so they are cleaned before they reach the audit log or the caller."""
+            if not filled:
+                return await post(topology_yaml)
+            body = to_yaml({**topo, "nodes": resolve_secrets(nodes, secrets_file, what="This topology")})
+            redact = secret_names_by_value(secrets_file)
+            try:
+                return redact_values(await post(body), redact)
+            except UpstreamError as e:
+                raise UpstreamError(redact_values(str(e), redact), e.status_code) from None
+            except InvalidRequest as e:
+                raise InvalidRequest(redact_values(str(e), redact)) from None
 
         return await preview_or_apply(
             ctx,

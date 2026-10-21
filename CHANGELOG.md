@@ -9,6 +9,15 @@
   `LAB_FTD_REG_KEY` only for FMC registration and `LAB_RADIUS_SECRET` never for it.
 
 ### Added
+- **`cml_import_lab` fills `${LAB_*}` lab secrets on the server (part of L42, #17).** A topology YAML can carry
+  `${LAB_*}` references in its nodes instead of the values, e.g. a CML Cookbook file rendered with
+  `admin_password='${LAB_FTD_ADMIN_PASSWORD}'` (`"AdminPassword": "${LAB_FTD_ADMIN_PASSWORD}"` in the FTD day-0 JSON,
+  and the pyATS login). They are filled from the `LAB_*` environment or `CML_LAB_SECRETS_FILE`, as for recipes, only in
+  the YAML sent to CML (the parsed topology is filled and re-serialised, so values are YAML-quoted). The preview lists
+  which secret goes into which node (`lab_secrets`), and a missing variable blocks it by name (also at confirm time).
+  The tool call, preview, confirm token, result and audit log carry only the placeholders, and CML's warnings and
+  errors are redacted. Lab notes and annotations keep their references, and YAML without node placeholders is sent
+  unchanged.
 - **Firewall SD-WAN recipes (fmc-mcp-server F52, #109).** `ftd-sdwan-single` (`mcp-sdwan-t1`: hub + 3 spokes),
   `ftd-sdwan-dual-hub` (`mcp-sdwan-t2`: primary + backup hub, 2 spokes) and `ftd-sdwan-ha-hub` (`mcp-sdwan-t3`: HA-pair
   hub, 2 spokes). Every FTDv has three WAN transports through IOL carrier routers (mpls, inet, lte) and an Alpine inside
