@@ -4,8 +4,10 @@ An [MCP](https://modelcontextprotocol.io) server for **Cisco Modeling Labs (CML 
 build, run and troubleshoot network labs from an AI assistant. It's built on
 [stutters-mcp-core](https://github.com/dr-stutters/stutters-mcp-core) and tested against CML 2.10.
 
-> Not affiliated with or endorsed by Cisco Systems, Inc. "Cisco" and "Cisco Modeling Labs" are
-> trademarks of Cisco Systems, Inc.
+> **Disclaimer.** This is not an official Cisco product or repository, and it isn't supported or endorsed by
+> Cisco. It's a personal project by [@dr-stutters](https://github.com/dr-stutters), for lab and learning use
+> only: don't point it at production systems. It's provided as is, with no warranty (see the
+> [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
 - **72 tools** in three tiers: 39 read, 25 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
