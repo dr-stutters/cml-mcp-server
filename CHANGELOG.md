@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 - 2026-10-22
 
 ### Added
 - **`http` and `dns` verify probes, matching the CML Cookbook check types of the same names.** A recipe's
