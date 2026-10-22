@@ -32,7 +32,7 @@ def test_every_recipe_contract_parses(name: str) -> None:
     assert set(c.nodes) <= labels and set(c.addresses) <= labels
     for p in c.probes:
         assert p.node is None or p.node in labels
-        assert bool(p.command) + bool(p.tcp) + bool(p.snmp) + bool(p.ise_session) == 1, p.name
+        assert sum(map(bool, (p.command, p.tcp, p.snmp, p.ise_session, p.http, p.dns))) == 1, p.name
         for rx in (p.expect, p.reject):
             if rx:
                 re.compile(rx)

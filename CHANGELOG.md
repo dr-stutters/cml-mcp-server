@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **`http` and `dns` verify probes, matching the CML Cookbook check types of the same names.** A recipe's
+  `verify.probes` can now prove application-level verdicts from a Linux node's console:
+  `{name, node, http: {url, method, insecure, expect: {status, pattern, not_pattern | no_response}}}` runs curl
+  (else GNU wget) without following redirects; `{name, node, dns: {name, record, server, expect: {rcode, answers,
+  not_answers | no_response}}}` runs dig (else drill, host or nslookup). Pass rules follow the Cookbook's
+  `docs/recipe-format.md`: http passes on `status` (default any 2xx) and the body patterns, or with `no_response`
+  only when the connection is refused, reset or times out; dns passes on `rcode` (default NOERROR) with every
+  `answers` entry present and no `not_answers` entry (NOERROR with no `answers` needs one answer), or with
+  `no_response` only when the query times out. Each is retried until it passes or its `timeout` (default 180 s)
+  runs out; results carry the tool, what was seen, why it failed, the output tail and the number of tries. The
+  commands are built from validated fields (`cml_mcp/appchecks.py`), never from caller input.
+
 ## 0.11.0 - 2026-10-21
 
 ### Fixed

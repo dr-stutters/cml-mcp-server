@@ -13,11 +13,15 @@ A contract (in the recipe YAML) lists what a known-good lab looks like:
         - {name: snmp, snmp: {host: 198.18.128.152, community: ${LAB_SNMP_RO}}}
         - {name: ise-session, ise_session: {url: https://198.18.134.35, username: ${LAB_ISE_USERNAME},
            password: ${LAB_ISE_PASSWORD}, user: '^mcp-alice$', nas_ip: 198.18.128.194}}
+        - {name: app-page, node: client1, http: {url: http://10.20.0.10/, expect: {status: 200}}}
+        - {name: sinkholed, node: client1, dns: {name: bad.example, expect: {answers: [10.99.99.99]}}}
 
 Console probes run commands written in the recipe file (packaged or from CML_RECIPE_DIRS, never caller
 input) over the node's console; tcp, snmp and ise_session probes run from the MCP server's host, like the
 product server would (ise_session reads ISE's live sessions from MnT: proof that ISE itself authenticated
-the user).
+the user). http and dns probes (cml_mcp.appchecks: the CML Cookbook check types of the same names) run
+curl/wget and dig/drill/host/nslookup from a Linux node's console and are retried until they pass or their
+`timeout` (default 180 s) runs out.
 Every check is pass/fail with a short detail; nothing in the lab is changed.
 """
 
@@ -35,6 +39,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from cml_mcp._core import InvalidRequest, UpstreamError
+from cml_mcp.appchecks import DEFAULT_TIMEOUT, AppProbe, DnsCheck, HttpCheck, run_app_probes
 from cml_mcp.build import VSWITCH_FILE, is_cat9kv, serial_of
 from cml_mcp.client import CmlApp
 from cml_mcp.console import FORBIDDEN_CHARS, Credentials, mask_secrets, read_only_problem
@@ -111,17 +116,28 @@ class Probe(BaseModel):
     command: str | None = None
     expect: str | None = Field(default=None, description="regex the console output must match")
     reject: str | None = Field(default=None, description="regex the console output must not match")
-    timeout: float = Field(default=60, gt=0, le=600)
+    timeout: float = Field(
+        default=60,
+        gt=0,
+        le=600,
+        description="seconds per command; for http/dns, how long to retry (default 180)",
+    )
     interrupt_after: float | None = None
     tcp: str | None = None
     snmp: SnmpProbe | None = None
     ise_session: IseSessionProbe | None = None
+    http: HttpCheck | None = None
+    dns: DnsCheck | None = None
 
     @model_validator(mode="after")
     def _check(self) -> Probe:
-        actions = [a for a in (self.command, self.tcp, self.snmp, self.ise_session) if a]
+        actions = [a for a in (self.command, self.tcp, self.snmp, self.ise_session, self.http, self.dns) if a]
         if len(actions) != 1:
-            raise ValueError(f"probe {self.name!r}: give exactly one of command, tcp, snmp, ise_session")
+            raise ValueError(
+                f"probe {self.name!r}: give exactly one of command, tcp, snmp, ise_session, http, dns"
+            )
+        if (self.http or self.dns) and not self.node:
+            raise ValueError(f"probe {self.name!r}: an http or dns probe needs a (Linux) node")
         if self.command:
             if not self.node:
                 raise ValueError(f"probe {self.name!r}: a command needs a node")
@@ -143,6 +159,11 @@ class Probe(BaseModel):
                 except re.error as e:
                     raise ValueError(f"probe {self.name!r}: bad regex {rx!r}: {e}") from e
         return self
+
+    def app_probe(self) -> AppProbe:
+        """This http/dns probe for run_app_probes; `timeout` is how long it is retried (default 180 s)."""
+        timeout = self.timeout if "timeout" in self.model_fields_set else DEFAULT_TIMEOUT
+        return AppProbe(name=self.name, node=str(self.node), timeout=timeout, http=self.http, dns=self.dns)
 
 
 class Contract(BaseModel):
@@ -580,6 +601,9 @@ async def _verify_recipe(
                     else {"found": sorted(found), **({"errors": address_errors} if address_errors else {})},
                 )
             )
+    app_probes = [p.app_probe() for p in contract.probes if p.http or p.dns]
+    if app_probes:
+        checks += await run_app_probes(app, lid, nodes, app_probes)
     # Notes are writable by any lab editor: substitutions read from them never redirect a network
     # probe (an SNMP probe sends the real community) to another host; the caller can pass them explicitly.
     # Probes are compared by position with the packaged recipe (a substitution can rename a probe, never
