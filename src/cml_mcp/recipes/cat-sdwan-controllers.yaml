@@ -1,0 +1,366 @@
+# Catalyst SD-WAN 20.18.3 control plane (L60, cat-sdwan W0 spike): Manager, Controller and Validator with an
+# Enterprise root CA, on two transports joined by an Alpine WAN router. Day-0 is cloud-init (zcloud.xml + the lab CA as
+# /usr/share/viptela/root-ca.crt), as Cisco's catalyst-sdwan-lab tool writes it. The controller certificates
+# themselves are signed after boot (Manager CSR -> lab AD CS -> install), see `manager_side`.
+name: cat-sdwan-controllers
+summary: Catalyst SD-WAN 20.18.3 Manager 198.18.129.10, Validator .11, Controller .12 (VPN 512) with VPN 0 on the inet transport 10.60.2.0/24, an mpls transport 10.60.1.0/24 and a WAN router between them
+address_plan:
+  management (VPN 512): manager eth0 198.18.129.10/18, validator eth0 .11, controller eth0 .12, gateway 198.18.128.1
+  inet transport (VPN 0): 10.60.2.0/24, manager eth1 .10, validator ge0/0 .11, controller eth1 .12, wan eth1 .254 (default route)
+  mpls transport: 10.60.1.0/24, wan eth0 .254 (the edges' mpls colour in cat-sdwan-fabric)
+  system IPs: manager 1.1.1.1, validator 1.1.1.2, controller 1.1.1.3, site 1
+  validator: 10.60.2.11 UDP 12346, organisation ${LAB_SDWAN_ORG}
+credentials:
+  sdwan: admin / ${LAB_SDWAN_ADMIN_PASSWORD} on the Manager GUI/API and every controller CLI (day-0 carries ${LAB_SDWAN_ADMIN_HASH}, its SHA-512 crypt)
+  wan: Alpine (a Linux router, IP forwarding on), login cisco / cisco
+  root_ca: the lab AD CS root (LAB_CA_PEM, or the file named by LAB_CA_PEM_FILE) is pre-installed as the controllers' root CA
+manager_side: >-
+  Once the Manager answers on https://198.18.129.10: Administration > Settings: organisation ${LAB_SDWAN_ORG},
+  validator 10.60.2.11 port 12346, controller certificate authorization Enterprise root CA (the lab root). Add the
+  validator (10.60.2.11, vbond) and controller (10.60.2.12, vsmart) with POST /dataservice/system/device, then for
+  each of manager, validator and controller: POST /dataservice/certificate/generate/csr, sign the CSR with the lab CA
+  (Windows_Server win_sign_csr, a template with server and client authentication), POST
+  /dataservice/certificate/install/signedCert. GET /dataservice/system/device/controllers then lists all three with
+  certificates installed.
+boot_minutes: 20-30 (the Manager formats its 256 GB data volume and starts its services after BOOTED)
+verify:
+  booted: [manager, validator, controller, wan]
+  nodes: [wan]
+  targets: [10.60.2.10, 10.60.2.11, 10.60.2.12]
+  probes:
+    - {name: manager HTTPS (443) from the server, tcp: 198.18.129.10:443}
+    - {name: validator SSH (22) from the server, tcp: 198.18.129.11:22}
+    - {name: controller SSH (22) from the server, tcp: 198.18.129.12:22}
+build:
+  title: mcp-cat-sdwan
+  description: Catalyst SD-WAN 20.18.3 Manager, Controller and Validator (cml-mcp-server recipe cat-sdwan-controllers)
+  nodes:
+    - label: ext
+      definition: external_connector
+      config: System Bridge
+      x: 0
+      y: 0
+    - label: mgmt-sw
+      definition: unmanaged_switch
+      x: 0
+      y: 120
+    - label: manager
+      definition: cat-sdwan-manager
+      # 32 GB: at 16 GB the configuration database crash-loops. 4 vCPUs: CML keeps a node QUEUED once the
+      # host's allocated vCPUs would pass 2x its cores (64 on the 32-core lab controller), and 8 rarely fit
+      ram: 32768
+      cpus: 4
+      x: -240
+      y: 280
+      credentials: {username: admin, password: "${LAB_SDWAN_ADMIN_PASSWORD}"}
+      config: |
+        #cloud-config
+        fs_setup:
+        - device: "/dev/vdb"
+          partition: "none"
+          filesystem: "ext4"
+        mounts:
+        - [ vdb, /opt/data ]
+        write_files:
+        - path: /etc/default/personality
+          content: "vmanage\n"
+        - path: /opt/web-app/etc/persona
+          owner: vmanage:vmanage-admin
+          permissions: '0644'
+          content: '{"persona":"COMPUTE_AND_DATA"}'
+        - path: /etc/default/inited
+          content: "1\n"
+        - path: /usr/share/viptela/symantec-root-ca.crt
+        - path: /usr/share/viptela/root-ca.crt
+          content: |
+            ${LAB_CA_PEM}
+        - path: /etc/confd/init/zcloud.xml
+          content: |
+            <config xmlns="http://tail-f.com/ns/config/1.0">
+              <system xmlns="http://viptela.com/system">
+                <personality>vmanage</personality>
+                <device-model>vmanage</device-model>
+                <organization-name>${LAB_SDWAN_ORG}</organization-name>
+                <sp-organization-name>${LAB_SDWAN_ORG}</sp-organization-name>
+                <vbond>
+                  <remote>10.60.2.11</remote>
+                  <port>12346</port>
+                </vbond>
+                <site-id>1</site-id>
+                <system-ip>1.1.1.1</system-ip>
+                <host-name>manager</host-name>
+                <domain-id>1</domain-id>
+                <aaa>
+                  <user>
+                    <name>admin</name>
+                    <password>${LAB_SDWAN_ADMIN_HASH}</password>
+                    <last-password-change-time>2026-10-23T00:00:00.000</last-password-change-time>
+                    <group>netadmin</group>
+                  </user>
+                </aaa>
+              </system>
+              <vpn xmlns="http://viptela.com/vpn">
+                <vpn-instance>
+                  <vpn-id>0</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>10.60.2.254</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth1</if-name>
+                    <ip>
+                      <address>10.60.2.10/24</address>
+                    </ip>
+                    <tunnel-interface>
+                      <encapsulation>
+                        <encap>ipsec</encap>
+                      </encapsulation>
+                      <color>
+                        <value>default</value>
+                      </color>
+                      <allow-service>
+                        <sshd>true</sshd>
+                        <netconf>true</netconf>
+                      </allow-service>
+                    </tunnel-interface>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+                <vpn-instance>
+                  <vpn-id>512</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>198.18.128.1</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth0</if-name>
+                    <ip>
+                      <address>198.18.129.10/18</address>
+                    </ip>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+              </vpn>
+            </config>
+    - label: validator
+      definition: cat-sdwan-validator
+      x: 0
+      y: 280
+      credentials: {username: admin, password: "${LAB_SDWAN_ADMIN_PASSWORD}"}
+      config: |
+        #cloud-config
+        write_files:
+        - path: /etc/default/inited
+          content: "1\n"
+        - path: /usr/share/viptela/symantec-root-ca.crt
+        - path: /usr/share/viptela/root-ca.crt
+          content: |
+            ${LAB_CA_PEM}
+        - path: /etc/confd/init/zcloud.xml
+          content: |
+            <config xmlns="http://tail-f.com/ns/config/1.0">
+              <system xmlns="http://viptela.com/system">
+                <personality>vedge</personality>
+                <device-model>vedge-cloud</device-model>
+                <organization-name>${LAB_SDWAN_ORG}</organization-name>
+                <sp-organization-name>${LAB_SDWAN_ORG}</sp-organization-name>
+                <vbond>
+                  <local></local>
+                  <remote>10.60.2.11</remote>
+                  <port>12346</port>
+                </vbond>
+                <site-id>1</site-id>
+                <system-ip>1.1.1.2</system-ip>
+                <host-name>validator</host-name>
+                <domain-id>1</domain-id>
+                <aaa>
+                  <user>
+                    <name>admin</name>
+                    <password>${LAB_SDWAN_ADMIN_HASH}</password>
+                    <group>netadmin</group>
+                  </user>
+                </aaa>
+              </system>
+              <vpn xmlns="http://viptela.com/vpn">
+                <vpn-instance>
+                  <vpn-id>0</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>10.60.2.254</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>ge0/0</if-name>
+                    <ip>
+                      <address>10.60.2.11/24</address>
+                    </ip>
+                    <tunnel-interface>
+                      <encapsulation>
+                        <encap>ipsec</encap>
+                      </encapsulation>
+                      <color>
+                        <value>default</value>
+                      </color>
+                      <allow-service>
+                        <sshd>true</sshd>
+                        <netconf>true</netconf>
+                      </allow-service>
+                    </tunnel-interface>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+                <vpn-instance>
+                  <vpn-id>512</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>198.18.128.1</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth0</if-name>
+                    <ip>
+                      <address>198.18.129.11/18</address>
+                    </ip>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+              </vpn>
+            </config>
+    - label: controller
+      definition: cat-sdwan-controller
+      x: 240
+      y: 280
+      credentials: {username: admin, password: "${LAB_SDWAN_ADMIN_PASSWORD}"}
+      config: |
+        #cloud-config
+        write_files:
+        - path: /etc/default/personality
+          content: "vsmart\n"
+        - path: /etc/default/inited
+          content: "1\n"
+        - path: /usr/share/viptela/symantec-root-ca.crt
+        - path: /usr/share/viptela/root-ca.crt
+          content: |
+            ${LAB_CA_PEM}
+        - path: /etc/confd/init/zcloud.xml
+          content: |
+            <config xmlns="http://tail-f.com/ns/config/1.0">
+              <system xmlns="http://viptela.com/system">
+                <personality>vsmart</personality>
+                <device-model>vsmart</device-model>
+                <organization-name>${LAB_SDWAN_ORG}</organization-name>
+                <sp-organization-name>${LAB_SDWAN_ORG}</sp-organization-name>
+                <vbond>
+                  <remote>10.60.2.11</remote>
+                  <port>12346</port>
+                </vbond>
+                <site-id>1</site-id>
+                <system-ip>1.1.1.3</system-ip>
+                <host-name>controller</host-name>
+                <domain-id>1</domain-id>
+                <aaa>
+                  <user>
+                    <name>admin</name>
+                    <password>${LAB_SDWAN_ADMIN_HASH}</password>
+                    <group>netadmin</group>
+                  </user>
+                </aaa>
+              </system>
+              <vpn xmlns="http://viptela.com/vpn">
+                <vpn-instance>
+                  <vpn-id>0</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>10.60.2.254</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth1</if-name>
+                    <ip>
+                      <address>10.60.2.12/24</address>
+                    </ip>
+                    <tunnel-interface>
+                      <encapsulation>
+                        <encap>ipsec</encap>
+                      </encapsulation>
+                      <color>
+                        <value>default</value>
+                      </color>
+                      <allow-service>
+                        <sshd>true</sshd>
+                        <netconf>true</netconf>
+                      </allow-service>
+                    </tunnel-interface>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+                <vpn-instance>
+                  <vpn-id>512</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>198.18.128.1</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth0</if-name>
+                    <ip>
+                      <address>198.18.129.12/18</address>
+                    </ip>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+              </vpn>
+            </config>
+    - label: inet
+      definition: unmanaged_switch
+      x: 0
+      y: 440
+    - label: mpls
+      definition: unmanaged_switch
+      x: -240
+      y: 600
+    - label: wan
+      definition: alpine
+      x: 0
+      y: 600
+      credentials: {username: cisco, password: cisco}
+      config: |
+        # this is a shell script which will be sourced at boot
+        hostname wan
+        USERNAME=cisco
+        PASSWORD=cisco
+        ip link set eth0 up
+        ip addr add 10.60.1.254/24 dev eth0
+        ip link set eth1 up
+        ip addr add 10.60.2.254/24 dev eth1
+        sysctl -w net.ipv4.ip_forward=1
+  links:
+    - ext mgmt-sw
+    - manager:eth0 mgmt-sw
+    - validator:eth0 mgmt-sw
+    - controller:eth0 mgmt-sw
+    - manager:eth1 inet
+    - validator:ge0/0 inet
+    - controller:eth1 inet
+    - wan:eth1 inet
+    - wan:eth0 mpls

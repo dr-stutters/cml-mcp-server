@@ -1,0 +1,787 @@
+# Catalyst SD-WAN 20.18.3 fabric (L60, cat-sdwan W0): the cat-sdwan-controllers lab plus a hub and two branch
+# edges (cat-sdwan-edge 17.18.02, controller mode) on two transports, with an Ubuntu host in VPN 10 behind each.
+# Edge day-0 is the Manager's cloud-init bootstrap format (vbond, organisation, the lab root CA) plus a boothook with
+# their transports, tunnels and VPN 512. The chassis number and one-time token come later: the Manager mints the
+# token when the owner's PnP serial file is uploaded, and each edge is activated with them over SSH (VPN 512). The
+# placeholder uuid/otp stay in vinitparam: without them the C8000V boots in autonomous mode.
+name: cat-sdwan-fabric
+summary: Catalyst SD-WAN 20.18.3 fabric - Manager 198.18.129.10, Validator .11, Controller .12, edges hub1 .13, br1 .14, br2 .15 (VPN 512) on mpls 10.60.1.0/24 and inet 10.60.2.0/24, an Ubuntu host behind each edge (VPN 10)
+address_plan:
+  management (VPN 512): manager 198.18.129.10/18, validator .11, controller .12, hub1 GigabitEthernet4 .13, br1 .14, br2 .15, gateway 198.18.128.1
+  inet transport (colour biz-internet): 10.60.2.0/24, manager .10, validator .11 (UDP 12346), controller .12, hub1 GigabitEthernet2 .13, br1 .14, br2 .15, wan eth1 .254
+  mpls transport (colour mpls): 10.60.1.0/24, hub1 GigabitEthernet1 .13, br1 .14, br2 .15, wan eth0 .254 (routes to inet, so mpls TLOCs reach the controllers)
+  system IPs / sites: manager 1.1.1.1, validator 1.1.1.2, controller 1.1.1.3 (site 1); hub1 10.0.0.1 site 100, br1 10.0.0.2 site 200, br2 10.0.0.3 site 201
+  VPN 10 (GigabitEthernet3): hub1 10.61.100.1/24, br1 10.61.200.1/24, br2 10.61.201.1/24; host-<edge> .10 behind each
+credentials:
+  sdwan: admin / ${LAB_SDWAN_ADMIN_PASSWORD} on the Manager GUI/API, every controller and every edge (controller day-0 carries ${LAB_SDWAN_ADMIN_HASH})
+  edges: activated after boot with a chassis number and one-time token from the Manager's WAN edge list (the Manager mints the token at the serial file upload, so no recipe can carry it)
+  hosts: Ubuntu, login cisco / cisco
+  wan: Alpine (a Linux router, IP forwarding on), login cisco / cisco
+  root_ca: the lab AD CS root (LAB_CA_PEM, or the file named by LAB_CA_PEM_FILE) is the controllers' root CA and the edges' trusted CA
+manager_side: >-
+  As cat-sdwan-controllers (organisation ${LAB_SDWAN_ORG}, validator 10.60.2.11, Enterprise root CA, validator and controller
+  added with lab-CA certificates), then upload the PnP serial file (POST /dataservice/system/device/fileupload, validity
+  valid) and activate each edge with a free C8000V entry: 'request platform software sdwan vedge_cloud activate
+  chassis-number <chassis> token <token>' on the edge (stutters-mcp-lab seed_lab.py edges does both over SSH to
+  198.18.129.13-.15). GET /dataservice/system/device/vedges then shows them with certificates installed, control
+  connections up and BFD up on both colours.
+boot_minutes: 30-40 (the Manager as cat-sdwan-controllers; edges join 5-10 min after they boot)
+verify:
+  booted: [manager, validator, controller, wan, hub1, br1, br2, host-hub1, host-br1, host-br2]
+  nodes: [wan]
+  targets: [10.60.2.10, 10.60.2.11, 10.60.2.12, 10.60.1.13, 10.60.1.14, 10.60.1.15, 10.60.2.13, 10.60.2.14, 10.60.2.15]
+  probes:
+    - {name: manager HTTPS (443) from the server, tcp: 198.18.129.10:443}
+    - {name: validator SSH (22) from the server, tcp: 198.18.129.11:22}
+    - {name: controller SSH (22) from the server, tcp: 198.18.129.12:22}
+    - name: hub1 has BFD up to br1 and br2 on both colours (needs the edges activated)
+      node: hub1
+      command: show sdwan bfd sessions | count up
+      expect: 'regexp = [4-9]'
+    - name: br1 has its control connections up (validator, controller, manager)
+      node: br1
+      command: show sdwan control connections | count up
+      expect: 'regexp = [3-9]'
+    - name: host-br1 reaches host-br2 over the overlay (VPN 10)
+      node: host-br1
+      command: ping -c 5 10.61.201.10
+      expect: 'transmitted, [2-5] received'
+    - name: host-br1 reaches host-hub1 over the overlay (VPN 10)
+      node: host-br1
+      command: ping -c 5 10.61.100.10
+      expect: 'transmitted, [2-5] received'
+build:
+  title: mcp-cat-sdwan
+  description: Catalyst SD-WAN 20.18.3 fabric - controllers, hub1, br1, br2 and a host behind each (cml-mcp-server recipe cat-sdwan-fabric)
+  nodes:
+    - label: ext
+      definition: external_connector
+      config: System Bridge
+      x: 0
+      y: 0
+    - label: mgmt-sw
+      definition: unmanaged_switch
+      x: 0
+      y: 120
+    - label: manager
+      definition: cat-sdwan-manager
+      # 32 GB: at 16 GB the configuration database crash-loops. 4 vCPUs: CML keeps a node QUEUED once the
+      # host's allocated vCPUs would pass 2x its cores (64 on the 32-core lab controller), and 8 rarely fit
+      ram: 32768
+      cpus: 4
+      x: -240
+      y: 280
+      credentials: {username: admin, password: "${LAB_SDWAN_ADMIN_PASSWORD}"}
+      config: |
+        #cloud-config
+        fs_setup:
+        - device: "/dev/vdb"
+          partition: "none"
+          filesystem: "ext4"
+        mounts:
+        - [ vdb, /opt/data ]
+        write_files:
+        - path: /etc/default/personality
+          content: "vmanage\n"
+        - path: /opt/web-app/etc/persona
+          owner: vmanage:vmanage-admin
+          permissions: '0644'
+          content: '{"persona":"COMPUTE_AND_DATA"}'
+        - path: /etc/default/inited
+          content: "1\n"
+        - path: /usr/share/viptela/symantec-root-ca.crt
+        - path: /usr/share/viptela/root-ca.crt
+          content: |
+            ${LAB_CA_PEM}
+        - path: /etc/confd/init/zcloud.xml
+          content: |
+            <config xmlns="http://tail-f.com/ns/config/1.0">
+              <system xmlns="http://viptela.com/system">
+                <personality>vmanage</personality>
+                <device-model>vmanage</device-model>
+                <organization-name>${LAB_SDWAN_ORG}</organization-name>
+                <sp-organization-name>${LAB_SDWAN_ORG}</sp-organization-name>
+                <vbond>
+                  <remote>10.60.2.11</remote>
+                  <port>12346</port>
+                </vbond>
+                <site-id>1</site-id>
+                <system-ip>1.1.1.1</system-ip>
+                <host-name>manager</host-name>
+                <domain-id>1</domain-id>
+                <aaa>
+                  <user>
+                    <name>admin</name>
+                    <password>${LAB_SDWAN_ADMIN_HASH}</password>
+                    <last-password-change-time>2026-10-23T00:00:00.000</last-password-change-time>
+                    <group>netadmin</group>
+                  </user>
+                </aaa>
+              </system>
+              <vpn xmlns="http://viptela.com/vpn">
+                <vpn-instance>
+                  <vpn-id>0</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>10.60.2.254</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth1</if-name>
+                    <ip>
+                      <address>10.60.2.10/24</address>
+                    </ip>
+                    <tunnel-interface>
+                      <encapsulation>
+                        <encap>ipsec</encap>
+                      </encapsulation>
+                      <color>
+                        <value>default</value>
+                      </color>
+                      <allow-service>
+                        <sshd>true</sshd>
+                        <netconf>true</netconf>
+                      </allow-service>
+                    </tunnel-interface>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+                <vpn-instance>
+                  <vpn-id>512</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>198.18.128.1</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth0</if-name>
+                    <ip>
+                      <address>198.18.129.10/18</address>
+                    </ip>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+              </vpn>
+            </config>
+    - label: validator
+      definition: cat-sdwan-validator
+      x: 0
+      y: 280
+      credentials: {username: admin, password: "${LAB_SDWAN_ADMIN_PASSWORD}"}
+      config: |
+        #cloud-config
+        write_files:
+        - path: /etc/default/inited
+          content: "1\n"
+        - path: /usr/share/viptela/symantec-root-ca.crt
+        - path: /usr/share/viptela/root-ca.crt
+          content: |
+            ${LAB_CA_PEM}
+        - path: /etc/confd/init/zcloud.xml
+          content: |
+            <config xmlns="http://tail-f.com/ns/config/1.0">
+              <system xmlns="http://viptela.com/system">
+                <personality>vedge</personality>
+                <device-model>vedge-cloud</device-model>
+                <organization-name>${LAB_SDWAN_ORG}</organization-name>
+                <sp-organization-name>${LAB_SDWAN_ORG}</sp-organization-name>
+                <vbond>
+                  <local></local>
+                  <remote>10.60.2.11</remote>
+                  <port>12346</port>
+                </vbond>
+                <site-id>1</site-id>
+                <system-ip>1.1.1.2</system-ip>
+                <host-name>validator</host-name>
+                <domain-id>1</domain-id>
+                <aaa>
+                  <user>
+                    <name>admin</name>
+                    <password>${LAB_SDWAN_ADMIN_HASH}</password>
+                    <group>netadmin</group>
+                  </user>
+                </aaa>
+              </system>
+              <vpn xmlns="http://viptela.com/vpn">
+                <vpn-instance>
+                  <vpn-id>0</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>10.60.2.254</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>ge0/0</if-name>
+                    <ip>
+                      <address>10.60.2.11/24</address>
+                    </ip>
+                    <tunnel-interface>
+                      <encapsulation>
+                        <encap>ipsec</encap>
+                      </encapsulation>
+                      <color>
+                        <value>default</value>
+                      </color>
+                      <allow-service>
+                        <sshd>true</sshd>
+                        <netconf>true</netconf>
+                      </allow-service>
+                    </tunnel-interface>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+                <vpn-instance>
+                  <vpn-id>512</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>198.18.128.1</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth0</if-name>
+                    <ip>
+                      <address>198.18.129.11/18</address>
+                    </ip>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+              </vpn>
+            </config>
+    - label: controller
+      definition: cat-sdwan-controller
+      x: 240
+      y: 280
+      credentials: {username: admin, password: "${LAB_SDWAN_ADMIN_PASSWORD}"}
+      config: |
+        #cloud-config
+        write_files:
+        - path: /etc/default/personality
+          content: "vsmart\n"
+        - path: /etc/default/inited
+          content: "1\n"
+        - path: /usr/share/viptela/symantec-root-ca.crt
+        - path: /usr/share/viptela/root-ca.crt
+          content: |
+            ${LAB_CA_PEM}
+        - path: /etc/confd/init/zcloud.xml
+          content: |
+            <config xmlns="http://tail-f.com/ns/config/1.0">
+              <system xmlns="http://viptela.com/system">
+                <personality>vsmart</personality>
+                <device-model>vsmart</device-model>
+                <organization-name>${LAB_SDWAN_ORG}</organization-name>
+                <sp-organization-name>${LAB_SDWAN_ORG}</sp-organization-name>
+                <vbond>
+                  <remote>10.60.2.11</remote>
+                  <port>12346</port>
+                </vbond>
+                <site-id>1</site-id>
+                <system-ip>1.1.1.3</system-ip>
+                <host-name>controller</host-name>
+                <domain-id>1</domain-id>
+                <aaa>
+                  <user>
+                    <name>admin</name>
+                    <password>${LAB_SDWAN_ADMIN_HASH}</password>
+                    <group>netadmin</group>
+                  </user>
+                </aaa>
+              </system>
+              <vpn xmlns="http://viptela.com/vpn">
+                <vpn-instance>
+                  <vpn-id>0</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>10.60.2.254</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth1</if-name>
+                    <ip>
+                      <address>10.60.2.12/24</address>
+                    </ip>
+                    <tunnel-interface>
+                      <encapsulation>
+                        <encap>ipsec</encap>
+                      </encapsulation>
+                      <color>
+                        <value>default</value>
+                      </color>
+                      <allow-service>
+                        <sshd>true</sshd>
+                        <netconf>true</netconf>
+                      </allow-service>
+                    </tunnel-interface>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+                <vpn-instance>
+                  <vpn-id>512</vpn-id>
+                  <ip>
+                    <route>
+                      <prefix>0.0.0.0/0</prefix>
+                      <next-hop>
+                        <address>198.18.128.1</address>
+                      </next-hop>
+                    </route>
+                  </ip>
+                  <interface>
+                    <if-name>eth0</if-name>
+                    <ip>
+                      <address>198.18.129.12/18</address>
+                    </ip>
+                    <shutdown>false</shutdown>
+                  </interface>
+                </vpn-instance>
+              </vpn>
+            </config>
+    - label: inet
+      definition: unmanaged_switch
+      x: 0
+      y: 440
+    - label: mpls
+      definition: unmanaged_switch
+      x: -240
+      y: 600
+    - label: wan
+      definition: alpine
+      x: 0
+      y: 600
+      credentials: {username: cisco, password: cisco}
+      config: |
+        # this is a shell script which will be sourced at boot
+        hostname wan
+        USERNAME=cisco
+        PASSWORD=cisco
+        ip link set eth0 up
+        ip addr add 10.60.1.254/24 dev eth0
+        ip link set eth1 up
+        ip addr add 10.60.2.254/24 dev eth1
+        sysctl -w net.ipv4.ip_forward=1
+    - label: hub1
+      definition: cat-sdwan-edge
+      x: -360
+      y: 760
+      credentials: {username: admin, password: "${LAB_SDWAN_ADMIN_PASSWORD}"}
+      config: |
+        Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+        MIME-Version: 1.0
+
+        --==BOUNDARY==
+        Content-Type: text/cloud-config; charset="us-ascii"
+        MIME-Version: 1.0
+        Content-Transfer-Encoding: 7bit
+        Content-Disposition: attachment; filename="cloud-config"
+
+        #cloud-config
+        vinitparam:
+         - uuid : C8K-00000000-0000-0000-0000-000000000000
+         - otp : 00000000000000000000000000000000
+         - vbond : 10.60.2.11
+         - org : ${LAB_SDWAN_ORG}
+         - rcc : true
+        ca-certs:
+          remove-defaults: false
+          trusted:
+          - |
+           ${LAB_CA_PEM}
+        --==BOUNDARY==
+        Content-Type: text/cloud-boothook; charset="us-ascii"
+        MIME-Version: 1.0
+        Content-Transfer-Encoding: 7bit
+        Content-Disposition: attachment;
+        filename="config-hub1.txt"
+
+        #cloud-boothook
+          system
+           system-ip 10.0.0.1
+           site-id 100
+           organization-name "${LAB_SDWAN_ORG}"
+           vbond 10.60.2.11 port 12346
+          !
+          hostname hub1
+          username admin privilege 15 secret 0 ${LAB_SDWAN_ADMIN_PASSWORD}
+          platform console serial
+          vrf definition 10
+           rd 1:10
+           address-family ipv4
+            exit-address-family
+          !
+          vrf definition Mgmt-intf
+           address-family ipv4
+            exit-address-family
+          !
+          interface GigabitEthernet1
+           description mpls transport
+           no shutdown
+           ip address 10.60.1.13 255.255.255.0
+          !
+          interface GigabitEthernet2
+           description inet transport
+           no shutdown
+           ip address 10.60.2.13 255.255.255.0
+          !
+          interface GigabitEthernet3
+           description LAN (VPN 10) to host-hub1
+           no shutdown
+           vrf forwarding 10
+           ip address 10.61.100.1 255.255.255.0
+          !
+          interface GigabitEthernet4
+           description management (VPN 512)
+           no shutdown
+           vrf forwarding Mgmt-intf
+           ip address 198.18.129.13 255.255.192.0
+          !
+          interface Tunnel1
+           no shutdown
+           ip unnumbered GigabitEthernet1
+           tunnel source GigabitEthernet1
+           tunnel mode sdwan
+          !
+          interface Tunnel2
+           no shutdown
+           ip unnumbered GigabitEthernet2
+           tunnel source GigabitEthernet2
+           tunnel mode sdwan
+          !
+          ip route 0.0.0.0 0.0.0.0 10.60.1.254
+          ip route 0.0.0.0 0.0.0.0 10.60.2.254
+          ip route vrf Mgmt-intf 0.0.0.0 0.0.0.0 198.18.128.1
+          line vty 0 4
+           transport input ssh
+          line vty 5 80
+           transport input ssh
+          sdwan
+           interface GigabitEthernet1
+            tunnel-interface
+             encapsulation ipsec
+             color mpls
+             allow-service all
+            exit
+           exit
+           interface GigabitEthernet2
+            tunnel-interface
+             encapsulation ipsec
+             color biz-internet
+             allow-service all
+            exit
+           exit
+          !
+        --==BOUNDARY==--
+    - label: br1
+      definition: cat-sdwan-edge
+      x: 0
+      y: 760
+      credentials: {username: admin, password: "${LAB_SDWAN_ADMIN_PASSWORD}"}
+      config: |
+        Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+        MIME-Version: 1.0
+
+        --==BOUNDARY==
+        Content-Type: text/cloud-config; charset="us-ascii"
+        MIME-Version: 1.0
+        Content-Transfer-Encoding: 7bit
+        Content-Disposition: attachment; filename="cloud-config"
+
+        #cloud-config
+        vinitparam:
+         - uuid : C8K-00000000-0000-0000-0000-000000000000
+         - otp : 00000000000000000000000000000000
+         - vbond : 10.60.2.11
+         - org : ${LAB_SDWAN_ORG}
+         - rcc : true
+        ca-certs:
+          remove-defaults: false
+          trusted:
+          - |
+           ${LAB_CA_PEM}
+        --==BOUNDARY==
+        Content-Type: text/cloud-boothook; charset="us-ascii"
+        MIME-Version: 1.0
+        Content-Transfer-Encoding: 7bit
+        Content-Disposition: attachment;
+        filename="config-br1.txt"
+
+        #cloud-boothook
+          system
+           system-ip 10.0.0.2
+           site-id 200
+           organization-name "${LAB_SDWAN_ORG}"
+           vbond 10.60.2.11 port 12346
+          !
+          hostname br1
+          username admin privilege 15 secret 0 ${LAB_SDWAN_ADMIN_PASSWORD}
+          platform console serial
+          vrf definition 10
+           rd 1:10
+           address-family ipv4
+            exit-address-family
+          !
+          vrf definition Mgmt-intf
+           address-family ipv4
+            exit-address-family
+          !
+          interface GigabitEthernet1
+           description mpls transport
+           no shutdown
+           ip address 10.60.1.14 255.255.255.0
+          !
+          interface GigabitEthernet2
+           description inet transport
+           no shutdown
+           ip address 10.60.2.14 255.255.255.0
+          !
+          interface GigabitEthernet3
+           description LAN (VPN 10) to host-br1
+           no shutdown
+           vrf forwarding 10
+           ip address 10.61.200.1 255.255.255.0
+          !
+          interface GigabitEthernet4
+           description management (VPN 512)
+           no shutdown
+           vrf forwarding Mgmt-intf
+           ip address 198.18.129.14 255.255.192.0
+          !
+          interface Tunnel1
+           no shutdown
+           ip unnumbered GigabitEthernet1
+           tunnel source GigabitEthernet1
+           tunnel mode sdwan
+          !
+          interface Tunnel2
+           no shutdown
+           ip unnumbered GigabitEthernet2
+           tunnel source GigabitEthernet2
+           tunnel mode sdwan
+          !
+          ip route 0.0.0.0 0.0.0.0 10.60.1.254
+          ip route 0.0.0.0 0.0.0.0 10.60.2.254
+          ip route vrf Mgmt-intf 0.0.0.0 0.0.0.0 198.18.128.1
+          line vty 0 4
+           transport input ssh
+          line vty 5 80
+           transport input ssh
+          sdwan
+           interface GigabitEthernet1
+            tunnel-interface
+             encapsulation ipsec
+             color mpls
+             allow-service all
+            exit
+           exit
+           interface GigabitEthernet2
+            tunnel-interface
+             encapsulation ipsec
+             color biz-internet
+             allow-service all
+            exit
+           exit
+          !
+        --==BOUNDARY==--
+    - label: br2
+      definition: cat-sdwan-edge
+      x: 360
+      y: 760
+      credentials: {username: admin, password: "${LAB_SDWAN_ADMIN_PASSWORD}"}
+      config: |
+        Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+        MIME-Version: 1.0
+
+        --==BOUNDARY==
+        Content-Type: text/cloud-config; charset="us-ascii"
+        MIME-Version: 1.0
+        Content-Transfer-Encoding: 7bit
+        Content-Disposition: attachment; filename="cloud-config"
+
+        #cloud-config
+        vinitparam:
+         - uuid : C8K-00000000-0000-0000-0000-000000000000
+         - otp : 00000000000000000000000000000000
+         - vbond : 10.60.2.11
+         - org : ${LAB_SDWAN_ORG}
+         - rcc : true
+        ca-certs:
+          remove-defaults: false
+          trusted:
+          - |
+           ${LAB_CA_PEM}
+        --==BOUNDARY==
+        Content-Type: text/cloud-boothook; charset="us-ascii"
+        MIME-Version: 1.0
+        Content-Transfer-Encoding: 7bit
+        Content-Disposition: attachment;
+        filename="config-br2.txt"
+
+        #cloud-boothook
+          system
+           system-ip 10.0.0.3
+           site-id 201
+           organization-name "${LAB_SDWAN_ORG}"
+           vbond 10.60.2.11 port 12346
+          !
+          hostname br2
+          username admin privilege 15 secret 0 ${LAB_SDWAN_ADMIN_PASSWORD}
+          platform console serial
+          vrf definition 10
+           rd 1:10
+           address-family ipv4
+            exit-address-family
+          !
+          vrf definition Mgmt-intf
+           address-family ipv4
+            exit-address-family
+          !
+          interface GigabitEthernet1
+           description mpls transport
+           no shutdown
+           ip address 10.60.1.15 255.255.255.0
+          !
+          interface GigabitEthernet2
+           description inet transport
+           no shutdown
+           ip address 10.60.2.15 255.255.255.0
+          !
+          interface GigabitEthernet3
+           description LAN (VPN 10) to host-br2
+           no shutdown
+           vrf forwarding 10
+           ip address 10.61.201.1 255.255.255.0
+          !
+          interface GigabitEthernet4
+           description management (VPN 512)
+           no shutdown
+           vrf forwarding Mgmt-intf
+           ip address 198.18.129.15 255.255.192.0
+          !
+          interface Tunnel1
+           no shutdown
+           ip unnumbered GigabitEthernet1
+           tunnel source GigabitEthernet1
+           tunnel mode sdwan
+          !
+          interface Tunnel2
+           no shutdown
+           ip unnumbered GigabitEthernet2
+           tunnel source GigabitEthernet2
+           tunnel mode sdwan
+          !
+          ip route 0.0.0.0 0.0.0.0 10.60.1.254
+          ip route 0.0.0.0 0.0.0.0 10.60.2.254
+          ip route vrf Mgmt-intf 0.0.0.0 0.0.0.0 198.18.128.1
+          line vty 0 4
+           transport input ssh
+          line vty 5 80
+           transport input ssh
+          sdwan
+           interface GigabitEthernet1
+            tunnel-interface
+             encapsulation ipsec
+             color mpls
+             allow-service all
+            exit
+           exit
+           interface GigabitEthernet2
+            tunnel-interface
+             encapsulation ipsec
+             color biz-internet
+             allow-service all
+            exit
+           exit
+          !
+        --==BOUNDARY==--
+    - label: host-hub1
+      definition: ubuntu
+      x: -360
+      y: 920
+      credentials: {username: cisco, password: cisco}
+      config: |
+        #cloud-config
+        hostname: host-hub1
+        manage_etc_hosts: True
+        system_info:
+          default_user:
+            name: cisco
+        password: cisco
+        chpasswd: { expire: False }
+        ssh_pwauth: True
+        runcmd:
+          - ip link set ens2 up
+          - ip addr add 10.61.100.10/24 dev ens2
+          - ip route replace default via 10.61.100.1
+    - label: host-br1
+      definition: ubuntu
+      x: 0
+      y: 920
+      credentials: {username: cisco, password: cisco}
+      config: |
+        #cloud-config
+        hostname: host-br1
+        manage_etc_hosts: True
+        system_info:
+          default_user:
+            name: cisco
+        password: cisco
+        chpasswd: { expire: False }
+        ssh_pwauth: True
+        runcmd:
+          - ip link set ens2 up
+          - ip addr add 10.61.200.10/24 dev ens2
+          - ip route replace default via 10.61.200.1
+    - label: host-br2
+      definition: ubuntu
+      x: 360
+      y: 920
+      credentials: {username: cisco, password: cisco}
+      config: |
+        #cloud-config
+        hostname: host-br2
+        manage_etc_hosts: True
+        system_info:
+          default_user:
+            name: cisco
+        password: cisco
+        chpasswd: { expire: False }
+        ssh_pwauth: True
+        runcmd:
+          - ip link set ens2 up
+          - ip addr add 10.61.201.10/24 dev ens2
+          - ip route replace default via 10.61.201.1
+  links:
+    - ext mgmt-sw
+    - manager:eth0 mgmt-sw
+    - validator:eth0 mgmt-sw
+    - controller:eth0 mgmt-sw
+    - manager:eth1 inet
+    - validator:ge0/0 inet
+    - controller:eth1 inet
+    - wan:eth1 inet
+    - wan:eth0 mpls
+    - hub1:GigabitEthernet1 mpls
+    - hub1:GigabitEthernet2 inet
+    - hub1:GigabitEthernet3 host-hub1:ens2
+    - hub1:GigabitEthernet4 mgmt-sw
+    - br1:GigabitEthernet1 mpls
+    - br1:GigabitEthernet2 inet
+    - br1:GigabitEthernet3 host-br1:ens2
+    - br1:GigabitEthernet4 mgmt-sw
+    - br2:GigabitEthernet1 mpls
+    - br2:GigabitEthernet2 inet
+    - br2:GigabitEthernet3 host-br2:ens2
+    - br2:GigabitEthernet4 mgmt-sw

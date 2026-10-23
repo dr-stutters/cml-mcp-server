@@ -30,6 +30,8 @@ All of them attach to the lab network (198.18.128.0/18, gateway 198.18.128.1) th
 | `ftd-sdwan-single` | `mcp-sdwan-t1` | 11 (4x ftdv 8 GB + 3x iol-xe + 4x alpine) | hub 198.18.128.200, spoke1-3 .201-.203 | Firewall SD-WAN T1 (fmc-mcp-server F52/F53): single hub + 3 spokes, each FTD on three carriers (mpls, inet, lte: 10.1c.&lt;site&gt;.0/24) and an inside host (10.10.&lt;site&gt;.0/24); day 0 points every FTD at FMC 198.18.134.76 |
 | `ftd-sdwan-dual-hub` | `mcp-sdwan-t2` | 10 (4x ftdv + 3x iol-xe + 3x alpine) | hub .204, hub2 .205, spoke1-2 .206-.207 | SD-WAN T2: primary + backup hub sharing a DC LAN, 2 spokes |
 | `ftd-sdwan-ha-hub` | `mcp-sdwan-t3` | 10 (4x ftdv + 3x iol-xe + 3x alpine) | hub .208, hub2 .209, spoke1-2 .210-.211 | SD-WAN T3: HA-pair hub (failover link Gi0/4, state link Gi0/5; the carriers reach both hubs through a switch), 2 spokes |
+| `cat-sdwan-controllers` | `mcp-cat-sdwan` | 4 (cat-sdwan-manager 32 GB 4 vCPU + validator + controller + alpine) | manager 198.18.129.10, validator .11, controller .12 (VPN 512); inet 10.60.2.0/24, mpls 10.60.1.0/24 | Catalyst SD-WAN 20.18.3 control plane (cat-sdwan-mcp-server W0 spike); the Manager set-up and lab-CA certificates are `stutters-mcp-lab` `seed_lab.py controllers` |
+| `cat-sdwan-fabric` | `mcp-cat-sdwan` | 10 (the controllers + 3x cat-sdwan-edge 5 GB + 3x ubuntu) | as above + hub1 .13, br1 .14, br2 .15 (VPN 512) | The full fabric (cat-sdwan W0): edges activated after boot with a chassis number and token from the Manager's WAN edge list (`seed_lab.py serial` then `edges`); BFD on mpls and biz-internet, VPN 10 hosts 10.61.&lt;site&gt;.10 |
 
 Reserved for recipes: 198.18.128.150-.159, .200-.211 (the three `ftd-sdwan-*` recipes, checked free by ping on 2026-10-17) and (since phase 4) .190-.199: .190/.191 ftd-ha management, .192/.193 ftd-ha outside (suggested), .194 sw1 of `ise-fmc-identity` (the old `mcp-cml2-ise` copy was deleted); (.150 probe, .155 spare FTD outside, .157 `ise-fmc-identity` FTD management, .156/.158/.159 free);
 checked unused by ping/ARP on 2026-10-14.
@@ -121,6 +123,12 @@ A recipe's `actions:` are named console commands that change the lab's state the
 `cml_run_recipe_action(recipe, action)` or `scripts/recipes.py run <recipe> <action>` (preview-first; the command
 comes from the recipe only). `ise-fmc-identity`: `login-alice`, `login-bob` (EAPOL-Logoff, then 802.1X as that AD
 user; prints `user=... port=Authorized eap=SUCCESS ip=10.10.34.x/24`) and `logoff`.
+
+Verified on 2026-10-23: cat-sdwan-controllers 10/10, cat-sdwan-fabric 26/26 (BFD 8/8 on hub1, br1 control
+connections up, host-br1 reaches host-br2 and host-hub1 over the overlay). The Manager needs 32 GB (at 16 GB its
+configuration database crash-loops) and gets 4 vCPUs: CML keeps a node QUEUED once the host's allocated vCPUs
+would pass twice its cores. The edges keep a placeholder uuid/otp in vinitparam: without one the C8000V boots
+in autonomous mode.
 
 Verified on 2026-10-15: ftd-fmc 6/6 (FTD 'show managers' points at FMC), catc-routers 14/14 (SSH, NETCONF
 and SNMP from cortex), ise-access 9/9 (RADIUS server UP and `test aaa` answered by ISE).
