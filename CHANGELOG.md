@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Recipes `cat-sdwan-controllers` and `cat-sdwan-fabric` (L60, cat-sdwan W0).** Catalyst SD-WAN 20.18.3: Manager,
+  Validator and Controller with the lab AD CS root as their Enterprise root CA (cloud-init `zcloud.xml`, the admin
+  password as `${LAB_SDWAN_ADMIN_HASH}`, organisation `${LAB_SDWAN_ORG}`), on an inet and an mpls transport joined
+  by an Alpine router; the fabric adds hub1, br1 and br2 (cat-sdwan-edge 17.18.02, controller mode, colours mpls and
+  biz-internet) and an Ubuntu host in VPN 10 behind each. Edges are activated after boot with a chassis number and
+  the token the Manager mints at the serial file upload (no recipe can carry it). Verify contracts check BFD,
+  control connections and host-to-host reachability over the overlay.
+
+### Fixed
+- `scripts/check_secrets.py` no longer reads the XML element `<last-password-change-time>` as a password value.
+
 ## 0.12.0 - 2026-10-22
 
 ### Added

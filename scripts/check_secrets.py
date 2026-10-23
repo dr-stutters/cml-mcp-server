@@ -25,10 +25,11 @@ from pathlib import Path
 
 MIN_VALUE_LEN = 6
 PATTERN_SCOPE = ("src/cml_mcp/recipes/", "labs/")
-# keyword, optional IOS encryption type digit, then the value
+# keyword (not followed by "-": <last-password-change-time> is an element name), optional IOS encryption
+# type digit, then the value
 PATTERN = re.compile(
     r"""(?ix)
-    (?:\b(?:secret|password|passwd|server-key|key|community|psk|regkey|fmcregkey|adminpassword)\b)
+    (?:\b(?:secret|password|passwd|server-key|key|community|psk|regkey|fmcregkey|adminpassword)\b)(?!-)
     ["'`]?\s*[:=]?\s*["'`]?
     (?:[0-9]\s+)?
     (?P<value>[A-Za-z0-9!@#$%^&*+=_./-][^\s"'`,}]*)
