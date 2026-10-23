@@ -34,6 +34,22 @@ verify:
     - {name: manager HTTPS (443) from the server, tcp: 198.18.129.10:443}
     - {name: validator SSH (22) from the server, tcp: 198.18.129.11:22}
     - {name: controller SSH (22) from the server, tcp: 198.18.129.12:22}
+    - name: hub1 has BFD up to br1 and br2 on both colours (needs the edges activated)
+      node: hub1
+      command: show sdwan bfd sessions | count up
+      expect: 'regexp = [4-9]'
+    - name: br1 has its control connections up (validator, controller, manager)
+      node: br1
+      command: show sdwan control connections | count up
+      expect: 'regexp = [3-9]'
+    - name: host-br1 reaches host-br2 over the overlay (VPN 10)
+      node: host-br1
+      command: ping -c 5 10.61.201.10
+      expect: 'transmitted, [2-5] received'
+    - name: host-br1 reaches host-hub1 over the overlay (VPN 10)
+      node: host-br1
+      command: ping -c 5 10.61.100.10
+      expect: 'transmitted, [2-5] received'
 build:
   title: mcp-cat-sdwan
   description: Catalyst SD-WAN 20.18.3 fabric - controllers, hub1, br1, br2 and a host behind each (cml-mcp-server recipe cat-sdwan-fabric)
