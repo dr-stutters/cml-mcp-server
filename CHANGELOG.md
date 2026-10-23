@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.1 - 2026-10-23
 
 ### Added
 - **Recipes `cat-sdwan-controllers` and `cat-sdwan-fabric` (L60, cat-sdwan W0).** Catalyst SD-WAN 20.18.3: Manager,
