@@ -140,7 +140,8 @@ def test_hand_off_names_the_gate_and_the_product_sides() -> None:
     side = recipe_detail("cat-sdwan-secure")["product_side"]
     assert {"cml_side", "manager_side", "fmc_side"} <= set(side)
     assert "cml_plan_licences('cat-sdwan-secure')" in side["cml_side"]
-    assert "never wipe an edge" in side["cml_side"]
+    # resizing an edge or adding its interfaces needs a wipe (cml_update_node / cml_connect_nodes block)
+    assert "only on a wiped node" in side["cml_side"] and "activated" in side["cml_side"]
     assert "Global/mcp-test-leaf" in side["fmc_side"] and "${LAB_FTD_REG_KEY}" in side["fmc_side"]
     assert "configuration group" in side["manager_side"]
 

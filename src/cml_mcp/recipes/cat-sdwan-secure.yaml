@@ -33,14 +33,22 @@ cml_side: >-
   allocates and about 89 GB RAM) and cml_get_resource_usage (disk: the two FTDv overlays grow a few GB each and
   the Manager's data disk is thin) before the change and after the FTDs boot; stop other labs if the plan says so.
   On a fresh controller cml_build_recipe builds the whole lab. Extending a running cat-sdwan-fabric lab in place
-  (cml_build_recipe refuses an existing title, so the coordinator applies the difference with the node tools):
-  (1) stop hub1, br1 and br2 one at a time (cml_set_node_state), cml_update_node ram 8192 / cpus 4, start
-  again and wait for BFD (a stopped, not wiped, edge keeps its activation and certificate; never wipe an edge:
-  that loses its activation); (2) cml_add_node hub-ftd, br1-ftd (with the day-0 below), br1-lan, alice and bob;
-  (3) cml_connect_nodes for the links after 'br2:GigabitEthernet4 mgmt-sw' (hub1 GigabitEthernet5-7 and br1
-  GigabitEthernet5 are new interfaces on running nodes); (4) start the new nodes (FTDv 15-30 min,
-  cml_wait_for_converged); (5) cml_verify_recipe('cat-sdwan-secure'). The day-0 boothook changes on hub1 and br1
-  only matter on a fresh build: on the running edges their new interfaces come from the Manager (manager_side).
+  (cml_build_recipe refuses an existing title, so the coordinator applies the difference with the node tools) is
+  NOT a stop/start: CML changes RAM and vCPUs, and adds interfaces, only on a wiped node (DEFINED_ON_CORE;
+  cml_update_node and cml_connect_nodes block otherwise). Measured on mcp-cat-sdwan 2026-10-24: hub1 and br1 have
+  GigabitEthernet1-4 only, and mgmt-sw has one free port (port7) for the three new links to it. So: (1) each edge
+  that changes (hub1, br1 and br2 for 8 GB; hub1 Gi5-7 and br1 Gi5 for the new links) is stopped, wiped
+  (cml_wipe_node, dangerous), resized with cml_update_node ram 8192 / cpus 4, wired, started, then activated
+  again (a wipe drops the edge's activation and certificate: stutters-mcp-lab seed_lab.py edges with a fresh
+  token) and the configuration group redeployed (manager_side); one edge at a time, hub1 last; (2) mgmt-sw
+  cannot gain ports while it runs, and wiping it cuts VPN 512 for the whole lab, so either wipe it in the same
+  window or hang a second unmanaged switch off port7 for hub1 Gi5 and the two FTD Management0/0 (a topology change
+  to this recipe); (3) cml_add_node hub-ftd, br1-ftd (with the day-0 below), br1-lan, alice and bob, and
+  cml_connect_nodes for the links after 'br2:GigabitEthernet4 mgmt-sw'; (4) start the new nodes (FTDv 15-30 min,
+  cml_wait_for_converged); (5) cml_verify_recipe('cat-sdwan-secure'). Wiping the edges in place versus a fresh
+  build is the owner's call. The hub1 and br1 boothook additions are read only at first boot (a wiped edge given
+  this recipe's day-0 with cml_set_node_config gets them); after that a controller-mode edge takes its running
+  config from the Manager (manager_side).
 manager_side: >-
   As cat-sdwan-fabric (organisation ${LAB_SDWAN_ORG}, controllers with lab-CA certificates, the PnP serial file,
   each edge activated with a chassis number and token; stutters-mcp-lab seed_lab.py serial then edges). The edges
