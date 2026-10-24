@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0 - 2026-10-24
+
+### Added
+- **Recipe `cat-sdwan-secure` (L65, C55, #65).** `cat-sdwan-fabric` plus FTDv at hub1 (service chain) and behind br1,
+  Alpine identity hosts, edges sized for UTD and hub1 in VPN 10 on the lab LAN. Same lab title `mcp-cat-sdwan`, so it
+  extends the running fabric in place.
+
 ## 0.12.2 - 2026-10-24
 
 ### Security
