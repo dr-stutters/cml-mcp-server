@@ -2,6 +2,7 @@
 
 # No `from __future__ import annotations` in tool modules: FastMCP inspects signatures at runtime.
 
+import hashlib
 import re
 from typing import Annotated, Any, Literal
 
@@ -16,7 +17,8 @@ from cml_mcp._core import (
     list_result,
     text_result,
 )
-from cml_mcp._core.formatting import MASK
+from cml_mcp._core.errors import InvalidRequest
+from cml_mcp._core.formatting import MASK, dumps, max_chars
 from cml_mcp._core.http import page_of
 from cml_mcp.client import CmlApp
 from cml_mcp.tools.common import ACCESS_KEYS, LabRef, Topo, drop_keys, load_topo, shaped, state_counts
@@ -72,11 +74,63 @@ def mask_testbed(text: str) -> str:
     return re.sub(r"(?m)^(\s*(?:-\s+)?password:\s*)(?!null\s*$)(\S.*)$", rf"\g<1>{MASK}", text)
 
 
+# Node user-data (cloud-init) and other file contents are YAML block scalars ('content: |-'). A
+# 'password:' line inside one is part of the file, not a field of the export: it gets this placeholder,
+# which cml_import_lab fills from the server's LAB_NODE_PASSWORD (or blocks the import naming it).
+NODE_PASSWORD_PLACEHOLDER = "${LAB_NODE_PASSWORD}"
+_QUOTED_MASK = f"'{MASK}'"  # '*' starts a YAML alias: an unquoted mask is not valid YAML
+# null and ${LAB_*} references (cookbook files) are not secrets: they stay as they are
+_KEEP = r"(?!(?:null|~|''|\"\"|\$\{LAB_[A-Z0-9_]+\})\s*$)"
+_FIELD_SECRET = re.compile(rf"^(\s*(?:-\s+)?(?:password|enable_password):[ \t]*){_KEEP}(\S.*)$")
+_FILE_SECRET = re.compile(rf"^(\s*(?:-\s+)?(?:password|plain_text_passwd):[ \t]*){_KEEP}(\S.*)$")
+_BLOCK_START = re.compile(r"^\s*(?:-\s+)?[^\s#'\"][^:#]*:[ \t]+[|>][-+0-9]*[ \t]*(?:#.*)?$")
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
 def mask_export(text: str) -> str:
-    """Mask pyATS credentials stored on nodes in an exported topology (configs are left alone)."""
-    return re.sub(
-        r"(?m)^(\s*(?:-\s+)?(?:password|enable_password):\s*)(?!null\s*$)(\S.*)$", rf"\g<1>{MASK}", text
-    )
+    """Mask the credentials in an exported topology and keep it valid, re-importable YAML.
+
+    pyATS logins stored on nodes (`password`, `enable_password`) become '********' (quoted). A
+    `password:` / `plain_text_passwd:` line inside a node file (cloud-init user-data and other block
+    scalars) becomes ${LAB_NODE_PASSWORD}, so a restore can fill a real one. Device configs are left
+    alone (IOS secrets have no 'password:' form)."""
+    out: list[str] = []
+    block_parent: int | None = None  # indent of the key that opened the current block scalar
+    block_indent: int | None = None  # indent of the block's content (its first non-blank line)
+    for line in text.split("\n"):
+        if block_parent is not None:
+            if not line.strip():
+                out.append(line)
+                continue
+            ind = _indent(line)
+            if block_indent is None and ind > block_parent:
+                block_indent = ind
+            if block_indent is not None and ind >= block_indent:
+                out.append(_FILE_SECRET.sub(rf"\g<1>{NODE_PASSWORD_PLACEHOLDER}", line))
+                continue
+            block_parent = block_indent = None
+        if _BLOCK_START.match(line):
+            stripped = line.lstrip(" ")
+            block_parent = _indent(line) + (2 if stripped.startswith("- ") else 0)
+            block_indent = None
+            out.append(line)
+            continue
+        out.append(_FIELD_SECRET.sub(rf"\g<1>{_QUOTED_MASK}", line))
+    return "\n".join(out)
+
+
+def export_page(text: str, offset: int, limit: int) -> tuple[str, int]:
+    """text[offset:end] with `end` at the last line break within `limit` characters (a single longer
+    line is cut at `limit`), so the pages joined in order are the whole text."""
+    end = min(len(text), offset + limit)
+    if end < len(text):
+        cut = text.rfind("\n", offset, end)
+        if cut >= offset:
+            end = cut + 1
+    return text[offset:end], end
 
 
 def event_row(ev: dict[str, Any], names: dict[str, str]) -> dict[str, Any]:
@@ -203,18 +257,60 @@ def register(reg: ToolRegistrar) -> None:
         ctx: Context,
         lab: LabRef,
         include_credentials: Annotated[
-            bool, Field(description="Keep pyATS passwords stored on nodes (masked by default)")
+            bool,
+            Field(description="Keep pyATS passwords and node-file passwords as they are (masked by default)"),
         ] = False,
+        offset: Annotated[
+            int, Field(ge=0, description="Character offset into the YAML (the previous page's next_offset)")
+        ] = 0,
+        limit: Annotated[
+            int | None,
+            Field(
+                ge=1000,
+                description="Characters per page (default and maximum: what fits in one response)",
+            ),
+        ] = None,
     ) -> ToolResult:
         """Export a lab as CML topology YAML (the same file the UI downloads): lab metadata, nodes with
         their day-0 configurations, interfaces, links and annotations. The YAML can be re-imported
         with cml_import_lab, kept as a baseline for cml_diff_lab, or edited to build a new lab.
-        Running configs are only included after cml_extract_node_configs. Secrets inside device
-        configs (enable secret, keys) are NOT masked."""
+        Running configs are only included after cml_extract_node_configs.
+        Masking (unless include_credentials): pyATS passwords on nodes become '********'; a `password:`
+        or `plain_text_passwd:` line inside a node file such as cloud-init user-data becomes
+        ${LAB_NODE_PASSWORD}, which cml_import_lab fills from the server's LAB_NODE_PASSWORD (or
+        CML_LAB_SECRETS_FILE) on restore. The masked YAML stays valid. Secrets inside device configs
+        (enable secret, keys) are NOT masked.
+        A YAML that fits in one response comes back as plain text. A larger one comes back in pages:
+        {total_chars, offset, next_offset, complete, sha256, yaml}; call again with offset=next_offset
+        until complete is true, and join the yaml of every page in order (pages end at line breaks).
+        sha256 is of the whole YAML: the same on every page unless the lab changed in between."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab)
         text = await app.api.get(f"/labs/{info['id']}/download", expect="text")
-        return text_result(text if include_credentials else mask_export(text))
+        if not include_credentials:
+            text = mask_export(text)
+        budget = max_chars() - 1000  # room for the page's own fields
+        if offset == 0 and limit is None and len(text) <= max_chars():
+            return text_result(text)
+        if offset > len(text):
+            raise InvalidRequest(f"offset {offset} is past the end of the export ({len(text)} characters)")
+        size = min(limit or budget, budget)
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        while True:
+            chunk, end = export_page(text, offset, size)
+            page = {
+                "lab": info.get("lab_title"),
+                "total_chars": len(text),
+                "offset": offset,
+                "next_offset": end if end < len(text) else None,
+                "complete": end >= len(text),
+                "sha256": digest,
+                "yaml": chunk,
+            }
+            body = dumps(page)
+            if len(body) <= max_chars() or size <= 1000:
+                return ToolResult(content=body, structured_content=page)
+            size = max(1000, size * max_chars() // len(body) - 500)  # JSON escaping made it too long
 
     @reg.read(title="List lab events")
     async def cml_list_lab_events(

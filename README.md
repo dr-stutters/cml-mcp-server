@@ -162,7 +162,7 @@ or in `.mcp.json`:
 | `cml_get_licensing` | Smart Licensing registration and authorization, features, expiry |
 | `cml_list_labs` / `cml_get_lab` | Labs with state and counts; one lab with convergence, node states and resources in use |
 | `cml_get_lab_topology` | Compact wiring summary (node interface -> peer, links, conditioning); `detail='full'` for everything |
-| `cml_export_lab` | Topology YAML (pyATS passwords masked unless `include_credentials`) |
+| `cml_export_lab` | Topology YAML, valid and re-importable when masked (pyATS passwords `'********'`, cloud-init passwords `${LAB_NODE_PASSWORD}`, unless `include_credentials`); large labs in pages (`offset` / `next_offset`) |
 | `cml_list_lab_events` | Change and state history, newest first, with the fields that changed |
 | `cml_get_pyats_testbed` | The pyATS testbed CML generates (passwords masked) |
 | `cml_list_nodes` / `cml_get_node` | Nodes with state, image and resources (optionally live CPU/RAM); one node with interfaces, peers and config |
@@ -253,6 +253,13 @@ names it. The filled topology is re-serialised, so YAML quoting is handled, but 
 as it is: keep `"` and `\` out of values used inside JSON day-0 configs. Unlike a recipe, the YAML comes from
 the caller, and a node's day-0 config can do anything with the value it gets, so check `lab_secrets` before
 you confirm. YAML without placeholders in its nodes is sent unchanged.
+
+**Restoring a masked export.** `cml_export_lab` masks pyATS passwords as `'********'` and replaces a
+`password:` / `plain_text_passwd:` line in a node file (cloud-init user-data) with `${LAB_NODE_PASSWORD}`. Set
+`LAB_NODE_PASSWORD` on the server (or in `CML_LAB_SECRETS_FILE`) and `cml_import_lab` fills it into those nodes;
+without it the import is blocked by name. Set the pyATS logins again after a restore (or export with
+`include_credentials`). A lab bigger than one response comes back in pages: call again with
+`offset=next_offset` until `complete`, join the `yaml` of every page in order, and check `sha256`.
 
 `cml_build_lab` does the same for a node's `config`, `files` and `credentials`, e.g.
 `"config": "username admin privilege 15 secret ${LAB_CLI_PASSWORD}"` with

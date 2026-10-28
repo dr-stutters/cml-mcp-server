@@ -89,7 +89,7 @@ async def test_export_masks_pyats_passwords(lab_api: respx.MockRouter) -> None:
     )
     lab_api.get(f"/labs/{LID}/download").mock(return_value=httpx.Response(200, text=yaml_text))
     text = await call("cml_export_lab", {"lab": LID})
-    assert "s3cret" not in text and "password: ********" in text and "enable_password: null" in text
+    assert "s3cret" not in text and "password: '********'" in text and "enable_password: null" in text
     raw = await call("cml_export_lab", {"lab": LID, "include_credentials": True})
     assert "s3cret" in raw
 
