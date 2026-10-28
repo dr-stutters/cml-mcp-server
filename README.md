@@ -9,7 +9,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > only: don't point it at production systems. It's provided as is, with no warranty (see the
 > [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
-- **75 tools** in three tiers: 39 read, 28 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **76 tools** in three tiers: 39 read, 29 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -179,7 +179,7 @@ or in `.mcp.json`:
 | `cml_list_image_definitions` | Installed images |
 | `cml_get_image_files` | Disk images in `CML_IMAGE_DIR` on the server host, and the controller's drop folder |
 | `cml_wait_for_converged` | Wait until a lab or node has booted, with progress notifications; `console_pattern` waits for a later console message |
-| `cml_diff_lab` | Diff a lab with another lab or a saved YAML: nodes, interfaces, links, config diff (`running_configs=true` for live configs) |
+| `cml_diff_lab` | Diff a lab with another lab or a saved YAML: nodes, interfaces, links, config diff (`running_configs=true` for live configs); `against='day0'` or `'saved'` for lab-wide drift of every node's running config, `view='sections'` for changed sections per node, `nodes=[...]` to narrow it |
 | `cml_diff_node_config` | Running config (from the console) vs day-0, startup, another node or a baseline; secrets masked |
 | `cml_summarize_capture` | Decoded summary of a link capture: protocol mix, conversations, RADIUS/EAPOL/OSPF/DHCP/ARP/ICMP highlights |
 | `cml_plan_licences` | Licences in use per lab, what a lab or recipe needs, which labs to stop |
@@ -204,6 +204,7 @@ or in `.mcp.json`:
 | `cml_set_node_state` | Start or stop one node |
 | `cml_extract_node_configs` | Save running configs into the stored node configs |
 | `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`), or exec-mode lines (`mode='exec'`, e.g. FTD `configure manager add`). Rejected lines are reported |
+| `cml_configure_nodes` | Push the same config lines to up to 20 running devices in one preview: templates with `{label}`, `{mgmt_ip}` and per-node `vars`, the rendered lines per node and `blast_radius` in the preview, the deny-list checked on every rendered line, `${LAB_*}` refused; a failing node doesn't stop the others |
 | `cml_connect_nodes` | Link two nodes (first free interfaces, or the ones you name) |
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |

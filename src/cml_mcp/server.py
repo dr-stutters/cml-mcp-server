@@ -50,9 +50,11 @@ OSPF, DHCP, ARP, ICMP decoded; `findings` names what got no answer; secrets neve
 What can be built: cml_list_node_definitions (iol-xe / ioll2-xe boot in under a minute).
 Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the CML console server
 (no IP reachability needed; IOS/IOS-XE, NX-OS, FTD, Linux); config changes go through
-cml_configure_node (write tier; mode='exec' for FTD 'configure manager add ...').
+cml_configure_node (write tier; mode='exec' for FTD 'configure manager add ...'); the same lines on
+several nodes in one preview: cml_configure_nodes ({label}, {mgmt_ip} and per-node vars).
 Diagrams: cml_export_topology (mermaid / drawio / json with addresses); cml_list_annotations and
 cml_annotate_lab (notes, per-node addresses, recipe purpose) make a lab self-describing.
+Lab-wide drift by node and section: cml_diff_lab(against='day0', view='sections').
 What changed on a device: cml_diff_node_config (running config vs day-0, startup, another node, a baseline;
 by default only real changes, by section, with IOS's own default lines hidden).
 Outside networks: cml_list_external_connectors, then an external_connector node in cml_build_lab.

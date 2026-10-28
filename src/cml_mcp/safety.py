@@ -10,9 +10,9 @@ to the plan before core's preview/confirm logic runs:
 - **Blast radius**: the number of nodes a change touches (whole-lab start/stop/wipe/delete: every node in the
   lab; builds: the nodes built; node tools: 1), so `MCP_MAX_BLAST_RADIUS` / `MCP_BLAST_RADIUS_OVERRIDES`
   (core) can cap e.g. `cml_build_*=20`.
-- **Device command deny-list** for `cml_configure_node`: `write erase`, `erase`, `reload`, `format`,
-  `delete`, `crypto key zeroize`, FTD `configure manager delete`, ... (`CML_CONFIG_DENY` adds one regex,
-  `|` for several; `CML_CONFIG_DENY_DEFAULTS=false` drops the built-in list).
+- **Device command deny-list** for `cml_configure_node` / `cml_configure_nodes`: `write erase`, `erase`,
+  `reload`, `format`, `delete`, `crypto key zeroize`, FTD `configure manager delete`, ...
+  (`CML_CONFIG_DENY` adds one regex, `|` for several; `CML_CONFIG_DENY_DEFAULTS=false` drops the defaults).
 
 A blocked preview has `status: "blocked"` and no confirm token; the blocker says which setting caused it.
 `cml_api_call` (dangerous tier, admin role) is core's raw escape hatch and is not covered by these rails.
