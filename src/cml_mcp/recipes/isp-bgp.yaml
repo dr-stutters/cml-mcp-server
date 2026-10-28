@@ -1,0 +1,356 @@
+# Dual-ISP internet edge (L75): two FRR "ISPs" peer eBGP with one customer edge, each originates a default route
+# and injects N synthetic prefixes (static blackholes, redistributed), and a shared nginx "internet" host sits
+# behind both. Written to be an `extends:` base: a child recipe swaps the customer edge (`remove_nodes: [ce]`
+# plus an FTDv or a cat8000v wired to isp1:eth0 / isp2:eth0) and keeps the ISPs, their actions and probes.
+# Nothing is bridged to the lab network: the lab is self-contained and builds in a couple of minutes.
+#
+# Addresses are documentation ranges (RFC 5737) and documentation ASNs (RFC 5398); the synthetic table is
+# 100.64.0.0/10 (/24s, up to 16384). Secrets are ${LAB_*} references.
+name: isp-bgp
+summary: Dual-ISP eBGP internet edge - isp1 (AS 64496) and isp2 (AS 64497) on FRR 10.5 peer with the customer edge
+  ce (iol-xe, AS 65001), each originates 0.0.0.0/0 and injects 1000 synthetic /24s (100.64.0.0/10); shared nginx
+  internet host 203.0.113.10; actions withdraw/restore the default and flap each ISP
+address_plan:
+  isp1 eth0 - ce Ethernet0/0: 192.0.2.0/30 (isp1 .1, ce .2), eBGP AS 64496 <-> AS 65001
+  isp2 eth0 - ce Ethernet0/1: 198.51.100.0/30 (isp2 .1, ce .2), eBGP AS 64497 <-> AS 65001
+  internet LAN (internet-sw): >-
+    203.0.113.0/24 - isp1 eth1 .1, isp2 eth1 .2, internet (nginx) .10 (default via isp1,
+    198.51.100.0/30 via isp2); not advertised in BGP, so the customer edge reaches it only over a default route
+  synthetic table: >-
+    both ISPs inject the same 100.64.0.0/24, 100.64.1.0/24, ... (static blackholes, redistributed);
+    the count is the token routes-1000 in each ISP's boot.sh (cml_build_recipe(substitute={'routes-1000':
+    'routes-5000'}), at most 16384)
+  default origination: >-
+    neighbor default-originate route-map MCP-DEFAULT, conditional on the sentinel route
+    203.0.113.254/32 (a sharpd route, never advertised); isp2 prepends its AS twice so isp1 is the primary path,
+    and ce also sets local-preference 200 on routes from isp1
+  ce inside: none (an FTDv child NATs its inside network to the outside interface, as on a real internet edge)
+credentials:
+  ce: netadmin / ${LAB_CLI_PASSWORD} (enable ${LAB_CLI_PASSWORD})
+  isp1_isp2: the FRR console is vtysh (no login)
+  internet: the nginx container's console (no login)
+fmc_side: >-
+  For an FTDv customer edge (fmc_configure_bgp), write a child recipe: `extends: isp-bgp`, `build.remove_nodes: [ce]`,
+  an ftdv node with links 'ftd:GigabitEthernet0/0 isp1:eth0' and 'ftd:GigabitEthernet0/1 isp2:eth0' (created before
+  the FTDv first boots). In FMC: outside1 (Ethernet0/0) 192.0.2.2/30 and outside2 (Ethernet0/1) 198.51.100.2/30
+  (if FMC refuses a TEST-NET interface address, build the copy with substitute={'192.0.2.': '172.31.75.',
+  '198.51.100.': '172.31.76.'}), fmc_configure_bgp AS 65001 with neighbours 192.0.2.1 remote-as 64496 and
+  198.51.100.1 remote-as 64497 (prefer isp1 with a higher local preference on its routes), a PAT rule to the
+  outside interfaces, fmc_deploy. 'show bgp summary' then shows both neighbours with the default plus the
+  synthetic prefixes; cml_run_recipe_action(isp-bgp child, withdraw-default-isp1) moves the default to isp2.
+cml_side: >-
+  A cat8000v customer edge instead of the IOL one: a child recipe with a node labelled ce (definition cat8000v, its
+  own day 0 on GigabitEthernet2/3) and links 'ce:GigabitEthernet2 isp1:eth0' and 'ce:GigabitEthernet3 isp2:eth0'
+  (they replace the base links on those ISP ports). Link-level failures need no action:
+  cml_apply_link_scenario('flap' or 'brownout') on 'ce<->isp1'.
+boot_minutes: 2-3 (FRR and nginx containers boot in seconds, iol-xe in about a minute; the ISPs install the
+  synthetic table and the default sentinel about 10-30 s after FRR starts)
+verify:
+  booted: [isp1, isp2, internet, ce]
+  nodes: [ce]
+  targets: [192.0.2.1, 198.51.100.1, 203.0.113.10]
+  addresses: {ce: [192.0.2.2, 198.51.100.2]}
+  # expects write addresses with plain dots so a copy built with substitute= (e.g. off the TEST-NETs) still matches
+  probes:
+    - name: isp1 eBGP session to the customer edge is Established
+      node: isp1
+      command: show bgp ipv4 unicast neighbors 192.0.2.2
+      expect: 'BGP state = Established'
+    - name: isp2 eBGP session to the customer edge is Established
+      node: isp2
+      command: show bgp ipv4 unicast neighbors 198.51.100.2
+      expect: 'BGP state = Established'
+    - name: isp1 sends the customer edge the default and the synthetic table (100+ prefixes)
+      node: isp1
+      command: show bgp ipv4 unicast summary
+      expect: '(?m)^192.0.2.2\s+4\s+65001\s+(\S+\s+){6}\d+\s+[1-9]\d{2,}\b'
+    - name: isp2 sends the customer edge the default and the synthetic table (100+ prefixes)
+      node: isp2
+      command: show bgp ipv4 unicast summary
+      expect: '(?m)^198.51.100.2\s+4\s+65001\s+(\S+\s+){6}\d+\s+[1-9]\d{2,}\b'
+    - name: ce receives 100+ prefixes from isp1 (session Established)
+      node: ce
+      command: show ip bgp summary
+      expect: '(?m)^192.0.2.1\s+4\s+64496(\s+\S+){6}\s+[1-9]\d{2,}\s*$'
+    - name: ce receives 100+ prefixes from isp2 (session Established)
+      node: ce
+      command: show ip bgp summary
+      expect: '(?m)^198.51.100.1\s+4\s+64497(\s+\S+){6}\s+[1-9]\d{2,}\s*$'
+    - name: ce default route is the BGP default from isp1 (the primary ISP)
+      node: ce
+      command: show ip route 0.0.0.0
+      expect: '(?s)Known via "bgp 65001".*192.0.2.1'
+actions:
+  withdraw-default-isp1:
+    description: isp1 stops originating 0.0.0.0/0 (removes its sentinel route); the customer edge's default moves to isp2
+    node: isp1
+    command: sharp remove routes 203.0.113.254 1
+    timeout: 30
+  restore-default-isp1:
+    description: isp1 originates 0.0.0.0/0 again (reinstalls its sentinel route)
+    node: isp1
+    command: sharp install routes 203.0.113.254 nexthop 203.0.113.10 1
+    timeout: 30
+  withdraw-default-isp2:
+    description: isp2 stops originating 0.0.0.0/0 (removes its sentinel route)
+    node: isp2
+    command: sharp remove routes 203.0.113.254 1
+    timeout: 30
+  restore-default-isp2:
+    description: isp2 originates 0.0.0.0/0 again (reinstalls its sentinel route)
+    node: isp2
+    command: sharp install routes 203.0.113.254 nexthop 203.0.113.10 1
+    timeout: 30
+  flap-isp1:
+    description: hard-reset isp1's eBGP session to the customer edge (all its routes withdrawn, then re-learnt)
+    node: isp1
+    command: clear bgp ipv4 unicast 192.0.2.2
+    timeout: 30
+  flap-isp2:
+    description: hard-reset isp2's eBGP session to the customer edge (all its routes withdrawn, then re-learnt)
+    node: isp2
+    command: clear bgp ipv4 unicast 198.51.100.2
+    timeout: 30
+build:
+  title: mcp-cml-isp-bgp
+  description: Dual-ISP eBGP internet edge on FRR with default origination and a synthetic table, nginx internet host (cml-mcp-server recipe isp-bgp)
+  nodes:
+    - label: internet
+      definition: nginx
+      x: 0
+      y: -320
+      files:
+        boot.sh: |
+          # cml-mcp-server recipe isp-bgp: the shared internet host (203.0.113.10), reachable through both ISPs
+          ip link set dev eth0 up
+          ip address add 203.0.113.10/24 dev eth0
+          ip route replace default via 203.0.113.1
+          ip route replace 198.51.100.0/30 via 203.0.113.2
+          echo "mcp internet host (cml-mcp-server recipe isp-bgp)" > /usr/share/nginx/html/index.html
+          # keep the next line to indicate that the machine is ready
+          echo "READY" >/dev/console
+          exit 0
+    - label: internet-sw
+      definition: unmanaged_switch
+      x: 0
+      y: -160
+    - label: isp1
+      definition: frr
+      x: -200
+      y: 0
+      files:
+        node.cfg: |
+          ! cml-mcp-server recipe isp-bgp: isp1, AS 64496 (primary ISP)
+          frr defaults traditional
+          hostname isp1
+          service integrated-vtysh-config
+          !
+          interface eth0
+           description to the customer edge (192.0.2.2, AS 65001)
+           ip address 192.0.2.1/30
+           no shutdown
+          !
+          interface eth1
+           description internet LAN (internet-sw)
+           ip address 203.0.113.1/24
+           no shutdown
+          !
+          ip prefix-list MCP-SCALE seq 5 permit 100.64.0.0/10 ge 24 le 24
+          ip prefix-list MCP-SENTINEL seq 5 permit 203.0.113.254/32
+          !
+          route-map MCP-SCALE permit 10
+           match ip address prefix-list MCP-SCALE
+          !
+          route-map MCP-SENTINEL permit 10
+           match ip address prefix-list MCP-SENTINEL
+          !
+          route-map MCP-DEFAULT permit 10
+           match ip address prefix-list MCP-SENTINEL
+          !
+          route-map MCP-TO-CE deny 5
+           match ip address prefix-list MCP-SENTINEL
+          !
+          route-map MCP-TO-CE permit 10
+          !
+          route-map MCP-FROM-CE permit 10
+          !
+          router bgp 64496
+           bgp router-id 192.0.2.1
+           no bgp ebgp-requires-policy
+           no bgp network import-check
+           neighbor 192.0.2.2 remote-as 65001
+           neighbor 192.0.2.2 description customer edge
+           neighbor 192.0.2.2 timers 10 30
+           !
+           address-family ipv4 unicast
+            redistribute static route-map MCP-SCALE
+            redistribute sharp route-map MCP-SENTINEL
+            neighbor 192.0.2.2 default-originate route-map MCP-DEFAULT
+            neighbor 192.0.2.2 route-map MCP-FROM-CE in
+            neighbor 192.0.2.2 route-map MCP-TO-CE out
+           exit-address-family
+          !
+          line vty
+          !
+          end
+        boot.sh: |
+          # cml-mcp-server recipe isp-bgp: isp1 day 0. Once FRR answers, install the synthetic table (static
+          # blackholes, redistributed into BGP) and the sentinel route that gates the default origination.
+          SCALE=routes-1000
+          ROUTES=${SCALE#routes-}
+          case "$ROUTES" in ''|*[!0-9]*) ROUTES=1000 ;; esac
+          [ "$ROUTES" -gt 16384 ] && ROUTES=16384
+          (
+            for _ in $(seq 1 90); do vtysh -c 'show version' >/dev/null 2>&1 && break; sleep 2; done
+            args=(-c 'configure terminal')
+            i=0
+            while [ "$i" -lt "$ROUTES" ]; do
+              args+=(-c "ip route 100.$((64 + i / 256)).$((i % 256)).0/24 blackhole")
+              i=$((i + 1))
+            done
+            vtysh "${args[@]}"
+            for _ in $(seq 1 30); do
+              vtysh -c 'sharp install routes 203.0.113.254 nexthop 203.0.113.10 1' && break
+              sleep 2
+            done
+          ) >/tmp/mcp-isp-bgp.log 2>&1 &
+          exit 0
+        protocols: |
+          # cml-mcp-server recipe isp-bgp: bgpd for the eBGP session, sharpd for the default-route sentinel
+          bgpd
+          sharpd
+    - label: isp2
+      definition: frr
+      x: 200
+      y: 0
+      files:
+        node.cfg: |
+          ! cml-mcp-server recipe isp-bgp: isp2, AS 64497 (backup ISP: prepends its AS twice)
+          frr defaults traditional
+          hostname isp2
+          service integrated-vtysh-config
+          !
+          interface eth0
+           description to the customer edge (198.51.100.2, AS 65001)
+           ip address 198.51.100.1/30
+           no shutdown
+          !
+          interface eth1
+           description internet LAN (internet-sw)
+           ip address 203.0.113.2/24
+           no shutdown
+          !
+          ip prefix-list MCP-SCALE seq 5 permit 100.64.0.0/10 ge 24 le 24
+          ip prefix-list MCP-SENTINEL seq 5 permit 203.0.113.254/32
+          !
+          route-map MCP-SCALE permit 10
+           match ip address prefix-list MCP-SCALE
+          !
+          route-map MCP-SENTINEL permit 10
+           match ip address prefix-list MCP-SENTINEL
+          !
+          route-map MCP-DEFAULT permit 10
+           match ip address prefix-list MCP-SENTINEL
+           set as-path prepend 64497 64497
+          !
+          route-map MCP-TO-CE deny 5
+           match ip address prefix-list MCP-SENTINEL
+          !
+          route-map MCP-TO-CE permit 10
+           set as-path prepend 64497 64497
+          !
+          route-map MCP-FROM-CE permit 10
+          !
+          router bgp 64497
+           bgp router-id 198.51.100.1
+           no bgp ebgp-requires-policy
+           no bgp network import-check
+           neighbor 198.51.100.2 remote-as 65001
+           neighbor 198.51.100.2 description customer edge
+           neighbor 198.51.100.2 timers 10 30
+           !
+           address-family ipv4 unicast
+            redistribute static route-map MCP-SCALE
+            redistribute sharp route-map MCP-SENTINEL
+            neighbor 198.51.100.2 default-originate route-map MCP-DEFAULT
+            neighbor 198.51.100.2 route-map MCP-FROM-CE in
+            neighbor 198.51.100.2 route-map MCP-TO-CE out
+           exit-address-family
+          !
+          line vty
+          !
+          end
+        boot.sh: |
+          # cml-mcp-server recipe isp-bgp: isp2 day 0. Once FRR answers, install the synthetic table (static
+          # blackholes, redistributed into BGP) and the sentinel route that gates the default origination.
+          SCALE=routes-1000
+          ROUTES=${SCALE#routes-}
+          case "$ROUTES" in ''|*[!0-9]*) ROUTES=1000 ;; esac
+          [ "$ROUTES" -gt 16384 ] && ROUTES=16384
+          (
+            for _ in $(seq 1 90); do vtysh -c 'show version' >/dev/null 2>&1 && break; sleep 2; done
+            args=(-c 'configure terminal')
+            i=0
+            while [ "$i" -lt "$ROUTES" ]; do
+              args+=(-c "ip route 100.$((64 + i / 256)).$((i % 256)).0/24 blackhole")
+              i=$((i + 1))
+            done
+            vtysh "${args[@]}"
+            for _ in $(seq 1 30); do
+              vtysh -c 'sharp install routes 203.0.113.254 nexthop 203.0.113.10 1' && break
+              sleep 2
+            done
+          ) >/tmp/mcp-isp-bgp.log 2>&1 &
+          exit 0
+        protocols: |
+          # cml-mcp-server recipe isp-bgp: bgpd for the eBGP session, sharpd for the default-route sentinel
+          bgpd
+          sharpd
+    - label: ce
+      definition: iol-xe
+      x: 0
+      y: 160
+      credentials: {username: netadmin, password: "${LAB_CLI_PASSWORD}", enable_password: "${LAB_CLI_PASSWORD}"}
+      config: |
+        hostname mcp-isp-ce
+        no ip domain lookup
+        username netadmin privilege 15 secret ${LAB_CLI_PASSWORD}
+        enable secret ${LAB_CLI_PASSWORD}
+        interface Ethernet0/0
+         description isp1 (AS 64496)
+         ip address 192.0.2.2 255.255.255.252
+         no shutdown
+        interface Ethernet0/1
+         description isp2 (AS 64497)
+         ip address 198.51.100.2 255.255.255.252
+         no shutdown
+        ! no transit: the edge advertises nothing it learnt from one ISP to the other
+        ip prefix-list MCP-NO-TRANSIT seq 5 deny 0.0.0.0/0 le 32
+        route-map MCP-FROM-ISP1 permit 10
+         set local-preference 200
+        router bgp 65001
+         bgp router-id 192.0.2.2
+         bgp log-neighbor-changes
+         neighbor 192.0.2.1 remote-as 64496
+         neighbor 192.0.2.1 description isp1
+         neighbor 192.0.2.1 timers 10 30
+         neighbor 198.51.100.1 remote-as 64497
+         neighbor 198.51.100.1 description isp2
+         neighbor 198.51.100.1 timers 10 30
+         address-family ipv4
+          neighbor 192.0.2.1 activate
+          neighbor 192.0.2.1 prefix-list MCP-NO-TRANSIT out
+          neighbor 192.0.2.1 route-map MCP-FROM-ISP1 in
+          neighbor 198.51.100.1 activate
+          neighbor 198.51.100.1 prefix-list MCP-NO-TRANSIT out
+         exit-address-family
+        line con 0
+         exec-timeout 0 0
+         logging synchronous
+        end
+  links:
+    - isp1:eth0 ce:Ethernet0/0
+    - isp2:eth0 ce:Ethernet0/1
+    - isp1:eth1 internet-sw
+    - isp2:eth1 internet-sw
+    - internet:eth0 internet-sw
