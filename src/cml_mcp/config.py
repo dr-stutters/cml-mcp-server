@@ -43,6 +43,9 @@ class Settings(BaseServerSettings):
     image_dir: str | None = Field(default=None, description="CML_IMAGE_DIR")
     # Saved captures (L78): the only directory cml_save_capture writes pcap files to (never sent via MCP)
     capture_dir: str | None = Field(default=None, description="CML_CAPTURE_DIR")
+    # Lab archives (L71): the only directory cml_archive_lab writes to (topology YAML, node configs, README);
+    # cml_delete_lab / cml_wipe_lab previews check it for a recent archive
+    archive_dir: str | None = Field(default=None, description="CML_ARCHIVE_DIR")
 
     # Safety rails (L20, docs/safety.md). Comma-separated lab title globs or lab ids.
     protected_labs: str | None = Field(default=None, description="CML_PROTECTED_LABS")
