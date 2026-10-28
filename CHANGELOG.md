@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.16.0 - 2026-10-28
+
+### Added
+- **Boot order (L68, #72).** Node `priority` in `cml_build_lab`, `cml_update_node` and recipes, and `cml_set_lab_boot`
+  for node staging and autostart; SD-WAN, FMC/FTD and ISE recipes boot controllers before the devices that join them.
+- **Lab archives (L71, #75).** `cml_archive_lab` writes a restorable lab archive (topology YAML, node configs, README)
+  to the new `CML_ARCHIVE_DIR`; `cml_delete_lab` and `cml_wipe_lab` previews warn when no archive is newer than the
+  lab's last change.
+- **Recipe `isp-bgp` (L75, #79).** A dual-ISP eBGP internet edge on FRR (default origination gated per ISP, a
+  synthetic table of N prefixes, a shared nginx internet host), with actions `withdraw-default-*`,
+  `restore-default-*` and `flap-*`, and an `extends:` base for FTDv or cat8000v edges.
+
+### Changed
+- `cml_connect_nodes` preview warns that a running cat9000v only uses links that exist at boot (stop/start it, or
+  connect while it is stopped); the tool description names the FTDv and cat9000v exceptions (#97).
+
 ## 0.15.0 - 2026-10-28
 
 ### Added
