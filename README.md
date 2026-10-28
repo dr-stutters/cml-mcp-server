@@ -9,7 +9,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > only: don't point it at production systems. It's provided as is, with no warranty (see the
 > [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
-- **79 tools** in three tiers: 41 read, 30 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **80 tools** in three tiers: 41 read, 31 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -215,6 +215,7 @@ or in `.mcp.json`:
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
 | `cml_save_capture` | Write a link's capture to a pcap file under `CML_CAPTURE_DIR` on the server host (Wireshark, TAC, evidence packs); returns only the path, SHA-256, size and packet count, never the bytes. `redact='radius'` blanks RADIUS authenticators, passwords, State/Class, secret AV-pairs and other vendors' VSA values first (IPv4 and IPv6) |
+| `cml_archive_lab` | Archive a lab before deleting or wiping it: extracts the running configs of booted nodes (`extract=false` skips it), then writes `<title>-<UTC time>/` under `CML_ARCHIVE_DIR` on the server host with `topology.yaml` (masked export, `${LAB_*}` references, re-importable with `cml_import_lab`), `configs/<node>.txt` and a `README.md` (purpose, date, recipe, restore steps). Mode 0600, never overwritten, no disk images; returns only paths and checksums. `cml_delete_lab` / `cml_wipe_lab` previews show the latest archive and warn when none is newer than the lab's last change |
 | `cml_capture_wireless` | Capture the simulated 802.11 medium at a wireless-ap / wireless-client node and decode it (SSIDs, auth/assoc, deauth reasons, EAPOL 4-way handshake, EAP identity/method) |
 | `cml_build_recipe` | Build a test-lab recipe, packaged or from `CML_RECIPE_DIRS` (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses; `extend=true` grows an existing lab into a superset recipe in place (adds only the missing nodes, links and notes, never changes an existing node) |
 | `cml_run_recipe_action` | Run one of a recipe's actions on its lab, e.g. `ise-fmc-identity` `login-alice` / `login-bob` / `logoff` (802.1X as another AD user); the command comes from the recipe, never the caller |
@@ -290,6 +291,7 @@ reference, and the lab description, labels and tags stay as written.
 | `CML_RECIPE_DIRS` | | More recipe directories (comma- or `:`-separated), e.g. a recipe checkout mounted read-only into the container, for `cml_list_recipes` / `cml_build_recipe` / `cml_verify_recipe` / `cml_run_recipe_action`. Read on every call (no restart). Trusted like the package (verify probes and actions run console commands). A packaged recipe wins on a name clash; `cml_list_recipes` lists unused files under `skipped` ([recipes README](src/cml_mcp/recipes/README.md#recipes-outside-the-package-cml_recipe_dirs)) |
 | `CML_IMAGE_DIR` | | The only directory `cml_upload_image` reads (images are streamed from it; uploads are off without it) |
 | `CML_CAPTURE_DIR` | | The only directory `cml_save_capture` writes pcap files to (`<lab>/<link>-<UTC time>.pcap`, mode 0600; saving is off without it) |
+| `CML_ARCHIVE_DIR` | | The only directory `cml_archive_lab` writes lab archives to (`<title>-<UTC time>/`, mode 0600/0700; archiving is off without it); `cml_delete_lab` / `cml_wipe_lab` previews check it for a recent archive |
 | `CML_PROTECTED_LABS` / `CML_MANAGED_LABS` | | Safety rails ([docs/safety.md](docs/safety.md)): labs no change may touch; labs the dangerous tools may wipe/delete (title globs or ids) |
 | `CML_CONFIG_DENY_DEFAULTS` / `CML_CONFIG_DENY` | `true` / | `cml_configure_node` refuses destructive device commands (write erase, reload, format, delete, ...); one extra regex |
 | `CML_TLS_CHECK_HOSTNAME` | `true` | `false` only with `CML_CA_BUNDLE` = the controller's own certificate (pinned; `scripts/pin_controller.py`) |

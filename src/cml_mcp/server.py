@@ -14,6 +14,7 @@ from cml_mcp.recipes import use_recipe_dirs
 from cml_mcp.redaction import LabSecretRedactor
 from cml_mcp.tools import (
     annotations,
+    archive_tool,
     build_tool,
     captures,
     cli,
@@ -49,6 +50,8 @@ cml_list_links / cml_get_link (conditioning, capture status), cml_list_capture_p
 Captures: cml_capture (capture + decoded summary in one call), cml_summarize_capture (RADIUS, EAPOL,
 OSPF, DHCP, ARP, ICMP decoded; `findings` names what got no answer; secrets never shown); the pcap file
 itself for Wireshark/TAC: cml_save_capture (to CML_CAPTURE_DIR on the server host, never into the reply).
+Before deleting or wiping a lab: cml_archive_lab (topology YAML with extracted configs, configs/<node>.txt and
+a README to CML_ARCHIVE_DIR on the server host; restore with cml_import_lab).
 What can be built: cml_list_node_definitions (iol-xe / ioll2-xe boot in under a minute).
 Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the CML console server
 (no IP reachability needed; IOS/IOS-XE, NX-OS, FTD, Linux); config changes go through
@@ -146,6 +149,7 @@ def create_server(
             planning.register,
             recipes_tools.register,
             replica_tools.register,
+            archive_tool.register,
             dangerous.register,
         ],
         status=CmlApp.status,

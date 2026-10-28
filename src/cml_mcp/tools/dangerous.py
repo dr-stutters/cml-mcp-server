@@ -15,6 +15,7 @@ from cml_mcp._core import (
     get_settings,
     poll_until,
 )
+from cml_mcp.archive import archive_check
 from cml_mcp.client import CmlApp
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, LinkRef, NodeRef, load_topo, state_counts
@@ -59,7 +60,9 @@ def register(reg: ToolRegistrar) -> None:
     ) -> dict[str, Any]:
         """Wipe a stopped lab: erase every node's disk so the next start boots fresh from the day-0
         configs (running configs and files on the nodes are lost). Required before changing node
-        configs/resources. force=true stops the lab first."""
+        configs/resources. force=true stops the lab first. The preview shows the lab's latest archive
+        (CML_ARCHIVE_DIR) and warns when there is none newer than the lab's last change: cml_archive_lab
+        first."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid, state = info["id"], str(info.get("state"))
@@ -68,13 +71,15 @@ def register(reg: ToolRegistrar) -> None:
             blockers.append("Lab is already wiped")
         elif state in RUNNING and not force:
             blockers.append(f"Lab is {state}; stop it first (cml_stop_lab) or pass force=true")
+        archive, warning = archive_check(get_settings(ctx).archive_dir, info)
         plan = Plan(
             f"WIPE lab {info.get('lab_title')!r} ({info.get('node_count')} nodes)",
-            details={"state": state, "force": force},
+            details={"state": state, "force": force, "archive": archive},
             fingerprint=lab_fingerprint(info),
             blockers=blockers,
             side_effects=["All node disks are erased; unsaved running configs are lost (irreversible)"]
-            + (["The lab is stopped first"] if state in RUNNING else []),
+            + (["The lab is stopped first"] if state in RUNNING else [])
+            + ([warning] if warning else []),
         )
 
         async def apply() -> Any:
@@ -95,8 +100,9 @@ def register(reg: ToolRegistrar) -> None:
         ctx: Context, lab: LabRef, force: Force = False, confirm: Confirm = None
     ) -> dict[str, Any]:
         """Delete a lab and everything in it (nodes, configs, links, captures). CML only deletes
-        stopped and wiped labs; force=true stops and wipes it first. Export it first
-        (cml_export_lab) if it might be needed again. Irreversible."""
+        stopped and wiped labs; force=true stops and wipes it first. Archive it first (cml_archive_lab) if
+        it might be needed again: the preview shows the latest archive and warns when there is none newer
+        than the lab's last change. Irreversible."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid, state = info["id"], str(info.get("state"))
@@ -106,12 +112,20 @@ def register(reg: ToolRegistrar) -> None:
             blockers.append(
                 f"Lab is {state}; CML deletes only wiped labs. Pass force=true to stop and wipe it first"
             )
+        archive, warning = archive_check(get_settings(ctx).archive_dir, info)
         plan = Plan(
             f"DELETE lab {info.get('lab_title')!r} ({len(nodes)} nodes, {info.get('link_count')} links)",
-            details={"id": lid, "state": state, "node_states": state_counts(nodes), "force": force},
+            details={
+                "id": lid,
+                "state": state,
+                "node_states": state_counts(nodes),
+                "force": force,
+                "archive": archive,
+            },
             fingerprint=lab_fingerprint(info),
             blockers=blockers,
-            side_effects=["The lab and all its nodes, configs and links are deleted (irreversible)"],
+            side_effects=["The lab and all its nodes, configs and links are deleted (irreversible)"]
+            + ([warning] if warning else []),
         )
 
         async def apply() -> Any:
