@@ -8,6 +8,7 @@ so a MAC this server pins must sit in that block or the next re-import of the la
 from __future__ import annotations
 
 import re
+from typing import Any
 
 CML_OUI = "52:54:00"
 _HEX = re.compile(r"[0-9a-f]{12}")
@@ -34,3 +35,25 @@ def mac_problem(raw: str) -> str | None:
             f"re-imported. Use {CML_OUI}:xx:xx:xx (or leave it unset and CML assigns one)"
         )
     return None
+
+
+def custom_mac_problem(definition_id: str, definition: dict[str, Any] | None) -> str | None:
+    """Why CML will not take a pinned MAC on nodes of this definition, or None when it will (or the
+    definition is unknown). CML's own flag decides: the simplified definition (GET
+    /simplified_node_definitions, what cml_build_lab reads) carries `sim.custom_mac`, false for IOL nodes,
+    external connectors and unmanaged switches (live, CML 2.10: an IOL import fails with 'cannot set custom
+    MAC address'). The full definition (GET /node_definitions/{id}) has no such flag, only
+    `sim.linux_native.libvirt_domain_driver`: `iol` is refused; `kvm` and `docker` nodes report
+    custom_mac true, so they are not blocked."""
+    sim = (definition or {}).get("sim") or {}
+    driver = str((sim.get("linux_native") or {}).get("libvirt_domain_driver") or "").lower()
+    if sim.get("custom_mac") is False:
+        why = "CML reports sim.custom_mac false for it"
+    elif driver == "iol":
+        why = "its nodes run under the iol driver (IOL)"
+    else:
+        return None
+    return (
+        f"node definition {definition_id} cannot take a pinned MAC: {why}, so CML assigns the MAC itself "
+        "and refuses a custom one. Pin MACs on KVM or Docker nodes (e.g. alpine, ubuntu, cat8000v, net-tools)"
+    )

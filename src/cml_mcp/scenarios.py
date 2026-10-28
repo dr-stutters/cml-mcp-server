@@ -106,7 +106,8 @@ SCENARIOS: dict[str, Scenario] = {
         ),
         Scenario(
             "flap",
-            "Timed down/up cycles (a cable pulled and replugged), run in the background.",
+            "Timed down/up cycles (a cable pulled and replugged), run in the background; with `side` only "
+            "one end loses carrier (an optic failing on one side).",
             "HA failover (FTD failover link), routing reconvergence (OSPF), NAD RADIUS dead timers",
             flap=True,
         ),
@@ -151,6 +152,9 @@ class FlapJob:
     down_seconds: float
     up_seconds: float
     cycles: int
+    side: str | None = (
+        None  # one-sided flap: the interface ('r1:Ethernet0/0') that goes down; peer keeps carrier
+    )
     started: float = field(default_factory=time.time)
     cycles_done: int = 0
     phase: str = "starting"
@@ -168,6 +172,7 @@ class FlapJob:
             "lab": self.lab_title,
             "link": self.link_name,
             "link_id": self.link_id,
+            **({"side": self.side} if self.side else {}),
             "running": self.running,
             "phase": self.phase,
             "cycles_done": self.cycles_done,
@@ -244,10 +249,12 @@ class FlapManager:
                 last = e
                 await asyncio.sleep(1 + 2 * attempt)
         log.warning("could not bring link %s back up: %s", job.link_name, last)
-        job.error = (
-            f"LINK MAY STILL BE DOWN: could not bring it back up ({str(last)[:200]}); "
-            "use cml_set_link_state(state='up')"
+        fix = (
+            f"cml_set_interface_state on {job.side} (state='up')"
+            if job.side
+            else "cml_set_link_state(state='up')"
         )
+        job.error = f"LINK MAY STILL BE DOWN: could not bring it back up ({str(last)[:200]}); use {fix}"
 
     async def cancel(self, jobs: list[FlapJob]) -> None:
         """Cancel the jobs and wait for their restores (concurrently). A cancel of the caller still

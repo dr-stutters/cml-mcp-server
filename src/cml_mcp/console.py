@@ -50,6 +50,24 @@ QUESTION = re.compile(
     r"|\[[^\]\n]{1,60}\]\?)[ \t]*$",
     re.IGNORECASE,
 )
+# IOS XE (controller-mode C8000V, 'config-transaction') leaving config mode with changes that were
+# never committed. Always answered 'no' (discard): this server never commits a candidate config the
+# caller didn't 'commit' itself, and CANCEL would leave the console stuck in config mode.
+UNCOMMITTED = re.compile(
+    r"Uncommitted changes found, commit them\?\s*\[yes/no/CANCEL\][ \t:]*$", re.IGNORECASE
+)
+UNCOMMITTED_WAKE_NOTE = (
+    "The console was left at IOS XE's 'Uncommitted changes found, commit them? [yes/no/CANCEL]' "
+    "question by an earlier session; answered 'no', so those uncommitted changes were discarded."
+)
+
+
+def uncommitted_note(command: str) -> str:
+    return (
+        f"{command!r} made IOS XE ask 'Uncommitted changes found, commit them? [yes/no/CANCEL]'; "
+        "answered 'no', so the uncommitted configuration-transaction changes were discarded (send "
+        "'commit' before 'end' to keep them)."
+    )
 
 
 class ConsoleBusy(InvalidRequest):
@@ -293,6 +311,8 @@ class ConsoleSession:
         self.last_prompt = ""
         # True while the console sits at a CLI prompt after a command that completed normally
         self.at_prompt = False
+        # Non-fatal remarks for the caller's result (e.g. uncommitted IOS XE changes discarded)
+        self.notes: list[str] = []
 
     def redact(self, text: str) -> str:
         for secret in (self.creds.password, self.creds.enable):
@@ -343,11 +363,12 @@ class ConsoleSession:
 
     async def wake(self) -> str:
         """Reach a CLI prompt: press RETURN, skip the setup dialog, log in, enable. Returns it."""
-        logins = passwords = 0
+        logins = passwords = discarded = 0
 
         def ready(t: str) -> bool:
             return bool(
                 PROMPT.search(t)
+                or UNCOMMITTED.search(t[-200:])
                 or LOGIN.search(t)
                 or PASSWORD.search(t)
                 or PRESS_RETURN.search(t)
@@ -361,7 +382,17 @@ class ConsoleSession:
         self.send("\r")
         for _ in range(15):
             text = await self.read_until(ready, self.timeout)
-            if CONFIG_DIALOG.search(text):
+            if UNCOMMITTED.search(text[-200:]):
+                discarded += 1
+                if discarded > 2:
+                    raise UpstreamTimeout(
+                        "The console keeps asking IOS XE's 'Uncommitted changes found, commit them?' "
+                        "after 'no'; clear the line ('clear line console 0') and retry"
+                    )
+                if UNCOMMITTED_WAKE_NOTE not in self.notes:
+                    self.notes.append(UNCOMMITTED_WAKE_NOTE)
+                self.send("no\r")
+            elif CONFIG_DIALOG.search(text):
                 self.send("no\r")
             elif POAP.search(text[-300:]):
                 self.send("skip\r")
@@ -436,7 +467,13 @@ class ConsoleSession:
                 in_config = bool(m and "(config" in m.group(0))
             if in_config:
                 self.send("end\r")
-                await self.read_until(lambda t: bool(prompt.search(t)), 3.0)
+                text = await self.read_until(
+                    lambda t: bool(prompt.search(t) or UNCOMMITTED.search(t[-200:])), 3.0
+                )
+                if UNCOMMITTED.search(text[-200:]):
+                    # never commit on the way out; 'no' discards and returns to the exec prompt
+                    self.send("no\r")
+                    await self.read_until(lambda t: bool(prompt.search(t)), 3.0)
             self.send("exit\r")
             await self.drain(quiet=0.5, limit=2.0)
         self.at_prompt = False
@@ -489,7 +526,8 @@ class ConsoleSession:
 
         self.at_prompt = False
         self.send(command + "\r")
-        answered = 0
+        answered = discarded = 0
+        strip_no = False
         need_echo = True
         before = ""  # output up to each answered question
 
@@ -519,7 +557,11 @@ class ConsoleSession:
         def finished(t: str) -> bool:
             r = view(t)
             return r is not None and bool(
-                prompt.search(r) or QUESTION.search(r[-120:]) or logged_out(r) or refilled(r)
+                prompt.search(r)
+                or QUESTION.search(r[-120:])
+                or UNCOMMITTED.search(r[-200:])
+                or logged_out(r)
+                or refilled(r)
             )
 
         while True:
@@ -538,6 +580,8 @@ class ConsoleSession:
                     self.proc.stdin.write("\x03")  # don't leave a runaway command on the console
                 raise
             rest = view(text) or ""
+            if strip_no:  # the device echoes the 'no' that answered UNCOMMITTED
+                rest = re.sub(r"^\s*no[ \t]*(?:\n|$)", "", rest, count=1)
             if prompt.search(rest):
                 break
             if refilled(rest) and not await self._more_output(0.6):
@@ -578,6 +622,25 @@ class ConsoleSession:
             # a question-like tail may just be a chunk boundary in ordinary output: only treat it as
             # a question if the device then stays quiet
             if await self._more_output(0.6):
+                continue
+            if UNCOMMITTED.search(rest[-200:]):
+                # answered whatever answer_questions says: 'yes' would commit changes nobody committed,
+                # Ctrl-C/CANCEL would leave the console in config mode for the next session
+                discarded += 1
+                if discarded > 2:
+                    self._cancel_pending()
+                    raise InvalidRequest(
+                        f"{self.safe(command)!r}: IOS XE kept asking 'Uncommitted changes found, commit "
+                        "them?' after 'no'"
+                    )
+                note = uncommitted_note(self.safe(command))
+                if note not in self.notes:
+                    self.notes.append(note)
+                head = rest.rstrip().rpartition("\n")[0]  # the output, without the question line
+                before += head + "\n" if head.strip() else head
+                need_echo = False
+                strip_no = True
+                self.send("no\r")
                 continue
             question = rest.strip().splitlines()[-1][-160:] if rest.strip() else "?"
             if not answer_questions:

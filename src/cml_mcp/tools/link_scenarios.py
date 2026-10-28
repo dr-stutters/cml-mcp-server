@@ -98,6 +98,14 @@ def register(reg: ToolRegistrar) -> None:
         cycles: Annotated[int, Field(ge=1, le=100, description="flap: number of down/up cycles")] = (
             FLAP_DEFAULTS[2]
         ),
+        side: Annotated[
+            Literal["a", "b"] | None,
+            Field(
+                description="flap only: flap ONE end of the link ('a' = its first interface, 'b' = the "
+                "second; the preview names it) so only that side loses carrier and the peer stays up (FTD HA "
+                "monitored interface, SD-WAN dead-WAN). Default: both ends"
+            ),
+        ] = None,
         confirm: Confirm = None,
     ) -> dict[str, Any]:
         """Put a named, repeatable impairment on a link instead of hand-typing netem values. The
@@ -105,9 +113,9 @@ def register(reg: ToolRegistrar) -> None:
         and stay until cml_clear_link_scenarios. 'flap' starts a background job in this server that
         takes the link down for down_seconds and up again, `cycles` times, then leaves it up; it
         returns at once (watch it with cml_get_link_scenarios(lab), stop it early with
-        cml_clear_link_scenarios). Flapping needs a started lab and stops if this server process
-        exits (the link is brought back up first). The result includes the expected round-trip ping
-        change, to check with cml_check_reachability."""
+        cml_clear_link_scenarios); side='a'|'b' flaps one end only. Flapping needs a started lab and
+        stops if this server process exits (the link is brought back up first). The result includes the
+        expected round-trip ping change, to check with cml_check_reachability."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
@@ -118,6 +126,12 @@ def register(reg: ToolRegistrar) -> None:
         current = condition_view(await app.api.get(f"/labs/{lid}/links/{lk['id']}/condition") or {})
         blockers: list[str] = []
         details: dict[str, Any] = {"link": name, "scenario": sc.name, "expected_ping_delta": sc.expected()}
+        side_iface: str | None = lk.get(f"interface_{side}") if side else None
+        side_name = topo.endpoint(side_iface) if side_iface else None
+        if side and not sc.flap:
+            blockers.append(
+                f"side applies only to the flap scenario, not {sc.name} (netem conditions both ends)"
+            )
         if sc.flap:
             total = cycles * (down_seconds + up_seconds)
             if lk.get("state") != "STARTED":
@@ -133,6 +147,10 @@ def register(reg: ToolRegistrar) -> None:
                 runs_about_seconds=total - up_seconds,
             )
             summary = f"Flap link {name}: {cycles} x ({down_seconds}s down, {up_seconds}s up)"
+            if side_name:
+                peer = topo.endpoint(lk.get("interface_b" if side == "a" else "interface_a"))
+                details.update(side=side_name, peer_stays_up=peer)
+                summary += f", only the {side_name} side (the peer {peer} keeps carrier)"
         else:
             details.update(
                 current=current, new=dict(sc.netem), changes=condition_changes(current, netem_body(sc))
@@ -148,7 +166,11 @@ def register(reg: ToolRegistrar) -> None:
         )
 
         async def set_state(state: str) -> None:
-            await app.api.put(f"/labs/{lid}/links/{lk['id']}/state/{'start' if state == 'up' else 'stop'}")
+            verb = "start" if state == "up" else "stop"
+            if side_iface:  # one-sided: only this interface loses carrier
+                await app.api.put(f"/labs/{lid}/interfaces/{side_iface}/state/{verb}")
+            else:
+                await app.api.put(f"/labs/{lid}/links/{lk['id']}/state/{verb}")
 
         async def apply() -> Any:
             if sc.flap:
@@ -161,6 +183,7 @@ def register(reg: ToolRegistrar) -> None:
                         down_seconds=down_seconds,
                         up_seconds=up_seconds,
                         cycles=cycles,
+                        side=side_name,
                     ),
                     set_state,
                 )
@@ -183,6 +206,7 @@ def register(reg: ToolRegistrar) -> None:
                 "down_seconds": down_seconds,
                 "up_seconds": up_seconds,
                 "cycles": cycles,
+                "side": side,
             },
             confirm=confirm,
             plan=plan,
