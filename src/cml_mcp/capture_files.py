@@ -7,9 +7,13 @@ expose secrets in place (lengths kept, so Wireshark still decodes the exchange):
 - the 16-byte Authenticator (with a request/response pair it allows an offline attack on the shared secret)
 - User-Password, CHAP-Password, CHAP-Challenge, State, Class, Tunnel-Password, Message-Authenticator
 - Cisco AV-pair values outside the allow-list the decoder shows (pcap.SAFE_AVPAIRS): masked with '*'
-- the payload of later IPv4 fragments of a RADIUS datagram (big EAP-TLS messages), which can't be parsed
+- the values of every other vendor's attributes (the vendor id stays), e.g. Microsoft MS-CHAP
+  challenge/response and MPPE keys, which the decoder never shows either
+- the payload of later fragments of a RADIUS datagram (big EAP-TLS messages), which can't be parsed
 
-The UDP checksum of a changed datagram is set to 0 (no checksum, valid for IPv4).
+RADIUS over IPv4 and IPv6 (directly or behind a fragment header) is redacted. The UDP checksum of a
+changed datagram is set to 0 over IPv4 (no checksum) and recomputed over IPv6 (where it is mandatory; a
+fragmented IPv6 datagram keeps 0, Wireshark flags it but still decodes).
 """
 
 from __future__ import annotations
@@ -130,6 +134,9 @@ def _redact_radius(buf: bytearray, start: int, end: int, stats: Redaction) -> bo
                         buf[cut:sub_end] = b"*" * (sub_end - cut)
                         stats.attributes += 1
                 j += buf[j + 1]
+        elif t == 26 and last - i > 6:  # another vendor's VSA: keep the vendor id, blank the value
+            buf[i + 6 : last] = b"\x00" * (last - i - 6)
+            stats.attributes += 1
         i += ln
     return True
 
@@ -166,6 +173,8 @@ def _redact_frame(
     while etype in (0x8100, 0x88A8):  # 802.1Q / QinQ
         etype = struct.unpack("!H", buf[p + 2 : p + 4])[0]
         p += 4
+    if etype == 0x86DD:
+        return _redact_ipv6(buf, p, end, frags, stats)
     if etype != 0x0800 or end - p < 20 or buf[p] >> 4 != 4:
         return False
     ihl = (buf[p] & 0x0F) * 4
@@ -194,4 +203,55 @@ def _redact_frame(
     if not _redact_radius(buf, body + 8, ip_end, stats):
         return False
     buf[body + 6 : body + 8] = b"\x00\x00"  # UDP checksum: none (the payload changed)
+    return True
+
+
+def _udp6_checksum(src: bytes, dst: bytes, segment: bytes) -> int:
+    data = src + dst + struct.pack("!I3xB", len(segment), 17) + segment
+    if len(data) % 2:
+        data += b"\x00"
+    total = sum(struct.unpack(f"!{len(data) // 2}H", data))
+    while total >> 16:
+        total = (total & 0xFFFF) + (total >> 16)
+    return (~total & 0xFFFF) or 0xFFFF
+
+
+def _redact_ipv6(
+    buf: bytearray, p: int, end: int, frags: set[tuple[bytes, bytes, int]], stats: Redaction
+) -> bool:
+    """RADIUS over IPv6: UDP right after the fixed header, or after a fragment header (44)."""
+    if end - p < 40 or buf[p] >> 4 != 6:
+        return False
+    plen = struct.unpack("!H", buf[p + 4 : p + 6])[0]
+    ip_end = min(p + 40 + plen, end)
+    nh, src, dst = buf[p + 6], bytes(buf[p + 8 : p + 24]), bytes(buf[p + 24 : p + 40])
+    body, fragmented = p + 40, False
+    if nh == 44:
+        if ip_end - body < 8:
+            return False
+        nh = buf[body]
+        fo = struct.unpack("!H", buf[body + 2 : body + 4])[0]
+        key = (src, dst, struct.unpack("!I", buf[body + 4 : body + 8])[0])
+        body += 8
+        if fo >> 3:  # a later fragment: blank it when it belongs to RADIUS
+            if key in frags:
+                buf[body:ip_end] = b"\x00" * (ip_end - body)
+                stats.fragments += 1
+                return True
+            return False
+        fragmented = bool(fo & 1)
+        if fragmented and nh == 17:
+            frags.add(key)
+    if nh != 17 or ip_end - body < 8:
+        return False
+    sport, dport = struct.unpack("!HH", buf[body : body + 4])
+    if not {sport, dport} & RADIUS_PORTS:
+        return False
+    if not _redact_radius(buf, body + 8, ip_end, stats):
+        return False
+    buf[body + 6 : body + 8] = b"\x00\x00"
+    udp_len = struct.unpack("!H", buf[body + 4 : body + 6])[0]
+    if not fragmented and body + udp_len <= ip_end:
+        csum = _udp6_checksum(src, dst, bytes(buf[body : body + udp_len]))
+        buf[body + 6 : body + 8] = struct.pack("!H", csum)
     return True

@@ -171,3 +171,39 @@ def test_redact_refuses_non_ethernet() -> None:
     wireless = struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 105)
     with pytest.raises(InvalidRequest, match="Ethernet"):
         redact_radius(wireless)
+
+
+def _ip6(nh: int, body: bytes) -> bytes:
+    src, dst = bytes.fromhex("20010db8" + "00" * 11 + "01"), bytes.fromhex("20010db8" + "00" * 11 + "02")
+    return struct.pack("!IHBB", 6 << 28, len(body), nh, 64) + src + dst + body
+
+
+def test_redact_ipv6_radius_and_other_vendors() -> None:
+    ms_chap = attr(26, struct.pack("!I", 311) + bytes([25, 2 + 6]) + b"MSRESP")  # MS-CHAP2-Response
+    msg = radius(1, 9, attr(1, b"carol") + attr(2, b"PW6SECRET!") + ms_chap)
+    dgram = udp(50000, 1812, msg)
+    fragged = radius(1, 10, attr(1, b"dave") + attr(24, b"STATE6" * 6))
+    fd = udp(50001, 1812, fragged)
+    frag_hdr = struct.pack("!BBHI", 17, 0, 1, 4242)  # offset 0, more fragments
+    later_hdr = struct.pack("!BBHI", 17, 0, (48 // 8) << 3, 4242)
+    data = pcap(
+        eth(0x86DD, _ip6(17, dgram)),
+        eth(0x86DD, _ip6(44, frag_hdr + fd[:48])),
+        eth(0x86DD, _ip6(44, later_hdr + fd[48:])),
+    )
+    out, stats = redact_radius(data)
+    assert len(out) == len(data)
+    for secret in (b"PW6SECRET!", b"MSRESP", b"STATE6"):
+        assert secret in data and secret not in out
+    assert b"carol" in out and b"dave" in out and struct.pack("!I", 311) in out
+    assert stats.packets == 3 and stats.fragments == 1
+    # the unfragmented datagram's UDP checksum is valid again (mandatory over IPv6)
+    frame = out[24 + 16 : 24 + 16 + 14 + 40 + len(dgram)]
+    ip6 = frame[14:]
+    seg = ip6[40:]
+    pseudo = ip6[8:40] + struct.pack("!I3xB", len(seg), 17) + seg
+    pseudo += b"\x00" * (len(pseudo) % 2)
+    total = sum(struct.unpack(f"!{len(pseudo) // 2}H", pseudo))
+    while total >> 16:
+        total = (total & 0xFFFF) + (total >> 16)
+    assert total == 0xFFFF and seg[6:8] != b"\x00\x00"
