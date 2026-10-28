@@ -163,7 +163,7 @@ def test_base_relation(recipe_dir: Path) -> None:
 
 def test_packaged_superset_recognises_its_base() -> None:
     """The case #67 was filed for: cat-sdwan-secure on a lab built from cat-sdwan-fabric."""
-    assert base_relation("cat-sdwan-secure", "cat-sdwan-fabric") == "subset"
+    assert base_relation("cat-sdwan-secure", "cat-sdwan-fabric") == "extends"  # now named under extends:
     assert base_relation("cat-sdwan-fabric", "cat-sdwan-secure") is None
 
 
