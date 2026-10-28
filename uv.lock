@@ -301,13 +301,14 @@ wheels = [
 
 [[package]]
 name = "cml-mcp-server"
-version = "0.13.0"
+version = "0.14.0"
 source = { editable = "." }
 dependencies = [
     { name = "asyncssh" },
     { name = "fastmcp" },
     { name = "fastmcp-tasks" },
     { name = "httpx" },
+    { name = "mcp" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
@@ -331,6 +332,7 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=4.1,<5" },
     { name = "fastmcp-tasks", specifier = ">=4.1,<5" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "mcp", specifier = ">=2.0,<3" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
