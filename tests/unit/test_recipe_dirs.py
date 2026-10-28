@@ -191,6 +191,7 @@ async def test_recipe_tools_take_no_recipe_yaml_from_the_caller() -> None:
         "start",
         "wait",
         "timeout",
+        "extend",  # a flag (#67): the recipe still comes from its file
         "confirm",
     }
     assert tools["cml_verify_recipe"] == {"recipe", "lab", "substitute"}

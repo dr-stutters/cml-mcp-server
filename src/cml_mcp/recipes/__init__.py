@@ -546,6 +546,43 @@ def read_recipe_marker(notes: Any) -> dict[str, Any] | None:
     return {"recipe": data["recipe"], "substitute": {str(k): str(v) for k, v in sub.items()}}
 
 
+def set_recipe_marker(notes: Any, name: str, substitute: dict[str, str] | None) -> str:
+    """`notes` with its recipe marker line replaced by one for `name` (or the line appended)."""
+    line = recipe_marker(name, substitute)
+    text = notes if isinstance(notes, str) else ""
+    if _MARKER_LINE.search(text):
+        return _MARKER_LINE.sub(lambda _m: line, text, count=1)
+    return f"{text.rstrip()}\n{line}" if text.strip() else line
+
+
+def recipe_bases(name: str) -> list[str]:
+    """The recipes `name` names under `extends:` (a name or a list of names; none when absent)."""
+    ext = get_recipe(name).get("extends")
+    if isinstance(ext, str):
+        return [ext]
+    return [str(e) for e in ext] if isinstance(ext, list) else []
+
+
+def base_relation(target: str, recorded: str) -> str | None:
+    """How a lab recorded as built from recipe `recorded` relates to recipe `target` (#67): 'same';
+    'extends' when `target` names `recorded` under `extends:`; 'subset' when every node of `recorded`
+    (label and definition) is in `target` - a superset recipe for the same lab, grown in place; None
+    otherwise (or when `recorded` is not a known recipe)."""
+    if recorded == target:
+        return "same"
+    if recorded in recipe_bases(target):
+        return "extends"
+    if recorded not in _load_all():
+        return None
+    want = {str(n.get("label")): n.get("definition") for n in get_recipe(target)["build"].get("nodes") or []}
+    have = {
+        str(n.get("label")): n.get("definition") for n in get_recipe(recorded)["build"].get("nodes") or []
+    }
+    if have and all(want.get(label) == d for label, d in have.items()):
+        return "subset"
+    return None
+
+
 # Recipe actions (L34): named console commands that change a recipe lab's state the way a
 # test needs (e.g. log the 802.1X client in as another user). Callers pick an action by name; the
 # command itself always comes from the recipe file (packaged or CML_RECIPE_DIRS), never from tool input.

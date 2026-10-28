@@ -52,6 +52,7 @@ from cml_mcp.netops import (
     ping_result,
 )
 from cml_mcp.recipes import (
+    base_relation,
     get_recipe,
     read_recipe_marker,
     redact_values,
@@ -481,13 +482,24 @@ async def _verify_recipe(
     else:
         notes = (await app.api.get(f"/labs/{lid}")).get("lab_notes")
     marker = read_recipe_marker(notes)
-    if marker and marker["recipe"] != name:
+    relation = base_relation(name, marker["recipe"]) if marker else None
+    if marker and relation is None:
         checks.append(
             check(
                 "lab built from this recipe", "lab", False, f"{title!r} was built from {marker['recipe']!r}"
             )
         )
         return {**out, "passed": False, "summary": "0/1 checks passed", "seconds": 0.0, "checks": checks}
+    if marker and relation != "same":
+        # #67: a superset recipe (same lab, more nodes) verifies a lab built from its base, grown in place
+        how = "extends" if relation == "extends" else "contains every node of"
+        out["built_from"] = {
+            "recipe": marker["recipe"],
+            "relation": relation,
+            "note": f"{title!r} was built from {marker['recipe']!r}, which recipe {name!r} {how}: the checks "
+            f"are {name!r}'s, so nodes it adds fail until the lab is extended "
+            f"(cml_build_recipe(recipe={name!r}, extend=true))",
+        }
     from_notes = False
     if substitute is None and marker:
         substitute = marker["substitute"] or None
