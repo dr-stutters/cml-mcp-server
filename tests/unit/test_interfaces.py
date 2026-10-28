@@ -3,8 +3,10 @@
 Payload shapes from the bundled CML OpenAPI spec:
 PUT /labs/{lab_id}/interfaces/{interface_id}/state/start|stop (no body, no response body), and
 PATCH /labs/{lab_id}/interfaces/{interface_id} with InterfaceUpdate {"mac_address": <MAC or null>}
-returning InterfaceResponse. The spec says nothing about the node
-state a MAC change needs; the live proof records whether CML refuses it on a running node.
+returning InterfaceResponse. Live (CML 2.10, #95): the PATCH on a BOOTED node returns
+400 'Physical configuration of node is locked', and an IOL node's import fails with 'cannot set custom
+MAC address'. node_definition_alpine.json is GET /node_definitions/alpine as live (libvirt_domain_driver:
+kvm, trimmed); node_definition_iol_xe.json is the recorded iol-xe one (libvirt_domain_driver: iol).
 """
 
 import json
@@ -13,14 +15,15 @@ from typing import Any
 import httpx
 import pytest
 import respx
+import yaml
 from fastmcp import Client
 
 from cml_mcp.build import BuildError, NodeSpec, build_topology
-from cml_mcp.macs import mac_problem, normalise_mac
+from cml_mcp.macs import custom_mac_problem, mac_problem, normalise_mac
 from cml_mcp.server import create_server
 
 from .conftest import LID, NODES, R1, fixture, make_settings
-from .test_write_tools import RW, data, preview_apply
+from .test_write_tools import RW, preview_apply
 
 IFACES = fixture("interfaces.json")
 R1_E00 = "a5719a70-f658-4dd3-98c7-2f4c5355b6e7"  # wired to r2:Ethernet0/0
@@ -32,9 +35,13 @@ def iface(iid: str, **changes: Any) -> dict[str, Any]:
     return next(i for i in IFACES if i["id"] == iid) | changes
 
 
-def with_node_state(api: respx.MockRouter, state: str) -> None:
-    nodes = [n | {"state": state} if n["id"] == R1 else n for n in NODES]
+def with_node_state(api: respx.MockRouter, state: str, definition: str = "alpine") -> None:
+    """r1 in `state`; by default made a KVM (alpine) node so a MAC pin is allowed."""
+    nodes = [n | {"state": state, "node_definition": definition} if n["id"] == R1 else n for n in NODES]
     api.get(f"/labs/{LID}/nodes").mock(return_value=httpx.Response(200, json=nodes))
+    api.get("/node_definitions/alpine").mock(
+        return_value=httpx.Response(200, json=fixture("node_definition_alpine.json"))
+    )
 
 
 async def test_tools_are_write_tier(lab_api: respx.MockRouter) -> None:
@@ -123,19 +130,68 @@ async def test_mac_pin_on_wiped_node(lab_api: respx.MockRouter) -> None:
     }
 
 
-async def test_mac_pin_on_running_node_warns_and_explains_refusal(lab_api: respx.MockRouter) -> None:
-    lab_api.patch(f"/labs/{LID}/interfaces/{R1_E01}").mock(
-        return_value=httpx.Response(400, json={"code": 400, "description": "Node must be wiped"})
+async def test_mac_pin_on_running_node_is_blocked(lab_api: respx.MockRouter) -> None:
+    with_node_state(lab_api, "BOOTED")
+    # what CML answers live on a BOOTED node; the preview must stop before it is ever sent
+    patch = lab_api.patch(f"/labs/{LID}/interfaces/{R1_E01}").mock(
+        return_value=httpx.Response(
+            400, json={"code": 400, "description": "Physical configuration of node is locked"}
+        )
     )
     args = {"lab": LID, "node": "r1", "interface": "Ethernet0/1", "mac_address": "52:54:00:00:01:01"}
-    async with Client(create_server(make_settings(**RW))) as c:
-        preview = data(await c.call_tool("cml_update_interface", args))
-        assert preview["status"] == "preview"
-        assert any("Node is BOOTED" in s and "wiped" in s for s in preview["side_effects"])
-        res = await c.call_tool(
-            "cml_update_interface", {**args, "confirm": preview["confirm"]}, raise_on_error=False
-        )
-    assert res.is_error and "DEFINED_ON_CORE" in res.content[0].text
+    preview, applied = await preview_apply("cml_update_interface", args)
+    assert preview["status"] == "blocked" and applied is None
+    assert any(
+        "r1 is BOOTED" in b and "DEFINED_ON_CORE" in b and "cml_wipe_node" in b for b in preview["blockers"]
+    )
+    assert not patch.called
+
+
+@pytest.mark.parametrize("state", ["STOPPED", "STARTED"])
+async def test_mac_pin_blocked_unless_wiped(lab_api: respx.MockRouter, state: str) -> None:
+    with_node_state(lab_api, state)
+    preview, _ = await preview_apply(
+        "cml_update_interface",
+        {"lab": LID, "node": "r1", "interface": "Ethernet0/1", "mac_address": "52:54:00:00:01:01"},
+    )
+    assert preview["status"] == "blocked" and any(f"is {state}" in b for b in preview["blockers"])
+
+
+async def test_mac_pin_on_iol_node_is_blocked(lab_api: respx.MockRouter) -> None:
+    with_node_state(lab_api, "DEFINED_ON_CORE", definition="iol-xe")  # recorded iol-xe definition
+    patch = lab_api.patch(f"/labs/{LID}/interfaces/{R1_E01}").mock(return_value=httpx.Response(200, json={}))
+    preview, _ = await preview_apply(
+        "cml_update_interface",
+        {"lab": LID, "node": "r1", "interface": "Ethernet0/1", "mac_address": "52:54:00:00:01:01"},
+    )
+    assert preview["status"] == "blocked" and not patch.called
+    assert any("iol-xe cannot take a pinned MAC" in b and "iol driver" in b for b in preview["blockers"])
+
+
+async def test_mac_pin_on_docker_node_is_blocked(lab_api: respx.MockRouter) -> None:
+    # synthetic definition: a Docker-driven node
+    docker = "id: tool-box\nsim:\n  linux_native:\n    driver: server\n    libvirt_domain_driver: docker\n"
+    with_node_state(lab_api, "DEFINED_ON_CORE", definition="tool-box")
+    lab_api.get("/node_definitions/tool-box").mock(return_value=httpx.Response(200, json=docker))
+    preview, _ = await preview_apply(
+        "cml_update_interface",
+        {"lab": LID, "node": "r1", "interface": "Ethernet0/1", "mac_address": "52:54:00:00:01:01"},
+    )
+    assert preview["status"] == "blocked"
+    assert any("tool-box cannot take a pinned MAC" in b and "docker driver" in b for b in preview["blockers"])
+
+
+async def test_mac_clear_on_iol_node_is_not_blocked_by_driver(lab_api: respx.MockRouter) -> None:
+    with_node_state(lab_api, "DEFINED_ON_CORE", definition="iol-xe")
+    pinned = [i | {"mac_address": "52:54:00:00:01:01"} if i["id"] == R1_E01 else i for i in IFACES]
+    lab_api.get(f"/labs/{LID}/interfaces").mock(return_value=httpx.Response(200, json=pinned))
+    patch = lab_api.patch(f"/labs/{LID}/interfaces/{R1_E01}").mock(
+        return_value=httpx.Response(200, json=iface(R1_E01))
+    )
+    preview, _ = await preview_apply(
+        "cml_update_interface", {"lab": LID, "node": "r1", "interface": "Ethernet0/1", "mac_address": "auto"}
+    )
+    assert preview["status"] == "preview" and patch.called  # clearing a pin needs no KVM driver
 
 
 async def test_mac_auto_clears_pin(lab_api: respx.MockRouter) -> None:
@@ -188,14 +244,14 @@ def test_normalise_mac_forms() -> None:
 
 def test_build_pins_macs_and_emits_the_interface() -> None:
     nodes = [
-        NodeSpec(label="r1", definition="iol-xe", macs={"Ethernet1/0": "52-54-00-00-10-00"}),
+        NodeSpec(label="r1", definition="alpine", macs={"eth3": "52-54-00-00-10-00"}),
         NodeSpec(label="r2", definition="iol-xe"),
     ]
     topo, _ = build_topology("t", nodes, ["r1 r2"], DEFS)
     r1 = {i["label"]: i for i in topo["nodes"][0]["interfaces"]}
-    # Ethernet1/0 is past the default four, but a pinned MAC makes it exist
-    assert r1["Ethernet1/0"]["mac_address"] == "52:54:00:00:10:00"
-    assert "mac_address" not in r1["Ethernet0/0"]
+    # eth3 is past alpine's default one interface, but a pinned MAC makes it exist
+    assert r1["eth3"]["mac_address"] == "52:54:00:00:10:00"
+    assert "mac_address" not in r1["eth0"]
     assert all("mac_address" not in i for i in topo["nodes"][1]["interfaces"])
 
 
@@ -203,14 +259,35 @@ def test_build_pins_macs_and_emits_the_interface() -> None:
     ("macs", "message"),
     [
         ({"r1": {"Gi9": "52:54:00:00:00:01"}}, "not a physical interface"),
-        ({"r1": {"Ethernet0/0": "aa:bb:cc:00:00:01"}}, "outside 52:54:00"),
+        ({"r1": {"eth0": "aa:bb:cc:00:00:01"}}, "outside 52:54:00"),
         (
-            {"r1": {"Ethernet0/0": "52:54:00:00:00:01"}, "r2": {"Ethernet0/1": "52:54:00:00:00:01"}},
+            {"r1": {"eth0": "52:54:00:00:00:01"}, "r2": {"eth1": "52:54:00:00:00:01"}},
             "also given",
         ),
     ],
 )
 def test_build_rejects_bad_macs(macs: dict[str, dict[str, str]], message: str) -> None:
-    nodes = [NodeSpec(label=lab, definition="iol-xe", macs=macs.get(lab, {})) for lab in ("r1", "r2")]
+    nodes = [NodeSpec(label=lab, definition="alpine", macs=macs.get(lab, {})) for lab in ("r1", "r2")]
     with pytest.raises(BuildError, match=message):
         build_topology("t", nodes, [], DEFS)
+
+
+@pytest.mark.parametrize("definition", ["iol-xe", "ioll2-xe", "unmanaged_switch"])
+def test_build_rejects_macs_on_non_kvm_nodes(definition: str) -> None:
+    # simplified definitions (what cml_build_lab reads) carry sim.custom_mac: false for these
+    nodes = [NodeSpec(label="r1", definition=definition, macs={"Ethernet0/0": "52:54:00:96:00:01"})]
+    with pytest.raises(BuildError, match=f"r1: macs given, but node definition {definition} cannot take"):
+        build_topology("t", nodes, [], DEFS)
+
+
+def test_build_rejects_macs_by_full_definition_driver() -> None:
+    full = {"iol-xe": yaml.safe_load(fixture("node_definition_iol_xe.json"))}
+    nodes = [NodeSpec(label="r1", definition="iol-xe", macs={"Ethernet0/0": "52:54:00:96:00:01"})]
+    with pytest.raises(BuildError, match="iol driver, not KVM"):
+        build_topology("t", nodes, [], full)
+
+
+def test_custom_mac_problem_kvm_and_unknown() -> None:
+    assert custom_mac_problem("alpine", yaml.safe_load(fixture("node_definition_alpine.json"))) is None
+    assert custom_mac_problem("alpine", DEFS["alpine"]) is None  # simplified: custom_mac true
+    assert custom_mac_problem("x", None) is None and custom_mac_problem("x", {}) is None

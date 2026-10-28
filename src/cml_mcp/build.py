@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
-from cml_mcp.macs import mac_problem, normalise_mac
+from cml_mcp.macs import custom_mac_problem, mac_problem, normalise_mac
 
 # Nodes that never take a node licence (and boot instantly).
 UNLICENSED_DEFINITIONS = frozenset({"external_connector", "unmanaged_switch"})
@@ -48,7 +48,8 @@ class NodeSpec(BaseModel):
     macs: dict[str, str] = Field(
         default_factory=dict,
         description="Pinned interface MACs by interface name, e.g. {'Ethernet0/1': '52:54:00:00:01:01'}, so "
-        "rebuilds keep them (ISE MAB endpoints, DHCP reservations). Must be in CML's 52:54:00 block",
+        "rebuilds keep them (ISE MAB endpoints, DHCP reservations). Must be in CML's 52:54:00 block; KVM "
+        "nodes only (alpine, ubuntu, cat8000v...): IOL and Docker nodes cannot take a custom MAC",
     )
     image: str | None = Field(default=None, description="Image definition id (default: newest)")
     tags: list[str] = Field(default_factory=list, description="Tags")
@@ -137,6 +138,9 @@ def build_topology(
     for n in nodes:
         d = definitions.get(n.definition)
         names = list((((d or {}).get("device") or {}).get("interfaces") or {}).get("physical") or [])
+        if n.macs and d is not None and (why := custom_mac_problem(n.definition, d)):
+            problems.append(f"{n.label}: macs given, but {why}")
+            continue
         for if_name, mac in n.macs.items():
             if d is not None and if_name not in names:
                 problems.append(

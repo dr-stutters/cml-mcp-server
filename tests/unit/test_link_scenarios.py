@@ -218,3 +218,64 @@ async def test_apply_scenario_preview_lists_reset_impairments(lab_api: respx.Moc
     changes = preview["preview"]["changes"]
     assert changes["duplicate"] == {"from": 1, "to": None, "removed": True}
     assert changes["latency"] == {"from": 600, "to": 150} and "enabled" not in changes
+
+
+R1_E00 = "a5719a70-f658-4dd3-98c7-2f4c5355b6e7"  # interface_a of LINK (r1:Ethernet0/0)
+R2_E00 = "105f0610-8257-4445-ab8e-fcea5332be63"  # interface_b of LINK (r2:Ethernet0/0)
+
+
+@pytest.mark.parametrize(
+    ("side", "iid", "name", "peer"), [("a", R1_E00, "r1", "r2"), ("b", R2_E00, "r2", "r1")]
+)
+async def test_one_sided_flap_uses_only_that_interface(
+    lab_api: respx.MockRouter, side: str, iid: str, name: str, peer: str
+) -> None:
+    calls: list[str] = []
+
+    def record(req: httpx.Request) -> httpx.Response:
+        calls.append(req.url.path.split(f"/labs/{LID}/", 1)[1])
+        return httpx.Response(204)
+
+    lab_api.put(url__regex=rf".*/labs/{LID}/(links|interfaces)/[^/]+/state/(start|stop)$").mock(
+        side_effect=record
+    )
+    args = {
+        "lab": LID,
+        "link": "r1<->r2",
+        "scenario": "flap",
+        "down_seconds": 2,
+        "up_seconds": 2,
+        "side": side,
+    }
+    async with Client(create_server(make_settings(**RW))) as c:
+        preview = data(await c.call_tool("cml_apply_link_scenario", args))
+        assert preview["status"] == "preview"
+        assert preview["preview"]["side"] == f"{name}:Ethernet0/0"
+        assert preview["preview"]["peer_stays_up"] == f"{peer}:Ethernet0/0"
+        assert f"only the {name}:Ethernet0/0 side" in preview["action"]
+        applied = data(await c.call_tool("cml_apply_link_scenario", {**args, "confirm": preview["confirm"]}))
+        assert applied["result"]["flap"]["side"] == f"{name}:Ethernet0/0"
+        await asyncio.sleep(0.2)
+        pv = data(await c.call_tool("cml_clear_link_scenarios", {"lab": LID}))
+        await c.call_tool("cml_clear_link_scenarios", {"lab": LID, "confirm": pv["confirm"]})
+    # only this interface's state endpoints: never the link's, never the peer's
+    assert calls == [f"interfaces/{iid}/state/stop", f"interfaces/{iid}/state/start"]
+
+
+async def test_side_only_for_flap(lab_api: respx.MockRouter) -> None:
+    blocked, _ = await preview_apply(
+        "cml_apply_link_scenario", {"lab": LID, "link": "r1<->r2", "scenario": "brownout", "side": "a"}
+    )
+    assert blocked["status"] == "blocked" and "only to the flap scenario" in blocked["blockers"][0]
+
+
+async def test_one_sided_restore_failure_names_interface_tool() -> None:
+    async def fail(state: str) -> None:
+        raise RuntimeError("boom")
+
+    job = FlapJob("l", "lab", "k", "a<->b", 0, 0, 1, side="a:eth0")
+    with pytest.MonkeyPatch.context() as mp:
+        real_sleep = asyncio.sleep
+        mp.setattr("cml_mcp.scenarios.asyncio.sleep", lambda s: real_sleep(0))
+        await FlapManager._restore(job, fail)
+    assert job.error and "cml_set_interface_state on a:eth0" in job.error
