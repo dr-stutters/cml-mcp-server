@@ -1,5 +1,5 @@
 {
-  "core_version": "0.17.0",
+  "core_version": "0.19.0",
   "manifest": 1,
   "prefix": "cml",
   "prompts": {
@@ -83,6 +83,10 @@
     "cml_clear_link_scenarios": {
       "tier": "write",
       "title": "Clear link scenarios"
+    },
+    "cml_compare_snapshot": {
+      "tier": "read",
+      "title": "Compare lab snapshots"
     },
     "cml_configure_node": {
       "tier": "write",
@@ -268,6 +272,10 @@
       "tier": "write",
       "title": "Run a recipe action"
     },
+    "cml_save_capture": {
+      "tier": "write",
+      "title": "Save packet capture to a file"
+    },
     "cml_search_spec": {
       "tier": "read",
       "title": "Search the Cisco Modeling Labs API spec"
@@ -291,6 +299,10 @@
     "cml_set_node_state": {
       "tier": "write",
       "title": "Start or stop node"
+    },
+    "cml_snapshot": {
+      "tier": "read",
+      "title": "Lab snapshot"
     },
     "cml_start_capture": {
       "tier": "write",
@@ -349,5 +361,5 @@
       "title": "Wipe node"
     }
   },
-  "version": "0.14.0"
+  "version": "0.15.0"
 }

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.15.0 - 2026-10-28
+
+### Added
+- **Lab snapshots (L69, #73).** `cml_snapshot` / `cml_compare_snapshot`: a lab pre/post change check on the core
+  snapshot contract (node and link state, routing neighbours, reachability pairs, config hashes).
+- **Templated multi-node config (L49, #24).** `cml_configure_nodes` pushes templated config lines to several nodes in
+  one preview; `cml_diff_lab` gains `against='day0'|'saved'`, `view='sections'` and `nodes=[...]` for a lab-wide
+  drift view by node and section.
+- **Captures to file (L78, #82).** `cml_save_capture` writes a link's capture to a pcap file under the new
+  `CML_CAPTURE_DIR` (path, SHA-256, size, packet count only; optional RADIUS redaction).
+- **Recipe `extends:` (L40, #14).** Recipes can extend another recipe (nodes by label, links by ends, verify/actions
+  by name; cycles and unknown bases refused). `cat-sdwan-secure` now extends `cat-sdwan-fabric`, with an unchanged
+  topology.
+- `cml_verify_recipe` verifies a superset recipe on a lab built from its base (`built_from`);
+  `cml_build_recipe(extend=true)` grows an existing recipe lab in place (only missing nodes, links and notes;
+  preview-first; refuses conflicts) (#67).
+- One-sided flap (`side`) on the flap link scenario (#95).
+
+### Fixed
+- Console tools answer IOS XE's 'Uncommitted changes found, commit them?' with 'no' (discarding the uncommitted
+  changes) and report it in `notes`, instead of stalling until timeout (#68).
+- `cml_connect_nodes` holds a picked port for its preview, so parallel previews to one switch get different ports;
+  a confirm whose port was taken re-picks or refuses clearly (#69).
+- `cml_connect_nodes` never picks an FTDv donotuse interface (#96).
+- Masked lab exports re-import (quoted mask, `${LAB_NODE_PASSWORD}` for cloud-init passwords), and large lab exports
+  are paged so they come back whole (#71).
+- MAC pin previews block IOL nodes and running nodes (#95).
+
+### Changed
+- Bundled stutters-mcp-core v0.17.0 -> v0.19.0 (snapshot schema 2, secret masking in audit/previews, JSON-text
+  list/dict arguments, `instance` fan-out on read tools).
+
 ## 0.14.0 - 2026-10-28
 
 ### Added
