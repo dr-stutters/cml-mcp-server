@@ -46,7 +46,8 @@ Start with cml_list_labs, then cml_get_lab_topology (compact summary; detail='fu
 Nodes: cml_list_nodes / cml_get_node / cml_get_node_console_log; wiring: cml_list_interfaces,
 cml_list_links / cml_get_link (conditioning, capture status), cml_list_capture_packets.
 Captures: cml_capture (capture + decoded summary in one call), cml_summarize_capture (RADIUS, EAPOL,
-OSPF, DHCP, ARP, ICMP decoded; `findings` names what got no answer; secrets never shown).
+OSPF, DHCP, ARP, ICMP decoded; `findings` names what got no answer; secrets never shown); the pcap file
+itself for Wireshark/TAC: cml_save_capture (to CML_CAPTURE_DIR on the server host, never into the reply).
 What can be built: cml_list_node_definitions (iol-xe / ioll2-xe boot in under a minute).
 Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the CML console server
 (no IP reachability needed; IOS/IOS-XE, NX-OS, FTD, Linux); config changes go through

@@ -4,8 +4,9 @@
 
 import asyncio
 import contextlib
+import hashlib
 import time
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
@@ -19,10 +20,13 @@ from cml_mcp._core import (
     ToolRegistrar,
     UpstreamError,
     get_client,
+    get_settings,
+    preview_or_apply,
 )
+from cml_mcp.capture_files import capture_root, check_name, redact_radius, safe_component, write_capture
 from cml_mcp.client import CmlApp
 from cml_mcp.pcap import PcapError, matches, pcap_truncated, read_pcap, summarise
-from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
+from cml_mcp.safety import guarded_preview_or_apply
 from cml_mcp.tools.common import LabRef, LinkRef, shaped
 
 Host = Annotated[str | None, Field(description="Only packets from or to this IP or MAC address")]
@@ -222,7 +226,7 @@ def register(reg: ToolRegistrar) -> None:
                 ),
             }
 
-        return await preview_or_apply(
+        return await guarded_preview_or_apply(
             ctx,
             tool="cml_capture",
             args={
@@ -237,6 +241,102 @@ def register(reg: ToolRegistrar) -> None:
                 "highlights": highlights,
                 "packets": packets,
             },
+            confirm=confirm,
+            plan=plan,
+            apply=apply,
+        )
+
+    @reg.write(title="Save packet capture to a file")
+    async def cml_save_capture(
+        ctx: Context,
+        lab: LabRef,
+        link: LinkRef,
+        name: Annotated[
+            str | None,
+            Field(
+                max_length=64,
+                description="File name stem instead of the link label (letters, digits, '.', '_', '-'; "
+                "no paths)",
+            ),
+        ] = None,
+        redact: Annotated[
+            Literal["none", "radius"],
+            Field(
+                description="'radius' overwrites RADIUS secrets in the file (authenticators, passwords, "
+                "State, Class, Message-Authenticator, non-allow-listed Cisco AV-pair values) before it "
+                "is written"
+            ),
+        ] = "none",
+        confirm: Confirm = None,
+    ) -> dict[str, Any]:
+        """Save a link's packet capture (the last finished one) as a pcap file on the server host, for
+        Wireshark/tshark, a TAC case or an evidence pack. The file goes to
+        CML_CAPTURE_DIR/<lab>/<link or name>-<UTC time>.pcap (mode 0600, never overwritten); the bytes are
+        never returned through MCP: the result is only the path, SHA-256, size and packet count. Captures
+        can carry secrets (RADIUS, cleartext protocols): redact='radius' blanks the RADIUS ones. Capture
+        first with cml_capture; cml_summarize_capture decodes the same capture. Preview-first."""
+        root = capture_root(get_settings(ctx).capture_dir)
+        check_name(name)
+        app: CmlApp = get_client(ctx)
+        info = await app.resolve_lab(lab)
+        lid = info["id"]
+        lk = await app.resolve_link(lid, link)
+        status = await app.api.get(f"/labs/{lid}/links/{lk['id']}/capture/status") or {}
+        data = await fetch_capture(app, lk)
+        try:
+            all_packets = await asyncio.to_thread(read_pcap, data) if data else []
+        except PcapError as e:
+            raise InvalidRequest(f"Could not read the capture: {e}") from e
+        lab_dir = safe_component(str(info.get("lab_title") or lid), lid)
+        stem = name or safe_component(str(lk.get("label") or lk["id"]), lk["id"])
+        blockers = []
+        if status.get("starttime"):
+            blockers.append("A capture is still running on this link; stop it first with cml_stop_capture")
+        if not data:
+            blockers.append("The link's capture is empty")
+        out, redaction = data, None
+        if redact == "radius" and data:
+            try:
+                out, redaction = redact_radius(data)
+            except InvalidRequest as e:
+                blockers.append(str(e))
+        digest = hashlib.sha256(data).hexdigest()
+        plan = Plan(
+            f"Write the capture of link {lk.get('label')} ({len(all_packets)} packets) to a pcap file under "
+            "CML_CAPTURE_DIR",
+            details={
+                "file": f"{lab_dir}/{stem}-<UTC time>.pcap",
+                "capture_dir": str(root),
+                "packets": len(all_packets),
+                "size_bytes": len(data),
+                "redact": redaction.as_dict() if redaction is not None else redact,
+            },
+            fingerprint=digest,  # the file is exactly the previewed capture
+            blockers=blockers,
+            side_effects=["Writes one file on the server host; the lab is not changed"],
+            blast_radius=1,
+        )
+
+        async def apply() -> Any:
+            path = await asyncio.to_thread(write_capture, root, lab_dir, stem, out)
+            result: dict[str, Any] = {
+                "lab": info.get("lab_title"),
+                "link": lk.get("label"),
+                "path": str(path),
+                "sha256": hashlib.sha256(out).hexdigest(),
+                "size_bytes": len(out),
+                "packets": len(all_packets),
+            }
+            if pcap_truncated(all_packets):
+                result["packets"] = f"{len(all_packets)}+ (count stops there)"
+            if redaction is not None:
+                result["redacted"] = redaction.as_dict()
+            return result
+
+        return await preview_or_apply(
+            ctx,
+            tool="cml_save_capture",
+            args={"lab": lab, "link": link, "name": name, "redact": redact},
             confirm=confirm,
             plan=plan,
             apply=apply,
@@ -379,7 +479,7 @@ def register_wireless(reg: ToolRegistrar) -> None:
                 ),
             }
 
-        return await preview_or_apply(
+        return await guarded_preview_or_apply(
             ctx,
             tool="cml_capture_wireless",
             args={

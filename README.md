@@ -212,6 +212,7 @@ or in `.mcp.json`:
 | `cml_update_interface` | Pin an interface MAC (52:54:00:xx:xx:xx) or clear the pin (`auto`) so ISE MAB endpoints and DHCP bindings survive wipes and re-imports; the preview names the old MAC and what keys on it |
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
+| `cml_save_capture` | Write a link's capture to a pcap file under `CML_CAPTURE_DIR` on the server host (Wireshark, TAC, evidence packs); returns only the path, SHA-256, size and packet count, never the bytes. `redact='radius'` blanks RADIUS authenticators, passwords, State/Class and secret AV-pairs first |
 | `cml_capture_wireless` | Capture the simulated 802.11 medium at a wireless-ap / wireless-client node and decode it (SSIDs, auth/assoc, deauth reasons, EAPOL 4-way handshake, EAP identity/method) |
 | `cml_build_recipe` | Build a test-lab recipe, packaged or from `CML_RECIPE_DIRS` (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses; `extend=true` grows an existing lab into a superset recipe in place (adds only the missing nodes, links and notes, never changes an existing node) |
 | `cml_run_recipe_action` | Run one of a recipe's actions on its lab, e.g. `ise-fmc-identity` `login-alice` / `login-bob` / `logoff` (802.1X as another AD user); the command comes from the recipe, never the caller |
@@ -286,6 +287,7 @@ reference, and the lab description, labels and tags stay as written.
 | `CML_LAB_SECRETS_FILE` | | dotenv file with the `LAB_*` values that recipes, `cml_import_lab` files and `cml_build_lab` specs reference as `${LAB_*}` (device passwords, keys, communities). `LAB_*` environment variables override it. Recipe builds, imports and lab builds name any missing variable |
 | `CML_RECIPE_DIRS` | | More recipe directories (comma- or `:`-separated), e.g. a recipe checkout mounted read-only into the container, for `cml_list_recipes` / `cml_build_recipe` / `cml_verify_recipe` / `cml_run_recipe_action`. Read on every call (no restart). Trusted like the package (verify probes and actions run console commands). A packaged recipe wins on a name clash; `cml_list_recipes` lists unused files under `skipped` ([recipes README](src/cml_mcp/recipes/README.md#recipes-outside-the-package-cml_recipe_dirs)) |
 | `CML_IMAGE_DIR` | | The only directory `cml_upload_image` reads (images are streamed from it; uploads are off without it) |
+| `CML_CAPTURE_DIR` | | The only directory `cml_save_capture` writes pcap files to (`<lab>/<link>-<UTC time>.pcap`, mode 0600; saving is off without it) |
 | `CML_PROTECTED_LABS` / `CML_MANAGED_LABS` | | Safety rails ([docs/safety.md](docs/safety.md)): labs no change may touch; labs the dangerous tools may wipe/delete (title globs or ids) |
 | `CML_CONFIG_DENY_DEFAULTS` / `CML_CONFIG_DENY` | `true` / | `cml_configure_node` refuses destructive device commands (write erase, reload, format, delete, ...); one extra regex |
 | `CML_TLS_CHECK_HOSTNAME` | `true` | `false` only with `CML_CA_BUNDLE` = the controller's own certificate (pinned; `scripts/pin_controller.py`) |
