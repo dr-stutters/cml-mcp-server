@@ -50,9 +50,32 @@ def is_ftd(node: dict[str, Any]) -> bool:
     return str(node.get("node_definition") or "").lower().startswith("ftd")
 
 
+CAT9K_LINK_WARNING = (
+    "{node} only uses links that exist at boot: stop and start the node after connecting, or connect "
+    "while it is stopped (a Catalyst 9000v binds its data-plane NICs at boot, so a link hot-added to "
+    "the running node shows STARTED but carries no frames; a link bounce does not help)"
+)
+
+
+def is_cat9k(node: dict[str, Any]) -> bool:
+    """Catalyst 9000v node definitions (cat9000v-uadp, cat9000v-q200, cat9kv-*)."""
+    return str(node.get("node_definition") or "").lower().startswith(("cat9000v", "cat9kv"))
+
+
+def boot_bound_link_warning(node: dict[str, Any]) -> str | None:
+    """A warning when a link added now is dead until the node restarts: a running (STARTED/BOOTED)
+    Catalyst 9000v (#97). Stopped or wiped nodes pick the link up at their next boot."""
+    if not is_cat9k(node) or node.get("state") not in ("STARTED", "BOOTED"):
+        return None
+    return CAT9K_LINK_WARNING.format(node=repr(node.get("label")))
+
+
 def late_link_warning(node: dict[str, Any], iface: dict[str, Any] | None) -> str | None:
-    """A warning when a new link on this node will stay down: an FTDv that has booted before (not
-    DEFINED_ON_CORE) and an interface that is new or not running now (never STARTED)."""
+    """A warning when a new link on this node will not carry traffic: an FTDv that has booted before
+    (not DEFINED_ON_CORE) and an interface that is new or not running now (never STARTED), or a running
+    Catalyst 9000v (boot_bound_link_warning)."""
+    if (warning := boot_bound_link_warning(node)) is not None:
+        return warning
     if not is_ftd(node) or node.get("state") == "DEFINED_ON_CORE":
         return None
     if iface is not None and iface.get("state") == "STARTED":
@@ -434,9 +457,11 @@ def register(reg: ToolRegistrar) -> None:
         when a wiped node has none free. The preview names the exact interfaces and holds a picked one
         for its token, so parallel previews to one switch get different ports; if another link took it
         before the confirm, the confirm picks the next free one and says so ('repicked'), or refuses
-        when none is left. Links can be added to running nodes if they have a free interface. An FTDv
-        that has booted before keeps a link added now down until it is wiped (cml_wipe_node; the day-0
-        config survives): the preview warns."""
+        when none is left. Links can be added to running nodes that have a free interface, with two
+        exceptions the preview warns about: an FTDv that has booted before keeps a link added now down
+        until it is wiped (cml_wipe_node; the day-0 config survives), and a running Catalyst 9000v
+        (cat9000v/cat9kv) only uses links that exist at boot, so stop and start it after connecting, or
+        connect while it is stopped. IOL and cat8000v pick up hot-added links."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]

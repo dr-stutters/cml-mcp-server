@@ -47,6 +47,7 @@ device consoles. Before Phase 2:
 | Console login after day-0 changes it | manual PATCH of pyATS creds | `credentials` in `cml_build_lab`; `login_*` in `cml_update_node` |
 | External network attachment | free-text config, typo = silent NAT | validated against `/system/external_connectors`; `cml_list_external_connectors` |
 | FTDv `donotuse` slot | auto-wiring could pick it | skipped |
+| Links hot-added to a running node | "links can be added to running nodes": a cat9000v link showed STARTED but carried no frames; an FTDv link stayed down | `cml_connect_nodes` preview warns: a running cat9000v/cat9kv only uses links that exist at boot (stop/start it, or connect while stopped); a booted-before FTDv needs `cml_wipe_node`. IOL and cat8000v work hot |
 | Slow boots (FTDv 15-30 min) | `start` always blocked until booted | `wait=false` on build; `console_pattern` on `cml_wait_for_converged` |
 | EVAL 5-node licence | raw 400 after the lab was half-created | preview blocker (`CML_NODE_LICENSE_LIMIT`) + error naming the labs holding licences |
 | L3 address discovery | snooping only (external segments) | `source='cli'/'both'`: IOS/IOS-XE/NX-OS/ASA/FTD/Linux parsers |

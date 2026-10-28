@@ -207,7 +207,7 @@ or in `.mcp.json`:
 | `cml_extract_node_configs` | Save running configs into the stored node configs |
 | `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`), or exec-mode lines (`mode='exec'`, e.g. FTD `configure manager add`). Rejected lines are reported |
 | `cml_configure_nodes` | Push the same config lines to up to 20 running devices in one preview: templates with `{label}`, `{mgmt_ip}` and per-node `vars`, the rendered lines per node and `blast_radius` in the preview, the deny-list checked on every rendered line, `${LAB_*}` refused; a failing node doesn't stop the others |
-| `cml_connect_nodes` | Link two nodes (first free interfaces, never an FTDv/ASAv `donotuse` slot, or the ones you name; a picked port is held for its preview, so parallel previews to one switch get different ports) |
+| `cml_connect_nodes` | Link two nodes (first free interfaces, never an FTDv/ASAv `donotuse` slot, or the ones you name; a picked port is held for its preview, so parallel previews to one switch get different ports; the preview warns when the link will not carry traffic yet: a booted-before FTDv needs a wipe, a running cat9000v a stop/start) |
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
 | `cml_set_interface_state` | Take one interface down or up on a running node: only that end loses carrier, the peer stays up (FTD HA monitored interface, SD-WAN dead-WAN tests) |
