@@ -211,6 +211,70 @@ async def test_connect_nodes_no_warning_for_booted_iol(lab_api: respx.MockRouter
     assert preview["status"] == "preview" and "side_effects" not in preview
 
 
+FTD_LABELS = ["Management0/0", "donotuse1", "GigabitEthernet0/0", "GigabitEthernet0/1"]
+
+
+def _ftd_ports(lab_api: respx.MockRouter, state: str, labels: list[str]) -> None:
+    """r2 becomes an FTDv in `state` whose physical slots carry `labels` (synthetic, shaped like CML's
+    FTDv list: Management0/0, the 'donotuse1' placeholder, then GigabitEthernet0/x). Slot 0 keeps the
+    fixture's link to r1, so Management0/0 is taken."""
+    nodes = [dict(n, node_definition="ftdv", state=state) if n["id"] == R2 else n for n in NODES]
+    lab_api.get(f"/labs/{LID}/nodes").mock(return_value=httpx.Response(200, json=nodes))
+    others = [i for i in fixture("interfaces.json") if i["node"] != R2]
+    r2 = sorted(
+        (i for i in fixture("interfaces.json") if i["node"] == R2 and i["type"] == "physical"),
+        key=lambda i: i["slot"],
+    )
+    ftd = [dict(i, label=label, state=state) for i, label in zip(r2, labels, strict=False)]
+    lab_api.get(f"/labs/{LID}/interfaces").mock(return_value=httpx.Response(200, json=others + ftd))
+    lab_api.post(f"/labs/{LID}/links").mock(return_value=httpx.Response(200, json={"id": "l4"}))
+
+
+async def test_connect_nodes_skips_ftdv_donotuse(lab_api: respx.MockRouter) -> None:
+    _ftd_ports(lab_api, "DEFINED_ON_CORE", FTD_LABELS)
+    links = lab_api.post(f"/labs/{LID}/links").mock(return_value=httpx.Response(200, json={"id": "l4"}))
+    preview, applied = await preview_apply("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"})
+    assert preview["action"] == "Connect r1:Ethernet0/1 <-> r2:GigabitEthernet0/0"
+    dst = json.loads(links.calls.last.request.content)["dst_int"]
+    r2 = sorted(
+        (i for i in fixture("interfaces.json") if i["node"] == R2 and i["type"] == "physical"),
+        key=lambda i: i["slot"],
+    )
+    assert dst == r2[2]["id"] and applied["status"] == "applied"
+
+
+async def test_connect_nodes_blocks_when_only_donotuse_free_on_booted_ftdv(lab_api: respx.MockRouter) -> None:
+    _ftd_ports(lab_api, "BOOTED", FTD_LABELS[:2])
+    async with Client(create_server(make_settings(**RW))) as c:
+        preview = data(await c.call_tool("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"}))
+    assert preview["status"] == "blocked"
+    (blocker,) = preview["blockers"]
+    assert "r2 has no free interface (only placeholder slots are free: donotuse1" in blocker
+    assert "cml_wipe_node" in blocker
+
+
+async def test_connect_nodes_adds_interface_when_only_donotuse_free_on_wiped_ftdv(
+    lab_api: respx.MockRouter,
+) -> None:
+    _ftd_ports(lab_api, "DEFINED_ON_CORE", FTD_LABELS[:2])
+    new_iface = lab_api.post(f"/labs/{LID}/interfaces").mock(
+        return_value=httpx.Response(200, json={"id": "22222222-2222-4222-8222-222222222222"})
+    )
+    links = lab_api.post(f"/labs/{LID}/links").mock(return_value=httpx.Response(200, json={"id": "l5"}))
+    preview, _ = await preview_apply("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"})
+    assert preview["preview"]["b"] == "r2:(new interface)"
+    assert json.loads(new_iface.calls.last.request.content) == {"node": R2}
+    assert json.loads(links.calls.last.request.content)["dst_int"] == "22222222-2222-4222-8222-222222222222"
+
+
+async def test_connect_nodes_blocks_named_donotuse(lab_api: respx.MockRouter) -> None:
+    _ftd_ports(lab_api, "DEFINED_ON_CORE", FTD_LABELS)
+    args = {"lab": LID, "node_a": "r1", "node_b": "r2", "interface_b": "donotuse1"}
+    preview, _ = await preview_apply("cml_connect_nodes", args)
+    assert preview["status"] == "blocked"
+    assert "r2:donotuse1 is a placeholder slot that never carries traffic" in preview["blockers"][0]
+
+
 def test_late_link_warning_rules() -> None:
     ftd = {"label": "fw", "node_definition": "ftdv", "state": "STOPPED"}
     assert late_link_warning(ftd, None)  # a new interface on a booted-before FTDv
