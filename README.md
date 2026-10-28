@@ -194,7 +194,7 @@ or in `.mcp.json`:
 
 | Tool | What it does |
 |---|---|
-| `cml_build_lab` | Build a lab from `nodes=[{label, definition, config?, files?, credentials?, ...}]` and `links=["r1 r2", "r1:Ethernet0/1 sw1"]`. Interfaces are picked automatically, external connectors and node licences are checked; `${LAB_*}` lab secrets in config, files and credentials are filled in on the server (see below). Optionally start it (and wait) |
+| `cml_build_lab` | Build a lab from `nodes=[{label, definition, config?, files?, credentials?, macs?, ...}]` and `links=["r1 r2", "r1:Ethernet0/1 sw1"]`. Interfaces are picked automatically, external connectors and node licences are checked; `${LAB_*}` lab secrets in config, files and credentials are filled in on the server (see below). Optionally start it (and wait) |
 | `cml_load_sample_lab` | Create a lab from a sample lab |
 | `cml_create_lab` / `cml_import_lab` | Create an empty lab, or create one from topology YAML (node definitions are checked; `${LAB_*}` lab secrets in its nodes are filled in on the server, see below) |
 | `cml_start_lab` / `cml_stop_lab` | Start (waits for convergence) or stop a lab |
@@ -207,6 +207,8 @@ or in `.mcp.json`:
 | `cml_connect_nodes` | Link two nodes (first free interfaces, or the ones you name) |
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
+| `cml_set_interface_state` | Take one interface down or up on a running node: only that end loses carrier, the peer stays up (FTD HA monitored interface, SD-WAN dead-WAN tests) |
+| `cml_update_interface` | Pin an interface MAC (52:54:00:xx:xx:xx) or clear the pin (`auto`) so ISE MAB endpoints and DHCP bindings survive wipes and re-imports; the preview names the old MAC and what keys on it |
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
 | `cml_capture_wireless` | Capture the simulated 802.11 medium at a wireless-ap / wireless-client node and decode it (SSIDs, auth/assoc, deauth reasons, EAPOL 4-way handshake, EAP identity/method) |
