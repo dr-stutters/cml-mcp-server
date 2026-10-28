@@ -88,6 +88,8 @@ async def console_batch(
                         await session.drain(limit=5.0)
                         continue
                     out["outputs"].append({"command": cmd, "output": mask_secrets(text)})
+                if session.notes:
+                    out["notes"] = list(session.notes)
         except Exception as e:  # report per node; never lose the other nodes' results
             out["error"] = mask_secrets(str(e))[:500] or type(e).__name__
         return out

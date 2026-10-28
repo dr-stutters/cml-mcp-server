@@ -65,7 +65,8 @@ def register(reg: ToolRegistrar) -> None:
         from the lab's pyATS testbed and turns off paging. Nodes run in parallel (4 at a time). For
         configuration changes use cml_configure_node. On Linux nodes give ping a count
         ('ping -c 3 x'), or it runs until the timeout. Secrets in output (passwords, community
-        strings) are masked."""
+        strings) are masked. A console left at IOS XE's 'Uncommitted changes found, commit them?' is
+        answered 'no' (the changes are discarded) and reported in the node's notes."""
         problems = {c: p for c in commands if (p := read_only_problem(c))}
         if problems:
             raise InvalidRequest(
@@ -110,7 +111,9 @@ def register(reg: ToolRegistrar) -> None:
             bool,
             Field(
                 description="Answer prompts such as '[confirm]', '[yes/no]:' or 'Do you want to "
-                "continue?' affirmatively; when false such a prompt aborts with an error"
+                "continue?' affirmatively; when false such a prompt aborts with an error. IOS XE's "
+                "'Uncommitted changes found, commit them?' is always answered 'no' (send 'commit' "
+                "yourself) and reported in notes"
             ),
         ] = False,
         line_timeout: Annotated[
@@ -201,6 +204,8 @@ def register(reg: ToolRegistrar) -> None:
                 if save and mode == "config":
                     out = await session.run("write memory", timeout=120, answer_questions=True)
                     result["saved"] = "[OK]" in out or "Copy complete" in out
+                if session.notes:
+                    result["notes"] = list(session.notes)
             return result
 
         return await preview_or_apply(
