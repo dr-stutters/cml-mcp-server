@@ -4,6 +4,8 @@
 
 import contextlib
 import difflib
+import secrets
+import time
 from typing import Annotated, Any, Literal
 
 from fastmcp import Context
@@ -55,6 +57,50 @@ def late_link_warning(node: dict[str, Any], iface: dict[str, Any] | None) -> str
     if iface is not None and iface.get("state") == "STARTED":
         return None
     return FTD_LINK_WARNING.format(node=repr(node.get("label")))
+
+
+class PortReservations:
+    """Interfaces held for pending cml_connect_nodes previews (#69), so parallel previews to one switch
+    (an unmanaged switch has many identical free ports) get different ports. Keyed by interface id;
+    each hold names the preview token that owns it and expires with that token."""
+
+    def __init__(self) -> None:
+        self._held: dict[str, tuple[str, float]] = {}  # interface id -> (owner key, expiry)
+
+    def _purge(self) -> None:
+        now = time.monotonic()
+        for iface in [i for i, (_, exp) in self._held.items() if exp < now]:
+            del self._held[iface]
+
+    def held_by_others(self, owner: str | None) -> set[str]:
+        self._purge()
+        return {i for i, (o, _) in self._held.items() if o != owner}
+
+    def held_by(self, owner: str | None) -> set[str]:
+        self._purge()
+        return {i for i, (o, _) in self._held.items() if owner is not None and o == owner}
+
+    def hold(self, owner: str, ifaces: list[str], ttl: float) -> None:
+        self._purge()
+        for iface in ifaces:
+            self._held[iface] = (owner, time.monotonic() + ttl)
+
+    def rekey(self, old: str, new: str) -> None:
+        for iface, (o, exp) in list(self._held.items()):
+            if o == old:
+                self._held[iface] = (new, exp)
+
+    def release(self, owner: str) -> None:
+        for iface in [i for i, (o, _) in self._held.items() if o == owner]:
+            del self._held[iface]
+
+
+def port_reservations(ctx: Context) -> PortReservations:
+    state = ctx.lifespan_context
+    res = state.get("port_reservations")
+    if res is None:
+        res = state["port_reservations"] = PortReservations()
+    return res
 
 
 def node_fingerprint(node: dict[str, Any]) -> Any:
@@ -384,9 +430,11 @@ def register(reg: ToolRegistrar) -> None:
     ) -> dict[str, Any]:
         """Create a link between two nodes. Without interface names it picks the first free physical
         interface on each side, adding a new interface when a wiped node has none free. The preview
-        names the exact interfaces. Links can be added to running nodes if they have a free
-        interface. An FTDv that has booted before keeps a link added now down until it is wiped
-        (cml_wipe_node; the day-0 config survives): the preview warns."""
+        names the exact interfaces and holds a picked one for its token, so parallel previews to one
+        switch get different ports; if another link took it before the confirm, the confirm picks the
+        next free one and says so ('repicked'), or refuses when none is left. Links can be added to
+        running nodes if they have a free interface. An FTDv that has booted before keeps a link added
+        now down until it is wiped (cml_wipe_node; the day-0 config survives): the preview warns."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
@@ -397,6 +445,12 @@ def register(reg: ToolRegistrar) -> None:
         blockers: list[str] = []
         if a["id"] == b["id"]:
             blockers.append("node_a and node_b are the same node")
+
+        reservations = port_reservations(ctx)
+        ttl = float(get_settings(ctx).mcp_confirm_ttl)
+        taken_elsewhere = reservations.held_by_others(confirm)  # held for other pending previews
+        own = reservations.held_by(confirm)  # what this token's preview picked
+        repicked: list[str] = []
 
         def choose(n: dict[str, Any], wanted: str | None) -> tuple[str | None, str]:
             ifaces = sorted(
@@ -418,29 +472,53 @@ def register(reg: ToolRegistrar) -> None:
                         "links need physical ones"
                     )
                 return match[0]["id"], str(match[0].get("label"))
-            for i in ifaces:
-                if i.get("type") == "physical" and i["id"] not in peers:
-                    return i["id"], str(i.get("label"))
+            previewed = next((i for i in ifaces if i["id"] in own), None)
+            if previewed is not None and previewed["id"] not in peers:
+                return previewed["id"], str(previewed.get("label"))
+            free = [
+                i
+                for i in ifaces
+                if i.get("type") == "physical" and i["id"] not in peers and i["id"] not in taken_elsewhere
+            ]
+            was = f"{n.get('label')}:{previewed.get('label')}" if previewed is not None else None
+            if free:
+                if was is not None:
+                    repicked.append(
+                        f"{was} was connected since the preview; used {free[0].get('label')} instead"
+                    )
+                return free[0]["id"], str(free[0].get("label"))
             if n.get("state") != "DEFINED_ON_CORE":
+                held = " (the others are held for pending previews)" if taken_elsewhere else ""
+                lead = f"{was} was connected since the preview and " if was is not None else ""
                 blockers.append(
-                    f"{n.get('label')} has no free interface and is {n.get('state')}; {WIPE_HINT}"
+                    f"{lead}{n.get('label')} has no free interface{held} and is {n.get('state')}; {WIPE_HINT}"
                 )
+            elif was is not None:
+                repicked.append(f"{was} was connected since the preview; adding a new interface instead")
             return None, "(new interface)"
 
         ia, name_a = choose(a, interface_a)
         ib, name_b = choose(b, interface_b)
+        auto = [i for i, wanted in ((ia, interface_a), (ib, interface_b)) if i and not wanted]
         warnings = [
             w
             for n, iface_id in ((a, ia), (b, ib))
             if (w := late_link_warning(n, topo.interfaces.get(iface_id) if iface_id else None))
         ]
+        details: dict[str, Any] = {"a": f"{a.get('label')}:{name_a}", "b": f"{b.get('label')}:{name_b}"}
+        if auto and confirm is None:
+            details["reserved"] = (
+                "the picked free interface is held for this preview until it is confirmed or expires, so "
+                "other cml_connect_nodes previews pick a different one"
+            )
         plan = Plan(
             f"Connect {a.get('label')}:{name_a} <-> {b.get('label')}:{name_b}",
-            details={"a": f"{a.get('label')}:{name_a}", "b": f"{b.get('label')}:{name_b}"},
+            details=details,
+            # Picked interfaces are not fingerprinted: the confirm re-picks when another link took
+            # the previewed one (#69). Named interfaces are, so a confirm never swaps them.
             fingerprint={
-                "a": ia,
-                "b": ib,
-                "peers": sorted(peers),
+                "a": ia if interface_a else None,
+                "b": ib if interface_b else None,
                 "states": [a.get("state"), b.get("state")],
             },
             blockers=blockers,
@@ -471,22 +549,38 @@ def register(reg: ToolRegistrar) -> None:
                         await app.api.delete(f"/labs/{lid}/interfaces/{iface_id}")
                 raise
             fresh = await load_topo(app, lid)
-            return {"id": res.get("id"), "a": fresh.endpoint(src), "b": fresh.endpoint(dst)}
+            out: dict[str, Any] = {"id": res.get("id"), "a": fresh.endpoint(src), "b": fresh.endpoint(dst)}
+            if repicked:
+                out["repicked"] = repicked
+            return out
 
-        return await preview_or_apply(
-            ctx,
-            tool="cml_connect_nodes",
-            args={
-                "lab": lab,
-                "node_a": node_a,
-                "node_b": node_b,
-                "interface_a": interface_a,
-                "interface_b": interface_b,
-            },
-            confirm=confirm,
-            plan=plan,
-            apply=apply,
-        )
+        # Hold the picked ports before anything else awaits, so a parallel preview can't pick them too.
+        owner = confirm if confirm is not None else "pending-" + secrets.token_hex(8)
+        if auto:
+            reservations.hold(owner, auto, ttl)
+        try:
+            result = await preview_or_apply(
+                ctx,
+                tool="cml_connect_nodes",
+                args={
+                    "lab": lab,
+                    "node_a": node_a,
+                    "node_b": node_b,
+                    "interface_a": interface_a,
+                    "interface_b": interface_b,
+                },
+                confirm=confirm,
+                plan=plan,
+                apply=apply,
+            )
+        except BaseException:
+            reservations.release(owner)
+            raise
+        if confirm is None and isinstance(result.get("confirm"), str):
+            reservations.rekey(owner, result["confirm"])  # held until confirmed or expired
+        else:
+            reservations.release(owner)  # applied, blocked or dry-run: nothing left to hold
+        return result
 
     @reg.write(title="Set link conditioning", idempotent=True)
     async def cml_set_link_condition(
