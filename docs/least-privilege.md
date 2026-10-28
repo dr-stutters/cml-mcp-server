@@ -39,7 +39,7 @@ an error per node, and the other read tools still work.
 
 | CML right | Needed by |
 |---|---|
-| regular user (owns what it builds) | every write tool on its own labs: `cml_build_lab`, `cml_build_recipe`, `cml_import_lab`, `cml_create_lab`, `cml_add_node`, `cml_connect_nodes`, `cml_update_node`, `cml_set_node_config`, `cml_start_lab`/`cml_stop_lab`, `cml_set_node_state`, `cml_configure_node`, `cml_extract_node_configs`, `cml_set_interface_state`, `cml_update_interface`, link conditioning, scenarios, captures, `cml_annotate_lab`, `cml_load_sample_lab` |
+| regular user (owns what it builds) | every write tool on its own labs: `cml_build_lab`, `cml_build_recipe`, `cml_import_lab`, `cml_create_lab`, `cml_add_node`, `cml_connect_nodes`, `cml_update_node`, `cml_set_node_config`, `cml_start_lab`/`cml_stop_lab`, `cml_set_node_state`, `cml_configure_node`/`cml_configure_nodes`, `cml_extract_node_configs`, `cml_set_interface_state`, `cml_update_interface`, link conditioning, scenarios, captures, `cml_annotate_lab`, `cml_load_sample_lab` |
 | `lab_admin` on a lab it owns (implicit) | sharing its labs with the viewers group (`PATCH /labs/{id}/associations`) |
 | resource pool `mcp-cml-operator-pool` (12 licences, 24 CPUs, 64 GB) | caps the blast radius on a shared controller. Previews use the pool as the limit when it is tighter than the controller licence (`cml_plan_licences` shows `resource_pool` and `limit_source`). Size it for your recipes: ftd-fmc 1 / catc-routers 2 / ise-access 3 / ftd-ha 3 licensed nodes; FTDv 8 GB each |
 

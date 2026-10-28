@@ -46,6 +46,27 @@ Copies: `cml_build_recipe(recipe, title='mcp-cml2-...', substitute={'198.18.128.
 next to the recipe's own lab (e.g. to try a recipe change while someone uses the original), and
 `cml_verify_recipe(recipe, lab=..., substitute=...)` verifies it against the same contract.
 
+## A recipe built on another (`extends:`)
+
+`extends: <recipe>` starts a recipe from another one's `build`, `verify` and `actions`, so a block several recipes
+share (the SD-WAN fabric) lives in one file. `cat-sdwan-secure` is `extends: cat-sdwan-fabric` plus what it adds.
+
+- Descriptive fields (`summary`, `address_plan`, `credentials`, `*_side`, `boot_minutes`) are the child's where it
+  has them, else the base's. `build.title` / `build.description` likewise.
+- `build.nodes` merge by `label`: a node with a base node's label is merged over it (its fields win, e.g. only
+  `ram` and `cpus`), a new label is added at the end.
+- `build.links` merge by their ends: the same two ends (either way round) is the base link; a link that takes an
+  interface a base link uses replaces that link in place; any other is added at the end.
+- `verify`: `booted` / `nodes` / `targets` are joined without repeats, `addresses` merged by node, `probes` by
+  `name` (the same name replaces the base probe). `actions` merge by name.
+- `build.remove_nodes: [label]` drops base nodes with their links, verify entries, probes and actions;
+  `build.remove_links: ['a:if b:if']` drops base links.
+- Chains work (`a` extends `b` extends `c`). A cycle, an unknown base or a removal that matches nothing makes the
+  recipe unusable: `cml_list_recipes` lists it under `skipped`, with why, and the other recipes are unaffected.
+  A packaged recipe extends only packaged ones; a `CML_RECIPE_DIRS` recipe can extend any recipe.
+- `cml_list_recipes` shows the base as `extends`; everything else (build, verify, actions, licence plan) sees the
+  resolved recipe.
+
 ## Recipes outside the package (`CML_RECIPE_DIRS`)
 
 A new or changed recipe can be built from the running server before it is merged and released: put it in a

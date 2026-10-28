@@ -11,6 +11,7 @@ from cml_mcp.console import mask_secrets
 
 NODE_FIELDS = ("node_definition", "image_definition", "ram", "cpus", "cpu_limit", "boot_disk_size", "tags")
 MAX_CONFIG_DIFF_LINES = 80
+MAX_SECTIONS = 100
 
 
 def _config(node: dict[str, Any]) -> str:
@@ -48,6 +49,14 @@ def normalise(topology: dict[str, Any]) -> dict[str, Any]:
     return {"title": (topology.get("lab") or {}).get("title"), "nodes": nodes, "links": links}
 
 
+def only_nodes(topology: dict[str, Any], labels: set[str]) -> dict[str, Any]:
+    """`topology` with just the nodes labelled in `labels` and the links between them."""
+    kept = [n for n in topology.get("nodes") or [] if str(n.get("label") or n.get("id")) in labels]
+    ids = {str(n.get("id")) for n in kept}
+    links = [lk for lk in topology.get("links") or [] if {str(lk.get("n1")), str(lk.get("n2"))} <= ids]
+    return {**topology, "nodes": kept, "links": links}
+
+
 def diff_topologies(
     a: dict[str, Any],
     b: dict[str, Any],
@@ -57,9 +66,15 @@ def diff_topologies(
     b_name: str = "b",
     semantic: bool = False,
     day0: Literal["a", "b"] | None = None,
+    sections: bool = False,
+    only: set[str] | None = None,
 ) -> dict[str, Any]:
     """`semantic`: compare configs by section (config_changes); `day0` names the side that holds
-    stored day-0 configs while the other holds running configs (None: both alike, nothing hidden)."""
+    stored day-0 configs while the other holds running configs (None: both alike, nothing hidden).
+    `sections`: by section too, and each changed node gets `config_sections` (structured) instead of
+    the `config_diff` text. `only`: compare just these node labels and the links between them."""
+    if only is not None:
+        a, b = only_nodes(a, only), only_nodes(b, only)
     na, nb = normalise(a), normalise(b)
     out: dict[str, Any] = {"a": na["title"] or a_name, "b": nb["title"] or b_name}
     only_a = sorted(set(na["nodes"]) - set(nb["nodes"]))
@@ -75,7 +90,7 @@ def diff_topologies(
         ib = {str(i.get("label")) for i in y.get("interfaces") or []}
         if ia != ib:
             delta["interfaces"] = {"only_in_a": sorted(ia - ib), "only_in_b": sorted(ib - ia)}
-        if include_configs and semantic:
+        if include_configs and (semantic or sections):
             # running vs stored configs (L27): only real changes, by section
             res = config_changes(
                 _config(x),
@@ -84,8 +99,13 @@ def diff_topologies(
                 b_name=f"{label} ({b_name})",
                 day0=day0,
                 max_lines=MAX_CONFIG_DIFF_LINES,
+                structured=sections,
             )
-            if not res["identical"]:
+            if not res["identical"] and sections:
+                delta["config_sections"] = res["sections"]
+                if res.get("sections_omitted"):
+                    delta["config_sections_omitted"] = res["sections_omitted"]
+            elif not res["identical"]:
                 delta["config_diff"] = res["diff"]
         elif include_configs:
             # secrets masked on both sides (day-0 configs hold plain-text passwords)
@@ -428,12 +448,14 @@ def config_changes(
     day0: Literal["a", "b"] | None = "a",
     ignore: list[str] | None = None,
     max_lines: int = 200,
+    structured: bool = False,
 ) -> dict[str, Any]:
     """What changed between two configurations of a node, by section. Block order is ignored, and
     the order of sub-lines too except in ACLs, route maps, prefix lists and QoS policies. When one
     side is a stored day-0 config (`day0`), sections IOS printed by itself on the other (running)
     side and day-0 commands IOS consumed are hidden and listed in `hidden`. Secrets are masked on
-    both sides, so a changed password with the same keyword is not a difference."""
+    both sides, so a changed password with the same keyword is not a difference. `structured` adds
+    `sections`: [{section, change: added|removed|modified, lines | added/removed}], MAX_SECTIONS at most."""
     patterns = _ignore_patterns(ignore)
     la, lb = normalise_config(a_text), normalise_config(b_text)
 
@@ -503,6 +525,10 @@ def config_changes(
         out["hidden"] = shown_hidden[:12] + (
             [f"... {len(shown_hidden) - 12} more"] if len(shown_hidden) > 12 else []
         )
+    if structured and changes:
+        out["sections"] = changes[:MAX_SECTIONS]
+        if len(changes) > MAX_SECTIONS:
+            out["sections_omitted"] = len(changes) - MAX_SECTIONS
     if changes:
         if len(text) > max_lines:
             text = text[:max_lines] + [f"... {len(text) - max_lines} more lines (raise max_lines)"]
