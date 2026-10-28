@@ -28,6 +28,7 @@ from cml_mcp.licence import (
 )
 from cml_mcp.recipes import base_relation, read_recipe_marker, redact_values, set_recipe_marker
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
+from cml_mcp.safety import lab_blockers
 from cml_mcp.tools.build_tool import assign_cat9kv_serials
 from cml_mcp.tools.common import load_topo
 from cml_mcp.tools.lab_writes import known_definitions
@@ -89,6 +90,8 @@ async def extend_lab_flow(
     )
     marker = read_recipe_marker(notes)
     blockers = list(blockers or [])
+    # the rails resolve a lab from `lab`, which a recipe build has none of: an extend changes this lab
+    blockers += await lab_blockers(ctx, "cml_build_recipe", tool_args, info)
     side_effects: list[str] = []
     relation = base_relation(recipe, marker["recipe"]) if marker else None
     if marker and relation is None:

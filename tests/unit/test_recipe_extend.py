@@ -355,3 +355,20 @@ async def test_extend_fills_secrets_only_in_what_goes_to_cml(
     node = next(b for k, b in fake.posts if k == "node")
     assert secret in json.dumps(node["configuration"])
     assert secret not in json.dumps([b for k, b in fake.posts if k == "annotation"]) + "".join(fake.notes)
+
+
+async def test_extend_refuses_a_protected_lab(
+    lab_api: respx.MockRouter, recipe_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The recipe tool has no `lab` argument, so the extend flow checks CML_PROTECTED_LABS itself."""
+    lab_notes(monkeypatch, recipe_marker("probe-base", None))
+    fake = FakeLab(lab_api)
+    srv = create_server(
+        make_settings(mcp_enable_writes=True, recipe_dirs=str(recipe_dir), protected_labs="mcp-test-*")
+    )
+    preview = await call_tool(
+        srv, "cml_build_recipe", {"recipe": "probe-plus", "extend": True, "start": False}
+    )
+    assert not preview.get("confirm")
+    assert any("CML_PROTECTED_LABS" in b for b in preview["blockers"])
+    assert not fake.posts
