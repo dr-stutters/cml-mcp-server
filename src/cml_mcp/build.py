@@ -94,9 +94,14 @@ def connector_keys(connectors: list[dict[str, Any]]) -> set[str]:
     return keys
 
 
+def is_placeholder(name: str | None) -> bool:
+    """FTDv/ASAv's placeholder 'donotuse' slots: an interface that never carries traffic."""
+    return str(name or "").lower().startswith("donotuse")
+
+
 def auto_interfaces(names: list[str]) -> list[str]:
     """Interfaces auto-allocation may pick: not FTDv/ASAv's placeholder 'donotuse' slots."""
-    return [x for x in names if not x.lower().startswith("donotuse")]
+    return [x for x in names if not is_placeholder(x)]
 
 
 def build_topology(
