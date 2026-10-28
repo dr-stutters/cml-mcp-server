@@ -1,5 +1,5 @@
 {
-  "core_version": "0.19.0",
+  "core_version": "0.20.0",
   "manifest": 1,
   "prefix": "cml",
   "prompts": {
@@ -31,8 +31,20 @@
         "fidelity",
         "max_nodes"
       ],
-      "references": [],
-      "rendered": false,
+      "references": [
+        "catc_get_site",
+        "catc_list_devices",
+        "catc_get_physical_topology",
+        "fmc_list_devices",
+        "ise_list_nads",
+        "cml_plan_replica",
+        "cml_plan_licences",
+        "cml_build_lab",
+        "cml_wait_for_converged",
+        "catc_get_device_config",
+        "cml_configure_node"
+      ],
+      "rendered": true,
       "tier": "write",
       "uses": [
         "cml",

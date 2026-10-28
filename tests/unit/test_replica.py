@@ -119,6 +119,27 @@ async def test_replicate_site_prompt_references_real_tools(api: respx.MockRouter
     )
 
 
+async def test_every_prompt_renders_in_the_manifest() -> None:
+    """Each cml prompt renders with its registered example, so the manifest lists the tools it names
+    (a prompt that fails to render is `rendered: false` with no references)."""
+    import json
+    from pathlib import Path
+
+    from cml_mcp._core.manifest import build_manifest
+
+    server = create_server(make_settings(mcp_enable_writes=True, mcp_enable_dangerous=True))
+    manifest = await build_manifest(server, server="cml-mcp-server", prefix="cml", version=None)
+    prompts = manifest["prompts"]
+    assert {"cml_build_test_lab", "cml_replicate_site"} <= set(prompts)
+    for name, meta in prompts.items():
+        assert meta["rendered"] is True, name
+        assert meta["references"], name
+    refs = set(prompts["cml_replicate_site"]["references"])
+    assert {"catc_list_devices", "fmc_list_devices", "ise_list_nads", "cml_build_lab"} <= refs
+    committed = json.loads((Path(__file__).resolve().parents[2] / "tests/manifests/cml.json").read_text())
+    assert {n: m["rendered"] for n, m in committed["prompts"].items()} == {n: True for n in prompts}
+
+
 def test_family_fallback() -> None:
     m = map_platform("XYZ-123", "light", "Switches and Hubs")
     assert m["definition"] == "ioll2-xe" and "family" in m["note"]
