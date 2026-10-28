@@ -9,7 +9,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > only: don't point it at production systems. It's provided as is, with no warranty (see the
 > [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
-- **72 tools** in three tiers: 39 read, 25 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **75 tools** in three tiers: 39 read, 28 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -47,7 +47,7 @@ with it as `lab_view` + `lab_exec` and a resource pool with 0 node licences, see
 has a wheel with stutters-mcp-core bundled in; it needs only PyPI dependencies.
 
 ```bash
-WHEEL=https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.13.0/cml_mcp_server-0.13.0-py3-none-any.whl
+WHEEL=https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.14.0/cml_mcp_server-0.14.0-py3-none-any.whl
 export CML_URL=https://cml.example.com CML_USERNAME=mcp-cml-viewer CML_PASSWORD='...'
 uvx --from "$WHEEL" cml-mcp-server check            # preflight: reachability, TLS, login, version, admin flag
 claude mcp add cml -e CML_URL=$CML_URL -e CML_USERNAME=$CML_USERNAME -e CML_PASSWORD="$CML_PASSWORD" \
@@ -61,7 +61,7 @@ Claude Desktop (`claude_desktop_config.json`), same idea:
   "mcpServers": {
     "cml": {
       "command": "uvx",
-      "args": ["--from", "https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.13.0/cml_mcp_server-0.13.0-py3-none-any.whl", "cml-mcp-server"],
+      "args": ["--from", "https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.14.0/cml_mcp_server-0.14.0-py3-none-any.whl", "cml-mcp-server"],
       "env": {"CML_URL": "https://cml.example.com", "CML_USERNAME": "mcp-cml-viewer", "CML_PASSWORD": "..."}
     }
   }
@@ -204,7 +204,7 @@ or in `.mcp.json`:
 | `cml_set_node_state` | Start or stop one node |
 | `cml_extract_node_configs` | Save running configs into the stored node configs |
 | `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`), or exec-mode lines (`mode='exec'`, e.g. FTD `configure manager add`). Rejected lines are reported |
-| `cml_connect_nodes` | Link two nodes (first free interfaces, or the ones you name) |
+| `cml_connect_nodes` | Link two nodes (first free interfaces, or the ones you name; a picked port is held for its preview, so parallel previews to one switch get different ports) |
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
 | `cml_set_interface_state` | Take one interface down or up on a running node: only that end loses carrier, the peer stays up (FTD HA monitored interface, SD-WAN dead-WAN tests) |
