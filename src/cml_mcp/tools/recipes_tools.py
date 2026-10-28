@@ -22,7 +22,7 @@ from cml_mcp._core import (
     tool_ref,
 )
 from cml_mcp._core.http import page_of
-from cml_mcp.build import NodeSpec
+from cml_mcp.build import NodeSpec, NodeStaging
 from cml_mcp.client import CmlApp
 from cml_mcp.console import mask_secrets
 from cml_mcp.netops import console_batch
@@ -296,6 +296,7 @@ def register(reg: ToolRegistrar) -> None:
         secrets_file = get_settings(ctx).lab_secrets_file
         resolved = resolve_secrets(raw_nodes, secrets_file, what=f"recipe {recipe!r}")
         nodes = [NodeSpec.model_validate(n) for n in resolved]
+        staging = NodeStaging.model_validate(b["node_staging"]) if b.get("node_staging") else None
         if extend:
             return await extend_lab_flow(
                 ctx,
@@ -342,6 +343,7 @@ def register(reg: ToolRegistrar) -> None:
             confirm=confirm,
             redact=secret_names_by_value(secrets_file),
             lab_notes=recipe_marker(recipe, substitute),
+            node_staging=staging,
         )
 
     @reg.write(title="Run a recipe action")

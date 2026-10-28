@@ -9,7 +9,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > only: don't point it at production systems. It's provided as is, with no warranty (see the
 > [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
-- **79 tools** in three tiers: 41 read, 30 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **80 tools** in three tiers: 41 read, 31 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -196,12 +196,13 @@ or in `.mcp.json`:
 
 | Tool | What it does |
 |---|---|
-| `cml_build_lab` | Build a lab from `nodes=[{label, definition, config?, files?, credentials?, macs?, ...}]` and `links=["r1 r2", "r1:Ethernet0/1 sw1"]`. Interfaces are picked automatically, external connectors and node licences are checked; `${LAB_*}` lab secrets in config, files and credentials are filled in on the server (see below). Optionally start it (and wait) |
+| `cml_build_lab` | Build a lab from `nodes=[{label, definition, config?, files?, credentials?, macs?, priority?, ...}]` and `links=["r1 r2", "r1:Ethernet0/1 sw1"]`. Interfaces are picked automatically, external connectors and node licences are checked; `${LAB_*}` lab secrets in config, files and credentials are filled in on the server (see below). Node `priority` plus `node_staging={enabled: true}` boots the nodes in order (preview: `boot_order`). Optionally start it (and wait) |
 | `cml_load_sample_lab` | Create a lab from a sample lab |
 | `cml_create_lab` / `cml_import_lab` | Create an empty lab, or create one from topology YAML (node definitions are checked; `${LAB_*}` lab secrets in its nodes are filled in on the server, see below) |
-| `cml_start_lab` / `cml_stop_lab` | Start (waits for convergence) or stop a lab |
+| `cml_start_lab` / `cml_stop_lab` | Start (waits for convergence) or stop a lab; with node staging on, the start preview shows the staged `boot_order` |
 | `cml_stop_labs` | Stop several labs (a list, or every running lab except `keep`) with one preview: licences and RAM freed per lab, protected labs refused |
-| `cml_add_node` / `cml_update_node` | Add a node; change its label, tags, position, resources or console login |
+| `cml_add_node` / `cml_update_node` | Add a node; change its label, tags, position, boot `priority`, resources or console login |
+| `cml_set_lab_boot` | Boot behaviour of a lab: node staging (`enabled`, `start_remaining`, `abort_on_failure`: start nodes by priority, highest first, each group after the one before has booted, so controllers come up before the devices that join them) and autostart on CML host boot (`enabled`, `priority`, `delay`). Old and new values and the `boot_order` in the preview; turning autostart on is dangerous tier (`MCP_ENABLE_DANGEROUS`) |
 | `cml_set_node_config` | Replace a node's day-0 config; the preview shows a unified diff |
 | `cml_set_node_state` | Start or stop one node |
 | `cml_extract_node_configs` | Save running configs into the stored node configs |

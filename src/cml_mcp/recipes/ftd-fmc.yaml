@@ -27,22 +27,29 @@ verify:
 build:
   title: mcp-cml-ftd
   description: FTDv on the lab network for FMC registration (cml-mcp-server recipe ftd-fmc)
+  # boot order (CML node staging, highest priority first): bridges and switches, the FMC, then the FTDv
+  # (Secure Firewall Getting Started: the FMC is reachable before the FTD registers)
+  node_staging: {enabled: true, start_remaining: true, abort_on_failure: false}
   nodes:
     - label: ext-mgmt
+      priority: 1000
       definition: external_connector
       config: System Bridge
       x: -200
       y: 0
     - label: ext-outside
+      priority: 1000
       definition: external_connector
       config: System Bridge
       x: 200
       y: 0
     - label: inside-sw
+      priority: 1000
       definition: unmanaged_switch
       x: 0
       y: 320
     - label: ftd1
+      priority: 500
       definition: ftdv
       x: 0
       y: 160

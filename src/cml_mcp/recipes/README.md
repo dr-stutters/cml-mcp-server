@@ -46,6 +46,16 @@ Copies: `cml_build_recipe(recipe, title='mcp-cml2-...', substitute={'198.18.128.
 next to the recipe's own lab (e.g. to try a recipe change while someone uses the original), and
 `cml_verify_recipe(recipe, lab=..., substitute=...)` verifies it against the same contract.
 
+## Boot order (`priority`, `node_staging`)
+
+A node's `priority` (0-10000, higher first) and `build.node_staging` (`{enabled, start_remaining,
+abort_on_failure}`, CML node staging) make CML start the nodes one priority at a time, each group after the one
+before has booted. The `cat-sdwan-*`, `ftd-fmc`, `fmc-local` and `ise-access` recipes use it the way the validated
+designs bring a site up: bridges and switches (1000), then the controllers (SD-WAN Validator 900, Manager 800,
+Controller 700; the FMC 800), then the devices that join them (edges, FTDv, the access switch: 500), then hosts and
+clients (100). The build preview shows the `boot_order`; on an existing lab, `cml_update_node(priority=...)` and
+`cml_set_lab_boot(staging=...)` set the same, and `cml_start_lab`'s preview shows the staged order.
+
 ## A recipe built on another (`extends:`)
 
 `extends: <recipe>` starts a recipe from another one's `build`, `verify` and `actions`, so a block several recipes

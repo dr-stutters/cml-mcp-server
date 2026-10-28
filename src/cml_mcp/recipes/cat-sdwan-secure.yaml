@@ -144,6 +144,7 @@ build:
   nodes:
     # every cat-sdwan-fabric node not named here is used as it is; hub1 and br1 replace their day-0
     - label: hub1
+      priority: 500
       definition: cat-sdwan-edge
       # 8 GB / 4 vCPU: UTD (IPS, URL filtering, AMP) needs 8 GB and the heavier service-plane profile
       ram: 8192
@@ -276,6 +277,7 @@ build:
           !
         --==BOUNDARY==--
     - label: br1
+      priority: 500
       definition: cat-sdwan-edge
       ram: 8192
       cpus: 4
@@ -396,9 +398,11 @@ build:
           !
         --==BOUNDARY==--
     - label: br2
+      priority: 500
       ram: 8192
       cpus: 4
     - label: hub-ftd
+      priority: 500
       definition: ftdv
       x: -720
       y: 760
@@ -426,6 +430,7 @@ build:
           "ManageLocally": "No"
         }
     - label: br1-ftd
+      priority: 500
       definition: ftdv
       x: 0
       y: 1080
@@ -453,10 +458,12 @@ build:
           "ManageLocally": "No"
         }
     - label: br1-lan
+      priority: 1000
       definition: unmanaged_switch
       x: 0
       y: 1240
     - label: alice
+      priority: 100
       definition: alpine
       ram: 512
       x: -160
@@ -471,6 +478,7 @@ build:
         ip addr add 10.61.220.10/24 dev eth0
         ip route add default via 10.61.220.1
     - label: bob
+      priority: 100
       definition: alpine
       ram: 512
       x: 160

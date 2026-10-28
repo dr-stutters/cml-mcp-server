@@ -21,6 +21,8 @@ from cml_mcp.build import (
     VSWITCH_FILE,
     BuildError,
     NodeSpec,
+    NodeStaging,
+    boot_order,
     build_topology,
     is_cat9kv,
     serial_of,
@@ -141,11 +143,13 @@ async def build_lab_flow(
     lab_notes: str | None = None,
     lab_secrets: dict[str, list[str]] | None = None,
     blockers: list[str] | None = None,
+    node_staging: NodeStaging | None = None,
 ) -> dict[str, Any]:
     """Preview/apply a lab build (shared by cml_build_lab and cml_build_recipe). `lab_notes` become the
     lab's notes (cml_build_recipe records the recipe and its substitutions there). `lab_secrets` ({LAB_* name:
     node labels}) were filled into `nodes`; `blockers` are the caller's own (e.g. a missing lab secret).
-    `redact` (lab secret value -> ${LAB_*}) cleans the preview's blockers and notes too."""
+    `redact` (lab secret value -> ${LAB_*}) cleans the preview's blockers and notes too. `node_staging` and
+    the nodes' priorities set the boot order (the preview's boot_order)."""
     app: CmlApp = get_client(ctx)
     defs = await known_definitions(app)
     nodes, serials = await assign_cat9kv_serials(app, title, nodes)
@@ -166,6 +170,7 @@ async def build_lab_flow(
             connectors=connectors,
             notes=notes,
             annotations=annotations,
+            node_staging=node_staging,
         )
     except BuildError as e:
         blockers.append(str(e))
@@ -196,6 +201,7 @@ async def build_lab_flow(
             **({"notes": redact_values(notes, redact or {})} if notes else {}),
             **({"annotations": len(annotations)} if annotations else {}),
             **({"cat9000v_serials": serials} if serials else {}),
+            **boot_details(nodes, node_staging),
             **({"lab_secrets": lab_secrets} if lab_secrets else {}),
         },
         # a node's config can reach a blocker or note (e.g. an external connector's name)
@@ -255,6 +261,22 @@ async def build_lab_flow(
     return await preview_or_apply(ctx, tool=tool, args=tool_args, confirm=confirm, plan=plan, apply=apply)
 
 
+def boot_details(nodes: list[NodeSpec], node_staging: NodeStaging | None) -> dict[str, Any]:
+    """The preview's node_staging and boot_order, when the build sets either (else nothing)."""
+    if node_staging is None and all(n.priority is None for n in nodes):
+        return {}
+    out: dict[str, Any] = {
+        "node_staging": node_staging.model_dump() if node_staging else {"enabled": False},
+        "boot_order": boot_order([{"label": n.label, "priority": n.priority} for n in nodes]),
+    }
+    if node_staging is None or not node_staging.enabled:
+        out["boot_order_note"] = (
+            "node staging is off, so CML starts every node at once and ignores the priorities: pass "
+            "node_staging={'enabled': true} (or cml_set_lab_boot later)"
+        )
+    return out
+
+
 def register(reg: ToolRegistrar) -> None:
     @reg.write(title="Build lab from spec", task=True)
     async def cml_build_lab(
@@ -265,7 +287,7 @@ def register(reg: ToolRegistrar) -> None:
             Field(
                 min_length=1,
                 description="Nodes: [{label, definition, config?, files?, credentials?, image?, tags?, "
-                "ram?, cpus?, parameters?, x?, y?}]",
+                "ram?, cpus?, parameters?, x?, y?, priority?}]",
             ),
         ],
         links: Annotated[
@@ -279,6 +301,13 @@ def register(reg: ToolRegistrar) -> None:
         start: Annotated[bool, Field(description="Start the lab after creating it")] = False,
         wait: Wait = True,
         timeout: Timeout = None,  # noqa: ASYNC109 - overall wait, handled by poll_until
+        node_staging: Annotated[
+            NodeStaging | None,
+            Field(
+                description="Boot in node priority order (higher first; preview: boot_order): {enabled, "
+                "start_remaining, abort_on_failure} (CML node staging). Default: off, all nodes at once"
+            ),
+        ] = None,
         confirm: Confirm = None,
     ) -> dict[str, Any]:
         """Build a complete lab from a compact spec: node labels + definitions (+ optional day-0
@@ -306,6 +335,7 @@ def register(reg: ToolRegistrar) -> None:
             "start": start,
             "wait": wait,
             "timeout": timeout,
+            "node_staging": node_staging.model_dump() if node_staging else None,
         }
         # ${LAB_*} secrets are filled only in what goes to CML: the call, preview, confirm token, result and
         # audit log keep the references (`nodes` arrive validated with them, so no error can quote a value)
@@ -332,4 +362,5 @@ def register(reg: ToolRegistrar) -> None:
             redact=secret_names_by_value(secrets_file) if refs else None,
             lab_secrets=refs,
             blockers=blockers,
+            node_staging=node_staging,
         )
