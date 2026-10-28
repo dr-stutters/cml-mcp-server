@@ -18,6 +18,8 @@ LONG = {
     "cml_capture",
     "cml_capture_wireless",
     "cml_check_reachability",
+    "cml_snapshot",
+    "cml_compare_snapshot",
 }
 
 
