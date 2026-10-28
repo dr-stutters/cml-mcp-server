@@ -122,6 +122,7 @@ def recipe_detail(name: str) -> Any:
         {
             "name": name,
             **({"source": source} if source != "package" else {}),
+            **({"extends": r["extends"]} if r.get("extends") else {}),
             "lab": r["build"]["title"],
             "summary": r.get("summary"),
             "licensed_nodes": recipe_licensed_nodes(r),
@@ -207,8 +208,10 @@ def register(reg: ToolRegistrar) -> None:
         licensed nodes and boot time for each. With `recipe`: its address plan, what to configure on
         the product side (FMC registration, ISE NAD, CatC discovery), nodes, links and the verify
         checks. Credentials are never returned, only where they are kept. Build one with
-        cml_build_recipe, check it with cml_verify_recipe. Recipes from the server's CML_RECIPE_DIRS
-        show their `source` file; files there that are not used are listed under `skipped`, with why."""
+        cml_build_recipe, check it with cml_verify_recipe. A recipe built on another one shows it as
+        `extends` (its nodes, links, checks and actions start from that recipe's). Recipes from the server's
+        CML_RECIPE_DIRS show their `source` file; files that are not used are listed under `skipped`, with
+        why."""
         app: CmlApp = get_client(ctx)
         states = {lab.get("lab_title"): lab.get("state") for lab in await app.list_labs()}
         if recipe:
@@ -223,6 +226,7 @@ def register(reg: ToolRegistrar) -> None:
                 {
                     "name": name,
                     **({"source": source} if source != "package" else {}),
+                    **({"extends": r["extends"]} if r.get("extends") else {}),
                     "lab": r["build"]["title"],
                     "lab_state": states.get(r["build"]["title"], "not built"),
                     "licensed_nodes": recipe_licensed_nodes(r),

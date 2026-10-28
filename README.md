@@ -184,7 +184,7 @@ or in `.mcp.json`:
 | `cml_summarize_capture` | Decoded summary of a link capture: protocol mix, conversations, RADIUS/EAPOL/OSPF/DHCP/ARP/ICMP highlights |
 | `cml_plan_licences` | Licences in use per lab, what a lab or recipe needs, which labs to stop |
 | `cml_plan_replica` | Map a real site's devices (Catalyst Center / ISE / FMC inventories) to CML node definitions within a node/RAM budget: ready `cml_build_lab` spec, gaps, dropped devices |
-| `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes, packaged and from `CML_RECIPE_DIRS` (no secrets returned; unused files there under `skipped`); pass/fail verify contract of a running recipe lab (or a copy: `lab`, `substitute`) |
+| `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes, packaged and from `CML_RECIPE_DIRS` (no secrets returned; a recipe built on another shows it as `extends`; unused files under `skipped`); pass/fail verify contract of a running recipe lab (or a copy: `lab`, `substitute`) |
 | `cml_get_link_scenarios` | Named link scenarios with netem values and expected round-trip ping deltas; with a lab, its conditioned links and flap jobs |
 | `cml_export_topology` | Mermaid, draw.io or JSON diagram of a lab with interface addresses (day-0 config, snooped or CLI) |
 | `cml_list_annotations` | A lab's drawn annotations (text, shapes), marking the ones this server wrote |
