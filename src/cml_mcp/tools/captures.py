@@ -263,8 +263,8 @@ def register(reg: ToolRegistrar) -> None:
             Literal["none", "radius"],
             Field(
                 description="'radius' overwrites RADIUS secrets in the file (authenticators, passwords, "
-                "State, Class, Message-Authenticator, non-allow-listed Cisco AV-pair values) before it "
-                "is written"
+                "State, Class, Message-Authenticator, non-allow-listed Cisco AV-pair values, other "
+                "vendors' VSA values; IPv4 and IPv6) before it is written"
             ),
         ] = "none",
         confirm: Confirm = None,
