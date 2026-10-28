@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.14.0 - 2026-10-28
+
+### Added
+- **Interface state and MAC pinning (L52, #87).** New write tools `cml_set_interface_state` (one-sided interface
+  up/down: only that end loses carrier) and `cml_update_interface` (pin or clear an interface MAC), and a
+  per-interface `macs` field in the `cml_build_lab`/recipe node spec so rebuilds keep their MACs.
+
+### Fixed
+- `cml_connect_nodes` warns that a link added to an FTDv that has booted before stays down until the node is
+  wiped (#70, #86).
+
+### Changed
+- Bundled stutters-mcp-core v0.14.0 -> v0.17.0 (`server.clock` in `cml_status`, suite prompt and test-kit
+  updates).
+
 ## 0.13.0 - 2026-10-24
 
 ### Added

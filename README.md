@@ -9,7 +9,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > only: don't point it at production systems. It's provided as is, with no warranty (see the
 > [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
-- **72 tools** in three tiers: 39 read, 25 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **76 tools** in three tiers: 39 read, 29 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -47,7 +47,7 @@ with it as `lab_view` + `lab_exec` and a resource pool with 0 node licences, see
 has a wheel with stutters-mcp-core bundled in; it needs only PyPI dependencies.
 
 ```bash
-WHEEL=https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.13.0/cml_mcp_server-0.13.0-py3-none-any.whl
+WHEEL=https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.14.0/cml_mcp_server-0.14.0-py3-none-any.whl
 export CML_URL=https://cml.example.com CML_USERNAME=mcp-cml-viewer CML_PASSWORD='...'
 uvx --from "$WHEEL" cml-mcp-server check            # preflight: reachability, TLS, login, version, admin flag
 claude mcp add cml -e CML_URL=$CML_URL -e CML_USERNAME=$CML_USERNAME -e CML_PASSWORD="$CML_PASSWORD" \
@@ -61,7 +61,7 @@ Claude Desktop (`claude_desktop_config.json`), same idea:
   "mcpServers": {
     "cml": {
       "command": "uvx",
-      "args": ["--from", "https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.13.0/cml_mcp_server-0.13.0-py3-none-any.whl", "cml-mcp-server"],
+      "args": ["--from", "https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.14.0/cml_mcp_server-0.14.0-py3-none-any.whl", "cml-mcp-server"],
       "env": {"CML_URL": "https://cml.example.com", "CML_USERNAME": "mcp-cml-viewer", "CML_PASSWORD": "..."}
     }
   }
@@ -162,7 +162,7 @@ or in `.mcp.json`:
 | `cml_get_licensing` | Smart Licensing registration and authorization, features, expiry |
 | `cml_list_labs` / `cml_get_lab` | Labs with state and counts; one lab with convergence, node states and resources in use |
 | `cml_get_lab_topology` | Compact wiring summary (node interface -> peer, links, conditioning); `detail='full'` for everything |
-| `cml_export_lab` | Topology YAML (pyATS passwords masked unless `include_credentials`) |
+| `cml_export_lab` | Topology YAML, valid and re-importable when masked (pyATS passwords `'********'`, cloud-init passwords `${LAB_NODE_PASSWORD}`, unless `include_credentials`); large labs in pages (`offset` / `next_offset`) |
 | `cml_list_lab_events` | Change and state history, newest first, with the fields that changed |
 | `cml_get_pyats_testbed` | The pyATS testbed CML generates (passwords masked) |
 | `cml_list_nodes` / `cml_get_node` | Nodes with state, image and resources (optionally live CPU/RAM); one node with interfaces, peers and config |
@@ -179,12 +179,12 @@ or in `.mcp.json`:
 | `cml_list_image_definitions` | Installed images |
 | `cml_get_image_files` | Disk images in `CML_IMAGE_DIR` on the server host, and the controller's drop folder |
 | `cml_wait_for_converged` | Wait until a lab or node has booted, with progress notifications; `console_pattern` waits for a later console message |
-| `cml_diff_lab` | Diff a lab with another lab or a saved YAML: nodes, interfaces, links, config diff (`running_configs=true` for live configs) |
+| `cml_diff_lab` | Diff a lab with another lab or a saved YAML: nodes, interfaces, links, config diff (`running_configs=true` for live configs); `against='day0'` or `'saved'` for lab-wide drift of every node's running config, `view='sections'` for changed sections per node, `nodes=[...]` to narrow it |
 | `cml_diff_node_config` | Running config (from the console) vs day-0, startup, another node or a baseline; secrets masked |
 | `cml_summarize_capture` | Decoded summary of a link capture: protocol mix, conversations, RADIUS/EAPOL/OSPF/DHCP/ARP/ICMP highlights |
 | `cml_plan_licences` | Licences in use per lab, what a lab or recipe needs, which labs to stop |
 | `cml_plan_replica` | Map a real site's devices (Catalyst Center / ISE / FMC inventories) to CML node definitions within a node/RAM budget: ready `cml_build_lab` spec, gaps, dropped devices |
-| `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes, packaged and from `CML_RECIPE_DIRS` (no secrets returned; unused files there under `skipped`); pass/fail verify contract of a running recipe lab (or a copy: `lab`, `substitute`) |
+| `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes, packaged and from `CML_RECIPE_DIRS` (no secrets returned; a recipe built on another shows it as `extends`; unused files under `skipped`); pass/fail verify contract of a running recipe lab (or a copy: `lab`, `substitute`; a lab built from a recipe's `extends:` base or a subset of it verifies too, with `built_from`) |
 | `cml_get_link_scenarios` | Named link scenarios with netem values and expected round-trip ping deltas; with a lab, its conditioned links and flap jobs |
 | `cml_export_topology` | Mermaid, draw.io or JSON diagram of a lab with interface addresses (day-0 config, snooped or CLI) |
 | `cml_list_annotations` | A lab's drawn annotations (text, shapes), marking the ones this server wrote |
@@ -204,7 +204,8 @@ or in `.mcp.json`:
 | `cml_set_node_state` | Start or stop one node |
 | `cml_extract_node_configs` | Save running configs into the stored node configs |
 | `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`), or exec-mode lines (`mode='exec'`, e.g. FTD `configure manager add`). Rejected lines are reported |
-| `cml_connect_nodes` | Link two nodes (first free interfaces, or the ones you name) |
+| `cml_configure_nodes` | Push the same config lines to up to 20 running devices in one preview: templates with `{label}`, `{mgmt_ip}` and per-node `vars`, the rendered lines per node and `blast_radius` in the preview, the deny-list checked on every rendered line, `${LAB_*}` refused; a failing node doesn't stop the others |
+| `cml_connect_nodes` | Link two nodes (first free interfaces, or the ones you name; a picked port is held for its preview, so parallel previews to one switch get different ports) |
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
 | `cml_set_interface_state` | Take one interface down or up on a running node: only that end loses carrier, the peer stays up (FTD HA monitored interface, SD-WAN dead-WAN tests) |
@@ -212,7 +213,7 @@ or in `.mcp.json`:
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
 | `cml_capture_wireless` | Capture the simulated 802.11 medium at a wireless-ap / wireless-client node and decode it (SSIDs, auth/assoc, deauth reasons, EAPOL 4-way handshake, EAP identity/method) |
-| `cml_build_recipe` | Build a test-lab recipe, packaged or from `CML_RECIPE_DIRS` (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses |
+| `cml_build_recipe` | Build a test-lab recipe, packaged or from `CML_RECIPE_DIRS` (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses; `extend=true` grows an existing lab into a superset recipe in place (adds only the missing nodes, links and notes, never changes an existing node) |
 | `cml_run_recipe_action` | Run one of a recipe's actions on its lab, e.g. `ise-fmc-identity` `login-alice` / `login-bob` / `logoff` (802.1X as another AD user); the command comes from the recipe, never the caller |
 | `cml_apply_link_scenario` | Apply a named scenario to a link: wan-good, wan-satellite, lossy-wifi, brownout, or `flap` (timed down/up cycles in the background, link always restored) |
 | `cml_clear_link_scenarios` | Stop flap jobs and remove conditioning from a lab's links |
@@ -252,6 +253,13 @@ names it. The filled topology is re-serialised, so YAML quoting is handled, but 
 as it is: keep `"` and `\` out of values used inside JSON day-0 configs. Unlike a recipe, the YAML comes from
 the caller, and a node's day-0 config can do anything with the value it gets, so check `lab_secrets` before
 you confirm. YAML without placeholders in its nodes is sent unchanged.
+
+**Restoring a masked export.** `cml_export_lab` masks pyATS passwords as `'********'` and replaces a
+`password:` / `plain_text_passwd:` line in a node file (cloud-init user-data) with `${LAB_NODE_PASSWORD}`. Set
+`LAB_NODE_PASSWORD` on the server (or in `CML_LAB_SECRETS_FILE`) and `cml_import_lab` fills it into those nodes;
+without it the import is blocked by name. Set the pyATS logins again after a restore (or export with
+`include_credentials`). A lab bigger than one response comes back in pages: call again with
+`offset=next_offset` until `complete`, join the `yaml` of every page in order, and check `sha256`.
 
 `cml_build_lab` does the same for a node's `config`, `files` and `credentials`, e.g.
 `"config": "username admin privilege 15 secret ${LAB_CLI_PASSWORD}"` with

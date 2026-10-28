@@ -1,5 +1,5 @@
 {
-  "core_version": "0.13.0",
+  "core_version": "0.17.0",
   "manifest": 1,
   "prefix": "cml",
   "prompts": {
@@ -87,6 +87,10 @@
     "cml_configure_node": {
       "tier": "write",
       "title": "Configure node via CLI"
+    },
+    "cml_configure_nodes": {
+      "tier": "write",
+      "title": "Configure several nodes via CLI"
     },
     "cml_connect_nodes": {
       "tier": "write",
@@ -268,6 +272,10 @@
       "tier": "read",
       "title": "Search the Cisco Modeling Labs API spec"
     },
+    "cml_set_interface_state": {
+      "tier": "write",
+      "title": "Set interface state"
+    },
     "cml_set_link_condition": {
       "tier": "write",
       "title": "Set link conditioning"
@@ -312,6 +320,10 @@
       "tier": "read",
       "title": "Summarize packet capture"
     },
+    "cml_update_interface": {
+      "tier": "write",
+      "title": "Pin interface MAC"
+    },
     "cml_update_node": {
       "tier": "write",
       "title": "Update node"
@@ -337,5 +349,5 @@
       "title": "Wipe node"
     }
   },
-  "version": "0.11.0"
+  "version": "0.14.0"
 }

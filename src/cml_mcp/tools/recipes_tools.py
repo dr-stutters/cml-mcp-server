@@ -44,6 +44,7 @@ from cml_mcp.safety import guarded_preview_or_apply
 from cml_mcp.tools.build_tool import build_lab_flow
 from cml_mcp.tools.common import shaped
 from cml_mcp.tools.lab_writes import Wait
+from cml_mcp.tools.recipe_extend import extend_lab_flow
 from cml_mcp.tools.smart import Timeout
 from cml_mcp.topology import address_annotations, config_addresses, place_notes
 
@@ -122,6 +123,7 @@ def recipe_detail(name: str) -> Any:
         {
             "name": name,
             **({"source": source} if source != "package" else {}),
+            **({"extends": r["extends"]} if r.get("extends") else {}),
             "lab": r["build"]["title"],
             "summary": r.get("summary"),
             "licensed_nodes": recipe_licensed_nodes(r),
@@ -207,8 +209,10 @@ def register(reg: ToolRegistrar) -> None:
         licensed nodes and boot time for each. With `recipe`: its address plan, what to configure on
         the product side (FMC registration, ISE NAD, CatC discovery), nodes, links and the verify
         checks. Credentials are never returned, only where they are kept. Build one with
-        cml_build_recipe, check it with cml_verify_recipe. Recipes from the server's CML_RECIPE_DIRS
-        show their `source` file; files there that are not used are listed under `skipped`, with why."""
+        cml_build_recipe, check it with cml_verify_recipe. A recipe built on another one shows it as
+        `extends` (its nodes, links, checks and actions start from that recipe's). Recipes from the server's
+        CML_RECIPE_DIRS show their `source` file; files that are not used are listed under `skipped`, with
+        why."""
         app: CmlApp = get_client(ctx)
         states = {lab.get("lab_title"): lab.get("state") for lab in await app.list_labs()}
         if recipe:
@@ -223,6 +227,7 @@ def register(reg: ToolRegistrar) -> None:
                 {
                     "name": name,
                     **({"source": source} if source != "package" else {}),
+                    **({"extends": r["extends"]} if r.get("extends") else {}),
                     "lab": r["build"]["title"],
                     "lab_state": states.get(r["build"]["title"], "not built"),
                     "licensed_nodes": recipe_licensed_nodes(r),
@@ -254,9 +259,18 @@ def register(reg: ToolRegistrar) -> None:
             ),
         ] = None,
         substitute: Substitute = None,
-        start: Annotated[bool, Field(description="Start the lab after building it")] = True,
+        start: Annotated[
+            bool, Field(description="Start the lab after building it (with extend: start the added nodes)")
+        ] = True,
         wait: Wait = False,
         timeout: Timeout = None,  # noqa: ASYNC109 - overall wait, handled by poll_until
+        extend: Annotated[
+            bool,
+            Field(
+                description="Grow the existing lab of that title into this recipe in place: add only the "
+                "nodes, links and notes it lacks (for a superset recipe of the one it was built from)"
+            ),
+        ] = False,
         confirm: Confirm = None,
     ) -> dict[str, Any]:
         """Build a recipe's lab (see cml_list_recipes) exactly as written - nodes, day-0 configs with
@@ -266,7 +280,12 @@ def register(reg: ToolRegistrar) -> None:
         cml_verify_recipe). Refuses if the lab already exists: start that one with cml_start_lab
         instead, or pass `title` (and `substitute` for other addresses) to build a copy; the lab's
         notes record the recipe and substitutions, so cml_verify_recipe(recipe, lab=title) needs
-        nothing else. Preview-first; the preview shows wiring and licence use."""
+        nothing else. extend=true grows that existing lab instead (a superset recipe of the one it
+        was built from, e.g. cat-sdwan-secure on a cat-sdwan-fabric lab): it adds only the missing
+        nodes, links, interfaces (on wiped nodes) and notes, starts the added nodes, never changes an
+        existing node (a node of another definition or a link end in use blocks) and records the new
+        recipe in the lab's notes. Preview-first; the preview shows wiring (or the additions) and
+        licence use."""
         r = substituted(get_recipe(recipe), substitute)
         b = r["build"]
         # ${LAB_*} secrets are filled only in what goes to CML (configs, files, logins); the preview shows
@@ -277,6 +296,30 @@ def register(reg: ToolRegistrar) -> None:
         secrets_file = get_settings(ctx).lab_secrets_file
         resolved = resolve_secrets(raw_nodes, secrets_file, what=f"recipe {recipe!r}")
         nodes = [NodeSpec.model_validate(n) for n in resolved]
+        if extend:
+            return await extend_lab_flow(
+                ctx,
+                tool_args={
+                    "recipe": recipe,
+                    "title": title,
+                    "substitute": substitute,
+                    "start": start,
+                    "wait": wait,
+                    "timeout": timeout,
+                    "extend": True,
+                },
+                recipe=recipe,
+                title=title or b["title"],
+                nodes=nodes,
+                links=list(b.get("links") or []),
+                annotations=recipe_annotations(recipe, r),
+                substitute=substitute,
+                start=start,
+                wait=wait,
+                timeout=timeout,
+                confirm=confirm,
+                redact=secret_names_by_value(secrets_file),
+            )
         return await build_lab_flow(
             ctx,
             tool="cml_build_recipe",
