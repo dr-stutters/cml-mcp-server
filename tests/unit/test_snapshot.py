@@ -280,3 +280,32 @@ async def test_bad_input(lab: dict[str, Any]) -> None:
         other = {"snapshot": 1, "prefix": "fmc", "sections": {}}
         res = await c.call_tool("cml_compare_snapshot", {"before": other}, raise_on_error=False)
         assert res.is_error and "not 'cml'" in res.content[0].text
+
+
+async def test_node_without_commands_is_skipped_not_unreadable(
+    lab: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A node whose OS has no snapshot commands (an SD-WAN controller, os 'sdwan') is left out of the
+    console pass and the matrix; it does not make the whole lab's console sections unreadable."""
+    import cml_mcp.tools.snapshot as snapshot
+
+    real = snapshot.node_commands
+    monkeypatch.setattr(snapshot, "node_commands", lambda cred: [] if cred.os == "sdwan" else real(cred))
+    orig = snapshot.console_batch
+
+    async def batch(app: Any, lid: str, nodes: list[dict[str, Any]], fn: Any, **kw: Any) -> Any:
+        def as_sdwan(node: dict[str, Any], cred: Credentials) -> Any:
+            return fn(node, Credentials(os="sdwan") if node.get("label") == "r2" else cred)
+
+        return await orig(app, lid, nodes, as_sdwan, **kw)
+
+    monkeypatch.setattr(snapshot, "console_batch", batch)
+    args = {"lab": LID, "probes": "matrix", "targets": ["192.0.2.2"]}
+    blob = await call_tool(create_server(make_settings()), "cml_snapshot", args)
+    secs = blob["sections"]
+    for name in ("addresses", "configs", "neighbours", "reachability"):
+        assert "error" not in secs[name], secs[name]
+    assert set(secs["configs"]["items"]) == {"r1"}
+    assert set(secs["neighbours"]["items"]) == {"r1|ospf|192.0.2.2|Ethernet0/0"}
+    assert set(secs["reachability"]["items"]) == {"r1->192.0.2.2"}  # r2 is no matrix source
+    assert {h for h, _ in lab["pings"]} == {"r1"}

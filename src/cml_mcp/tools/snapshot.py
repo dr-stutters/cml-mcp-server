@@ -64,6 +64,9 @@ BGP = "show ip bgp summary"
 EIGRP = "show ip eigrp neighbors"
 OK_OSPF = ("FULL", "2WAY")
 Probes = Literal["auto", "matrix", "recipe", "none"]
+# console_batch's error for a node whose OS has no commands here (SD-WAN controllers, os 'sdwan'): not read,
+# and not a console failure either
+NO_COMMANDS = "no commands for this node type"
 
 
 def _server_version() -> str | None:
@@ -298,7 +301,8 @@ async def take_snapshot(
         label = str(res["node"])
         os_of[label] = str(res.get("os") or "")
         if res.get("error"):
-            failed.append(f"{label}: {res['error'][:120]}")
+            if not str(res["error"]).startswith(NO_COMMANDS):
+                failed.append(f"{label}: {res['error'][:120]}")
             continue
         read_by_cli.add(label)
         for o in res.get("outputs") or []:
@@ -392,7 +396,8 @@ async def take_snapshot(
                 for c in result.get("checks") or []:
                     _add(rec, str(c.get("name")), ok=bool(c.get("ok")), state=str(c.get("kind") or ""))
     elif mode == "matrix":
-        await _matrix(app, lid, snap, console_nodes, os_of, targets, loopbacks)
+        readable = [n for n in console_nodes if _label(n) in read_by_cli]
+        await _matrix(app, lid, snap, readable, os_of, targets, loopbacks)
     return snap
 
 
