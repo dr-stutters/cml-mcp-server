@@ -33,6 +33,7 @@ from cml_mcp.tools import (
     replica_tools,
     samples,
     smart,
+    snapshot,
     system,
     topology_writes,
 )
@@ -66,6 +67,8 @@ Stable MACs (ISE MAB, DHCP bindings): cml_update_interface, or `macs` on a cml_b
 Proving connectivity: cml_check_reachability (success % and average RTT). BOOTED is not a converged
 network: right after a boot, pass wait_seconds so it retries until routing protocols have converged;
 addresses: cml_get_layer3_addresses(source='cli').
+Pre/post change check: cml_snapshot(lab) before the change (keep the blob), cml_compare_snapshot(before)
+after it: links and nodes down, lost OSPF/BGP/EIGRP neighbours, failed reachability pairs, changed configs.
 Slow images (FTDv 15-30 min, cat9000v ~10): build/start with wait=false, then cml_wait_for_converged.
 Running nodes are capped by the licence; external connectors and unmanaged switches don't count.
 cml_plan_licences(target) says which labs to stop before starting a lab or recipe, and whether RAM
@@ -138,6 +141,7 @@ def create_server(
             cli.register,
             configs.register,
             network.register,
+            snapshot.register,
             samples.register,
             planning.register,
             recipes_tools.register,

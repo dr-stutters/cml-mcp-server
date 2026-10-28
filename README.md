@@ -9,7 +9,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > only: don't point it at production systems. It's provided as is, with no warranty (see the
 > [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
-- **76 tools** in three tiers: 39 read, 29 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **78 tools** in three tiers: 41 read, 29 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -171,6 +171,8 @@ or in `.mcp.json`:
 | `cml_list_interfaces` | Interfaces with MAC, state and peer; filter free or connected |
 | `cml_get_layer3_addresses` | IPs per interface: snooped by CML on external segments, or read from every node's CLI (`source='cli'`) |
 | `cml_check_reachability` | Ping targets from nodes (per-OS syntax, VRF, FTD management) and return a pass/fail matrix with average RTT |
+| `cml_snapshot` | Pre/post change snapshot of a lab (core snapshot contract): node and link states, link conditioning, IPv4 per interface, masked running-config hash per node, OSPF/BGP/EIGRP neighbours, and a ping matrix (`probes='matrix'`) or the lab recipe's verify checks (`probes='recipe'`); the blob stays with the client |
+| `cml_compare_snapshot` | Compare a `cml_snapshot` blob with a later one (or a fresh snapshot of the same scope): links/nodes down, lost neighbours, failed pairs, changed configs, by severity; a leg of `suite_change_check` |
 | `cml_list_external_connectors` | Networks an `external_connector` node can join (NAT, System Bridge...) |
 | `cml_list_sample_labs` | Sample labs on the controller (filter by text or node type) |
 | `cml_list_links` / `cml_get_link` | Links as `node:interface` pairs; one link with conditioning and capture status |
@@ -205,18 +207,18 @@ or in `.mcp.json`:
 | `cml_extract_node_configs` | Save running configs into the stored node configs |
 | `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`), or exec-mode lines (`mode='exec'`, e.g. FTD `configure manager add`). Rejected lines are reported |
 | `cml_configure_nodes` | Push the same config lines to up to 20 running devices in one preview: templates with `{label}`, `{mgmt_ip}` and per-node `vars`, the rendered lines per node and `blast_radius` in the preview, the deny-list checked on every rendered line, `${LAB_*}` refused; a failing node doesn't stop the others |
-| `cml_connect_nodes` | Link two nodes (first free interfaces, or the ones you name; a picked port is held for its preview, so parallel previews to one switch get different ports) |
+| `cml_connect_nodes` | Link two nodes (first free interfaces, never an FTDv/ASAv `donotuse` slot, or the ones you name; a picked port is held for its preview, so parallel previews to one switch get different ports) |
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
 | `cml_set_interface_state` | Take one interface down or up on a running node: only that end loses carrier, the peer stays up (FTD HA monitored interface, SD-WAN dead-WAN tests) |
-| `cml_update_interface` | Pin an interface MAC (52:54:00:xx:xx:xx) or clear the pin (`auto`) so ISE MAB endpoints and DHCP bindings survive wipes and re-imports; the preview names the old MAC and what keys on it |
+| `cml_update_interface` | Pin an interface MAC (52:54:00:xx:xx:xx) or clear the pin (`auto`) so ISE MAB endpoints and DHCP bindings survive wipes and re-imports; the preview names the old MAC and what keys on it, and blocks a running node (wipe it first) or an IOL node (CML refuses custom MACs there) |
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
 | `cml_save_capture` | Write a link's capture to a pcap file under `CML_CAPTURE_DIR` on the server host (Wireshark, TAC, evidence packs); returns only the path, SHA-256, size and packet count, never the bytes. `redact='radius'` blanks RADIUS authenticators, passwords, State/Class, secret AV-pairs and other vendors' VSA values first (IPv4 and IPv6) |
 | `cml_capture_wireless` | Capture the simulated 802.11 medium at a wireless-ap / wireless-client node and decode it (SSIDs, auth/assoc, deauth reasons, EAPOL 4-way handshake, EAP identity/method) |
 | `cml_build_recipe` | Build a test-lab recipe, packaged or from `CML_RECIPE_DIRS` (optionally start it), with annotations; `title` + `substitute` build a copy on other addresses; `extend=true` grows an existing lab into a superset recipe in place (adds only the missing nodes, links and notes, never changes an existing node) |
 | `cml_run_recipe_action` | Run one of a recipe's actions on its lab, e.g. `ise-fmc-identity` `login-alice` / `login-bob` / `logoff` (802.1X as another AD user); the command comes from the recipe, never the caller |
-| `cml_apply_link_scenario` | Apply a named scenario to a link: wan-good, wan-satellite, lossy-wifi, brownout, or `flap` (timed down/up cycles in the background, link always restored) |
+| `cml_apply_link_scenario` | Apply a named scenario to a link: wan-good, wan-satellite, lossy-wifi, brownout, or `flap` (timed down/up cycles in the background, link always restored; `side` (a or b) flaps one end only) |
 | `cml_clear_link_scenarios` | Stop flap jobs and remove conditioning from a lab's links |
 | `cml_annotate_lab` | Add notes, per-node address labels and the recipe's purpose/credential references as text annotations (re-runnable) |
 | `cml_create_image_definition` | Make an uploaded disk image usable by a node definition (admin) |

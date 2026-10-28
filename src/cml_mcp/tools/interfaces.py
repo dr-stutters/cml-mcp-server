@@ -9,13 +9,15 @@ re-import.
 # No `from __future__ import annotations` in tool modules: FastMCP inspects signatures at runtime.
 
 from typing import Annotated, Any, Literal
+from urllib.parse import quote
 
+import yaml
 from fastmcp import Context
 from pydantic import Field
 
 from cml_mcp._core import Confirm, NotFound, Plan, ToolRegistrar, UpstreamError, get_client
 from cml_mcp.client import CmlApp
-from cml_mcp.macs import mac_problem, normalise_mac
+from cml_mcp.macs import custom_mac_problem, mac_problem, normalise_mac
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, NodeRef, load_topo
 from cml_mcp.tools.topology_writes import WIPE_HINT
@@ -48,6 +50,16 @@ async def resolve_interface(
             "cml_list_interfaces)."
         )
     return hit[0], ifaces
+
+
+async def full_definition(app: CmlApp, definition: str) -> dict[str, Any] | None:
+    """GET /node_definitions/{id} (CML returns YAML); None when it cannot be read, so no check is made."""
+    try:
+        raw = await app.api.get(f"/node_definitions/{quote(definition, safe='')}")
+    except UpstreamError:
+        return None
+    d = yaml.safe_load(raw) if isinstance(raw, str) else raw
+    return d if isinstance(d, dict) else None
 
 
 def register(reg: ToolRegistrar) -> None:
@@ -137,8 +149,10 @@ def register(reg: ToolRegistrar) -> None:
         """Pin an interface's MAC address so it survives wipes, re-imports and rebuilds (ISE MAB
         endpoints, DHCP reservations and Catalyst Center PnP bindings key on it), or clear the pin
         ('auto'). The preview names the old MAC and what references it. MACs must be in CML's
-        52:54:00 block or the lab can no longer be imported. Interface labels are fixed by the node
-        definition and cannot be changed."""
+        52:54:00 block or the lab can no longer be imported. CML takes the change only on a wiped node
+        (DEFINED_ON_CORE) of a definition that allows custom MACs (KVM or Docker; not IOL); the
+        preview blocks otherwise. Interface labels are fixed by the node definition and cannot be
+        changed."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
@@ -164,17 +178,22 @@ def register(reg: ToolRegistrar) -> None:
                     blockers.append(f"MAC {new} is already used in this lab by {', '.join(clash)}")
         if iface.get("type") == "loopback":
             blockers.append(f"{name} is a loopback; it has no MAC to pin")
+        definition = str(n.get("node_definition") or "")
+        if (
+            new is not None
+            and definition
+            and (why := custom_mac_problem(definition, await full_definition(app, definition)))
+        ):
+            blockers.append(f"{n.get('label')}: {why}")
+        if n.get("state") != "DEFINED_ON_CORE":
+            # live, CML 2.10: PATCH on a BOOTED node -> 400 'Physical configuration of node is locked'
+            blockers.append(f"Node {n.get('label')} is {n.get('state')}; {WIPE_HINT}")
         side_effects: list[str] = []
         if old and (old.lower() != (new or "")):
             side_effects.append(
                 f"Anything keyed on the old MAC {old} stops matching: ISE endpoints (MAB, endpoint "
                 "groups, ANC), DHCP reservations and leases, Catalyst Center PnP claims. Update or "
                 "re-learn them (e.g. ise_list_endpoints, the DHCP server's bindings)"
-            )
-        if n.get("state") != "DEFINED_ON_CORE":
-            side_effects.append(
-                f"Node is {n.get('state')}: the device keeps its current MAC until it is wiped and "
-                f"started again, and CML may refuse the change outright; if it does, {WIPE_HINT}"
             )
         if new is None and not iface.get("mac_address"):
             side_effects.append(f"{name} has no pinned MAC; nothing changes")

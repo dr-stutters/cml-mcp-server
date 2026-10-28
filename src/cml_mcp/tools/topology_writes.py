@@ -21,6 +21,7 @@ from cml_mcp._core import (
     get_settings,
     poll_until,
 )
+from cml_mcp.build import is_placeholder
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
 from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed
@@ -429,12 +430,13 @@ def register(reg: ToolRegistrar) -> None:
         confirm: Confirm = None,
     ) -> dict[str, Any]:
         """Create a link between two nodes. Without interface names it picks the first free physical
-        interface on each side, adding a new interface when a wiped node has none free. The preview
-        names the exact interfaces and holds a picked one for its token, so parallel previews to one
-        switch get different ports; if another link took it before the confirm, the confirm picks the
-        next free one and says so ('repicked'), or refuses when none is left. Links can be added to
-        running nodes if they have a free interface. An FTDv that has booted before keeps a link added
-        now down until it is wiped (cml_wipe_node; the day-0 config survives): the preview warns."""
+        interface on each side (never an FTDv/ASAv 'donotuse' placeholder slot), adding a new interface
+        when a wiped node has none free. The preview names the exact interfaces and holds a picked one
+        for its token, so parallel previews to one switch get different ports; if another link took it
+        before the confirm, the confirm picks the next free one and says so ('repicked'), or refuses
+        when none is left. Links can be added to running nodes if they have a free interface. An FTDv
+        that has booted before keeps a link added now down until it is wiped (cml_wipe_node; the day-0
+        config survives): the preview warns."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
@@ -466,6 +468,11 @@ def register(reg: ToolRegistrar) -> None:
                     blockers.append(
                         f"{n.get('label')}:{wanted} is already connected to {peers[match[0]['id']][0]}"
                     )
+                if is_placeholder(match[0].get("label")):
+                    blockers.append(
+                        f"{n.get('label')}:{wanted} is a placeholder slot that never carries traffic; "
+                        "pick a real interface (see cml_list_interfaces)"
+                    )
                 if match[0].get("type") != "physical":
                     blockers.append(
                         f"{n.get('label')}:{wanted} is a {match[0].get('type')} interface; "
@@ -475,11 +482,14 @@ def register(reg: ToolRegistrar) -> None:
             previewed = next((i for i in ifaces if i["id"] in own), None)
             if previewed is not None and previewed["id"] not in peers:
                 return previewed["id"], str(previewed.get("label"))
-            free = [
+            unlinked = [
                 i
                 for i in ifaces
                 if i.get("type") == "physical" and i["id"] not in peers and i["id"] not in taken_elsewhere
             ]
+            # FTDv/ASAv 'donotuse' slots never carry traffic: never pick one (#96).
+            free = [i for i in unlinked if not is_placeholder(i.get("label"))]
+            placeholders = [str(i.get("label")) for i in unlinked if is_placeholder(i.get("label"))]
             was = f"{n.get('label')}:{previewed.get('label')}" if previewed is not None else None
             if free:
                 if was is not None:
@@ -490,8 +500,15 @@ def register(reg: ToolRegistrar) -> None:
             if n.get("state") != "DEFINED_ON_CORE":
                 held = " (the others are held for pending previews)" if taken_elsewhere else ""
                 lead = f"{was} was connected since the preview and " if was is not None else ""
+                skipped = (
+                    f" (only placeholder slots are free: {', '.join(placeholders)}, "
+                    "which never carry traffic)"
+                    if placeholders
+                    else ""
+                )
                 blockers.append(
-                    f"{lead}{n.get('label')} has no free interface{held} and is {n.get('state')}; {WIPE_HINT}"
+                    f"{lead}{n.get('label')} has no free interface{held}{skipped} and is "
+                    f"{n.get('state')}; {WIPE_HINT}"
                 )
             elif was is not None:
                 repicked.append(f"{was} was connected since the preview; adding a new interface instead")
