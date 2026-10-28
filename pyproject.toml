@@ -1,6 +1,6 @@
 [project]
 name = "cml-mcp-server"
-version = "0.14.0"
+version = "0.15.0"
 description = "MCP server for Cisco Modeling Labs (CML 2.x), built on stutters-mcp-core"
 readme = "README.md"
 license = "MIT"
@@ -13,7 +13,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "asyncssh>=2.21",
     "python-dotenv>=1.0",
-    # >>> bundled stutters-mcp-core v0.17.0 (scripts/bundle_core.py; do not edit)
+    # >>> bundled stutters-mcp-core v0.19.0 (scripts/bundle_core.py; do not edit)
     "fastmcp>=4.1,<5",
     "httpx>=0.28.1",
     "mcp>=2.0,<3",
@@ -30,8 +30,8 @@ cml-mcp-server = "cml_mcp:main"
 # stutters-mcp-core is bundled into the package as cml_mcp._core (ADR-005 in stutters-mcp-core):
 # python scripts/bundle_core.py vendor   (after a clone or a pin change; then uv lock if deps changed)
 [tool.bundle-core]
-tag = "v0.17.0"
-commit = "a52faa65a4ae89201aa6aea37f33c6abc11ff47c"
+tag = "v0.19.0"
+commit = "931acb7c7457056f7bd11d1e42f34ef94fd5fbeb"
 extras = ["tasks"]
 
 [build-system]
