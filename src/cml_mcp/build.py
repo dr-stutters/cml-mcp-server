@@ -9,6 +9,8 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
+from cml_mcp.macs import mac_problem, normalise_mac
+
 # Nodes that never take a node licence (and boot instantly).
 UNLICENSED_DEFINITIONS = frozenset({"external_connector", "unmanaged_switch"})
 
@@ -42,6 +44,11 @@ class NodeSpec(BaseModel):
         default=None,
         description="Login the console tools use (CML pyATS credentials); set it when the day-0 config "
         "changes the definition's default login",
+    )
+    macs: dict[str, str] = Field(
+        default_factory=dict,
+        description="Pinned interface MACs by interface name, e.g. {'Ethernet0/1': '52:54:00:00:01:01'}, so "
+        "rebuilds keep them (ISE MAB endpoints, DHCP reservations). Must be in CML's 52:54:00 block",
     )
     image: str | None = Field(default=None, description="Image definition id (default: newest)")
     tags: list[str] = Field(default_factory=list, description="Tags")
@@ -126,6 +133,22 @@ def build_topology(
                     f"{n.label}: external connector {n.config.strip()!r} does not exist (known: "
                     f"{', '.join(sorted(keys))}; see cml_list_external_connectors)"
                 )
+    seen_macs: dict[str, str] = {}
+    for n in nodes:
+        d = definitions.get(n.definition)
+        names = list((((d or {}).get("device") or {}).get("interfaces") or {}).get("physical") or [])
+        for if_name, mac in n.macs.items():
+            if d is not None and if_name not in names:
+                problems.append(
+                    f"{n.label}: macs names {if_name!r}, not a physical interface of {n.definition}"
+                )
+            if problem := mac_problem(mac):
+                problems.append(f"{n.label}:{if_name}: {problem}")
+                continue
+            norm = normalise_mac(mac)
+            if norm in seen_macs:
+                problems.append(f"{n.label}:{if_name}: MAC {norm} is also given to {seen_macs[norm]}")
+            seen_macs[norm] = f"{n.label}:{if_name}"
     if problems:
         raise BuildError("; ".join(problems))
 
@@ -185,10 +208,14 @@ def build_topology(
             loopback = (dev.get("loopback") or ["Loopback0"])[0]
             interfaces.append({"id": f"i{len(interfaces)}", "label": loopback, "type": "loopback"})
         default_count = int(dev.get("default_count") or 0)
-        needed = max([phys[n.label].index(x) + 1 for x in used[n.label]] + [default_count])
+        pinned = used[n.label] | set(n.macs)
+        needed = max([phys[n.label].index(x) + 1 for x in pinned] + [default_count])
         for slot, name in enumerate(phys[n.label][:needed]):
             iid = f"i{len(interfaces)}"
-            interfaces.append({"id": iid, "label": name, "type": "physical", "slot": slot})
+            entry: dict[str, Any] = {"id": iid, "label": name, "type": "physical", "slot": slot}
+            if name in n.macs:
+                entry["mac_address"] = normalise_mac(n.macs[name])
+            interfaces.append(entry)
             iface_ids[(n.label, name)] = iid
         x, y = _layout(idx, len(nodes))
         x = n.x if n.x is not None else x

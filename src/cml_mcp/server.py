@@ -21,6 +21,7 @@ from cml_mcp.tools import (
     dangerous,
     definitions,
     images,
+    interfaces,
     lab_writes,
     labs,
     link_scenarios,
@@ -57,6 +58,8 @@ by default only real changes, by section, with IOS's own default lines hidden).
 Outside networks: cml_list_external_connectors, then an external_connector node in cml_build_lab.
 Degraded networks: cml_apply_link_scenario (wan-good, wan-satellite, lossy-wifi, brownout, flap) and
 cml_clear_link_scenarios; cml_get_link_scenarios shows values, expected ping deltas and flap jobs.
+One-sided failure (only one end loses carrier): cml_set_interface_state; cml_set_link_state drops both.
+Stable MACs (ISE MAB, DHCP bindings): cml_update_interface, or `macs` on a cml_build_lab node.
 Proving connectivity: cml_check_reachability (success % and average RTT). BOOTED is not a converged
 network: right after a boot, pass wait_seconds so it retries until routing protocols have converged;
 addresses: cml_get_layer3_addresses(source='cli').
@@ -127,6 +130,7 @@ def create_server(
             smart.register,
             lab_writes.register,
             topology_writes.register,
+            interfaces.register,
             build_tool.register,
             cli.register,
             configs.register,
