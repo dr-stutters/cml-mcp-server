@@ -4,7 +4,7 @@
 
 import re
 import time
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from fastmcp.tools import ToolResult
@@ -21,9 +21,9 @@ from cml_mcp._core import (
 from cml_mcp.client import CmlApp
 from cml_mcp.console import clean, mask_secrets
 from cml_mcp.convergence import wait_converged
-from cml_mcp.diff import diff_topologies
+from cml_mcp.diff import config_changes, diff_topologies
 from cml_mcp.licence import licensed
-from cml_mcp.tools.common import LabRef, parse_topology_yaml, shaped, strip_console_prefixes
+from cml_mcp.tools.common import LabRef, config_text, parse_topology_yaml, shaped, strip_console_prefixes
 from cml_mcp.tools.configs import device_configs
 
 Timeout = Annotated[
@@ -32,10 +32,15 @@ Timeout = Annotated[
 ]
 
 
-async def use_running_configs(app: CmlApp, lab: dict[str, Any], topology: dict[str, Any]) -> list[str]:
+async def use_running_configs(
+    app: CmlApp, lab: dict[str, Any], topology: dict[str, Any], only: set[str] | None = None
+) -> list[str]:
     """Replace each booted node's stored config in an exported topology with its running config;
-    returns '<lab>/<node>' for nodes whose running config couldn't be read (they keep day-0)."""
+    returns '<lab>/<node>' for nodes whose running config couldn't be read (they keep day-0).
+    `only`: just these node labels (the others are not read)."""
     nodes = [n for n in await app.list_nodes(lab["id"]) if licensed(n)]
+    if only is not None:
+        nodes = [n for n in nodes if str(n.get("label")) in only]
     booted = [n for n in nodes if n.get("state") == "BOOTED"]
     try:
         got = await device_configs(app, lab["id"], booted, purpose="cml_diff_lab", strict=False)
@@ -132,6 +137,26 @@ def register(reg: ToolRegistrar) -> None:
             str | None,
             Field(description="Or compare against this topology YAML (e.g. an earlier cml_export_lab)"),
         ] = None,
+        against: Annotated[
+            Literal["day0", "saved"] | None,
+            Field(
+                description="Or a lab-wide drift check, node by node: each booted node's running config "
+                "(read from its console) against 'day0' = its configuration stored in CML, or 'saved' = "
+                "its startup-config. Instead of other_lab / baseline_yaml"
+            ),
+        ] = None,
+        nodes: Annotated[
+            list[str] | None,
+            Field(max_length=50, description="Only these nodes (labels or ids); default: every node"),
+        ] = None,
+        view: Annotated[
+            Literal["full", "sections"],
+            Field(
+                description="'full' (default): unified config diff text per node. 'sections': per node, "
+                "the changed configuration sections as data ({section, change, added, removed}), "
+                "compared by section like cml_diff_node_config"
+            ),
+        ] = "full",
         include_configs: Annotated[
             bool, Field(description="Also diff the nodes' day-0 configurations")
         ] = True,
@@ -148,21 +173,31 @@ def register(reg: ToolRegistrar) -> None:
         interfaces, unified config diff) and links only in one side, matched by node label and
         interface name. Use it to check drift from a baseline or what a rebuild changed. Config
         secrets are masked. running_configs=true diffs what the devices run now (slower: one
-        console session per node), by section and without the lines IOS prints by itself."""
-        if (other_lab is None) == (baseline_yaml is None):
-            raise InvalidRequest("Give exactly one of other_lab or baseline_yaml to compare against.")
+        console session per node), by section and without the lines IOS prints by itself.
+        against='day0'|'saved' instead gives a lab-wide drift view: every booted node's running
+        config against its own day-0 or startup config, by node and (view='sections') by section -
+        e.g. after cml_configure_nodes or a Catalyst Center template push. nodes=[...] narrows
+        any comparison to those nodes."""
+        given = sum(x is not None for x in (other_lab, baseline_yaml, against))
+        if given != 1:
+            raise InvalidRequest("Give exactly one of other_lab, baseline_yaml or against to compare with.")
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab)
+        only: set[str] | None = None
+        if nodes:
+            only = {str((await app.resolve_node(info["id"], ref))["label"]) for ref in nodes}
+        if against is not None:
+            return shaped(await drift(app, info, against, only, view))
         a = parse_topology_yaml(await app.api.get(f"/labs/{info['id']}/download", expect="text"))
         missing: list[str] = []
         if running_configs:
-            missing += await use_running_configs(app, info, a)
+            missing += await use_running_configs(app, info, a, only)
         if other_lab is not None:
             other = await app.resolve_lab(other_lab)
             b = parse_topology_yaml(await app.api.get(f"/labs/{other['id']}/download", expect="text"))
             b_name = str(other.get("lab_title"))
             if running_configs:
-                missing += await use_running_configs(app, other, b)
+                missing += await use_running_configs(app, other, b, only)
         else:
             b = parse_topology_yaml(baseline_yaml or "")
             b_name = "baseline"
@@ -175,7 +210,75 @@ def register(reg: ToolRegistrar) -> None:
             semantic=running_configs,
             # the lab side runs; a baseline YAML keeps its stored day-0 configs (another lab runs too)
             day0="b" if running_configs and other_lab is None else None,
+            sections=view == "sections",
+            only=only,
         )
         if missing:
             result["running_config_unavailable"] = sorted(set(missing))
         return shaped(result)
+
+
+async def drift(
+    app: CmlApp, lab: dict[str, Any], against: str, only: set[str] | None, view: str
+) -> dict[str, Any]:
+    """Each booted node's running config against its day-0 (stored in CML) or startup config."""
+    lid = lab["id"]
+    nodes = [n for n in await app.list_nodes(lid) if licensed(n)]
+    if only is not None:
+        nodes = [n for n in nodes if str(n.get("label")) in only]
+    booted = [n for n in nodes if n.get("state") == "BOOTED"]
+    unavailable: dict[str, str] = {
+        str(n.get("label")): f"{n.get('state')}, not BOOTED" for n in nodes if n not in booted
+    }
+    purpose = "cml_diff_lab"
+    running = await device_configs(app, lid, booted, purpose=purpose, strict=False)
+    saved: dict[str, str] = {}
+    if against == "saved" and running:
+        ready = [n for n in booted if str(n.get("label")) in running]
+        saved = await device_configs(app, lid, ready, which="startup", purpose=purpose, strict=False)
+    changed: dict[str, Any] = {}
+    unchanged: list[str] = []
+    for n in booted:
+        label = str(n.get("label"))
+        if label not in running:
+            unavailable[label] = "running config could not be read from the console"
+            continue
+        if against == "day0":
+            other, other_name = config_text(await app.api.get(f"/labs/{lid}/nodes/{n['id']}")) or "", "day-0"
+        else:
+            other, other_name = saved.get(label, ""), "startup-config"
+            if label not in saved or ("not present" in other[:200].lower() and len(other) < 200):
+                unavailable[label] = "no saved startup-config (compare with against='day0')"
+                continue
+        res = config_changes(
+            other,
+            running[label],
+            a_name=f"{label} ({other_name})",
+            b_name=f"{label} (running)",
+            day0="a" if against == "day0" else None,
+            structured=view == "sections",
+        )
+        if res["identical"]:
+            unchanged.append(label)
+            continue
+        row: dict[str, Any] = {k: res[k] for k in ("sections_changed", "lines_added", "lines_removed")}
+        if view == "sections":
+            row["sections"] = res.get("sections", [])
+            if res.get("sections_omitted"):
+                row["sections_omitted"] = res["sections_omitted"]
+        else:
+            row["diff"] = res.get("diff", "")
+        if res.get("defaults_hidden"):
+            row["defaults_hidden"] = res["defaults_hidden"]
+        changed[label] = row
+    out: dict[str, Any] = {
+        "lab": lab.get("lab_title"),
+        "against": against,
+        "view": view,
+        "identical": not changed,
+        "changed": changed,
+        "unchanged": unchanged,
+    }
+    if unavailable:
+        out["unavailable"] = unavailable
+    return out

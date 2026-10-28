@@ -88,6 +88,10 @@
       "tier": "write",
       "title": "Configure node via CLI"
     },
+    "cml_configure_nodes": {
+      "tier": "write",
+      "title": "Configure several nodes via CLI"
+    },
     "cml_connect_nodes": {
       "tier": "write",
       "title": "Connect nodes"
