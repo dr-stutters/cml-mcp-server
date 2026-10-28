@@ -7,7 +7,7 @@ import contextlib
 from typing import Annotated, Any
 
 from fastmcp import Context
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from cml_mcp._core import (
     Confirm,
@@ -15,11 +15,12 @@ from cml_mcp._core import (
     Plan,
     ToolRegistrar,
     UpstreamError,
+    field_changes,
     get_client,
     get_settings,
     poll_until,
 )
-from cml_mcp.build import to_yaml
+from cml_mcp.build import PRIORITY_MAX, PRIORITY_MIN, boot_order, to_yaml
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
 from cml_mcp.licence import (
@@ -38,6 +39,64 @@ from cml_mcp.tools.common import LabRef, parse_topology_yaml, state_counts
 from cml_mcp.tools.smart import Timeout
 
 Wait = Annotated[bool, Field(description="Wait until the operation has finished")]
+
+# Lab autostart: the delay (seconds) before the lab of the next priority starts after a host boot.
+AUTOSTART_DELAY_MAX = 86400
+
+
+class StagingUpdate(BaseModel):
+    """A change to the lab's node staging (CML NodeStaging); unset fields keep their value."""
+
+    enabled: bool | None = Field(default=None, description="Start nodes in priority order (highest first)")
+    start_remaining: bool | None = Field(
+        default=None, description="Also start the nodes with no priority, after the others"
+    )
+    abort_on_failure: bool | None = Field(
+        default=None, description="Stop the staged start when a node fails to boot"
+    )
+
+
+class AutostartUpdate(BaseModel):
+    """A change to the lab's autostart (CML LabAutostart); unset fields keep their value."""
+
+    enabled: bool | None = Field(default=None, description="Start the lab when the CML host boots")
+    priority: int | None = Field(
+        default=None,
+        ge=PRIORITY_MIN,
+        le=PRIORITY_MAX,
+        description="Order among autostarted labs (0-10000, higher first)",
+    )
+    delay: int | None = Field(
+        default=None,
+        ge=0,
+        le=AUTOSTART_DELAY_MAX,
+        description="Seconds before the lab with the next priority is autostarted",
+    )
+
+
+STAGING_DEFAULTS = {"enabled": False, "start_remaining": True, "abort_on_failure": False}
+AUTOSTART_DEFAULTS: dict[str, Any] = {"enabled": False, "priority": None, "delay": None}
+
+
+def staged_start(info: dict[str, Any], nodes: list[dict[str, Any]]) -> dict[str, Any]:
+    """What cml_start_lab's preview says about the order: the staged boot_order when the lab's node
+    staging is on, else a note when nodes have priorities that an all-at-once start ignores."""
+    staging = info.get("node_staging") or {}
+    prioritised = any(isinstance(n.get("priority"), int) for n in nodes)
+    if staging.get("enabled"):
+        order = boot_order(nodes)
+        if not staging.get("start_remaining", True) and order and order[-1]["priority"] is None:
+            order[-1] = {**order[-1], "skipped": True}
+        return {
+            "node_staging": {**STAGING_DEFAULTS, **staging},
+            "boot_order": order,
+        }
+    if prioritised:
+        return {
+            "boot_order_note": "node staging is off: every node starts at once and the priorities are "
+            "ignored (cml_set_lab_boot staging={'enabled': true} to start them in order)"
+        }
+    return {}
 
 
 async def known_definitions(app: CmlApp) -> dict[str, dict[str, Any]]:
@@ -217,10 +276,11 @@ def register(reg: ToolRegistrar) -> None:
         timeout: Timeout = None,  # noqa: ASYNC109 - overall wait, handled by poll_until
         confirm: Confirm = None,
     ) -> dict[str, Any]:
-        """Start every node in a lab (boot order follows node priority), then by default wait until
-        all nodes have booted (converged) and report how long it took. With wait=false it returns at
-        once; follow up with cml_wait_for_converged. The preview shows how many nodes will start and
-        the RAM they need."""
+        """Start every node in a lab, then by default wait until all nodes have booted (converged)
+        and report how long it took. With wait=false it returns at once; follow up with
+        cml_wait_for_converged. The preview shows how many nodes will start, the RAM they need and,
+        when the lab's node staging is on (cml_set_lab_boot), the boot_order: one group per node
+        priority, highest first, each started after the one before has booted."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
@@ -243,6 +303,7 @@ def register(reg: ToolRegistrar) -> None:
                 **({"ram": memory} if memory else {}),
                 "licensed_nodes_to_start": needed,
                 **({"licences": usage if problem else compact_usage(usage)} if usage else {}),
+                **staged_start(info, stopped),
                 "wait": wait,
             },
             side_effects=[memory["warning"]] if memory and memory.get("warning") else [],
@@ -484,6 +545,112 @@ def register(reg: ToolRegistrar) -> None:
             ctx,
             tool="cml_extract_node_configs",
             args={"lab": lab, "node": node},
+            confirm=confirm,
+            plan=plan,
+            apply=apply,
+        )
+
+    @reg.write(title="Set lab boot order and autostart", idempotent=True)
+    async def cml_set_lab_boot(
+        ctx: Context,
+        lab: LabRef,
+        staging: Annotated[
+            StagingUpdate | None,
+            Field(
+                description="Node staging: {enabled, start_remaining, abort_on_failure}; unset fields keep "
+                "their value"
+            ),
+        ] = None,
+        autostart: Annotated[
+            AutostartUpdate | None,
+            Field(
+                description="Autostart on CML host boot: {enabled, priority, delay}; unset fields keep "
+                "their value. Turning it on needs MCP_ENABLE_DANGEROUS"
+            ),
+        ] = None,
+        confirm: Confirm = None,
+    ) -> dict[str, Any]:
+        """Set a lab's boot behaviour: node staging (start the nodes in priority order, highest first,
+        each priority after the one before has booted, so SD-WAN Validator/Manager/Controller, FMC or ISE
+        are up before the devices that join them) and autostart (start the lab when the CML host
+        boots, ordered by autostart priority with a delay between priorities). Give the nodes their
+        priority with cml_update_node(priority=...) or in cml_build_lab / recipe node specs. The preview
+        shows each field's old and new value and the staged boot_order. Turning autostart on is
+        dangerous tier (the lab then takes node licences and RAM after every host reboot): it needs
+        MCP_ENABLE_DANGEROUS. Read back with cml_get_lab."""
+        app: CmlApp = get_client(ctx)
+        info = await app.resolve_lab(lab, exact=True)
+        lid = info["id"]
+        current = await app.api.get(f"/labs/{lid}")
+        cur_staging = {**STAGING_DEFAULTS, **(current.get("node_staging") or {})}
+        cur_autostart = {**AUTOSTART_DEFAULTS, **(current.get("autostart") or {})}
+        body: dict[str, Any] = {}
+        changes: dict[str, Any] = {}
+        if staging is not None:
+            new = {**cur_staging, **staging.model_dump(exclude_none=True)}
+            if diff := field_changes(cur_staging, new):
+                body["node_staging"] = new
+                changes.update({f"node_staging.{k}": v for k, v in diff.items()})
+        if autostart is not None:
+            new = {**cur_autostart, **autostart.model_dump(exclude_none=True)}
+            if diff := field_changes(cur_autostart, new):
+                body["autostart"] = new
+                changes.update({f"autostart.{k}": v for k, v in diff.items()})
+        blockers: list[str] = []
+        if not body:
+            blockers.append(
+                "Nothing to change: every given field already has that value"
+                if staging is not None or autostart is not None
+                else "Nothing to change: give staging and/or autostart"
+            )
+        turns_on = bool((body.get("autostart") or {}).get("enabled")) and not cur_autostart.get("enabled")
+        if turns_on and not get_settings(ctx).mcp_enable_dangerous:
+            blockers.append(
+                "Turning autostart on is dangerous tier (the lab starts, taking node licences and RAM, after "
+                "every CML host reboot): it needs MCP_ENABLE_DANGEROUS"
+            )
+        nodes = await app.list_nodes(lid)
+        staging_after = body.get("node_staging") or cur_staging
+        details: dict[str, Any] = {"changes": changes}
+        if staging_after.get("enabled"):
+            details["boot_order"] = boot_order(nodes)
+            if not any(isinstance(n.get("priority"), int) for n in nodes):
+                details["boot_order_note"] = (
+                    "no node has a priority yet, so a staged start is all at once: set them with "
+                    "cml_update_node(priority=...)"
+                )
+        side_effects = []
+        if turns_on:
+            side_effects.append(
+                "The lab starts by itself after every CML host reboot (node licences and RAM are taken then)"
+            )
+        plan = Plan(
+            f"Set boot behaviour of lab {info.get('lab_title')!r}" + ("" if body else " (no changes)"),
+            details=details,
+            fingerprint={"node_staging": cur_staging, "autostart": cur_autostart},
+            blockers=blockers,
+            side_effects=side_effects,
+            blast_radius=1,
+        )
+
+        async def apply() -> Any:
+            res = await app.api.patch(f"/labs/{lid}", body)
+            out = res if isinstance(res, dict) else {}
+            return {
+                "id": lid,
+                "changed": sorted(changes),
+                "node_staging": out.get("node_staging", body.get("node_staging", cur_staging)),
+                "autostart": out.get("autostart", body.get("autostart", cur_autostart)),
+            }
+
+        return await preview_or_apply(
+            ctx,
+            tool="cml_set_lab_boot",
+            args={
+                "lab": lab,
+                "staging": staging.model_dump() if staging else None,
+                "autostart": autostart.model_dump() if autostart else None,
+            },
             confirm=confirm,
             plan=plan,
             apply=apply,

@@ -53,17 +53,24 @@ verify:
 build:
   title: mcp-cat-sdwan
   description: Catalyst SD-WAN 20.18.3 fabric - controllers, hub1, br1, br2 and a host behind each (cml-mcp-server recipe cat-sdwan-fabric)
+  # boot order (CML node staging, highest priority first, each after the one before has booted): the
+  # bridges and WAN switches, then Validator, Manager and Controller, then the edges and hosts (Catalyst SD-WAN
+  # Getting Started: controllers before edges, so the edges join on their first boot)
+  node_staging: {enabled: true, start_remaining: true, abort_on_failure: false}
   nodes:
     - label: ext
+      priority: 1000
       definition: external_connector
       config: System Bridge
       x: 0
       y: 0
     - label: mgmt-sw
+      priority: 1000
       definition: unmanaged_switch
       x: 0
       y: 120
     - label: manager
+      priority: 800
       definition: cat-sdwan-manager
       # 32 GB: at 16 GB the configuration database crash-loops. 4 vCPUs: CML keeps a node QUEUED once the
       # host's allocated vCPUs would pass 2x its cores (64 on the 32-core lab controller), and 8 rarely fit
@@ -170,6 +177,7 @@ build:
               </vpn>
             </config>
     - label: validator
+      priority: 900
       definition: cat-sdwan-validator
       x: 0
       y: 280
@@ -260,6 +268,7 @@ build:
               </vpn>
             </config>
     - label: controller
+      priority: 700
       definition: cat-sdwan-controller
       x: 240
       y: 280
@@ -351,14 +360,17 @@ build:
               </vpn>
             </config>
     - label: inet
+      priority: 1000
       definition: unmanaged_switch
       x: 0
       y: 440
     - label: mpls
+      priority: 1000
       definition: unmanaged_switch
       x: -240
       y: 600
     - label: wan
+      priority: 1000
       definition: alpine
       x: 0
       y: 600
@@ -374,6 +386,7 @@ build:
         ip addr add 10.60.2.254/24 dev eth1
         sysctl -w net.ipv4.ip_forward=1
     - label: hub1
+      priority: 500
       definition: cat-sdwan-edge
       x: -360
       y: 760
@@ -485,6 +498,7 @@ build:
           !
         --==BOUNDARY==--
     - label: br1
+      priority: 500
       definition: cat-sdwan-edge
       x: 0
       y: 760
@@ -596,6 +610,7 @@ build:
           !
         --==BOUNDARY==--
     - label: br2
+      priority: 500
       definition: cat-sdwan-edge
       x: 360
       y: 760
@@ -707,6 +722,7 @@ build:
           !
         --==BOUNDARY==--
     - label: host-hub1
+      priority: 100
       definition: ubuntu
       x: -360
       y: 920
@@ -726,6 +742,7 @@ build:
           - ip addr add 10.61.100.10/24 dev ens2
           - ip route replace default via 10.61.100.1
     - label: host-br1
+      priority: 100
       definition: ubuntu
       x: 0
       y: 920
@@ -745,6 +762,7 @@ build:
           - ip addr add 10.61.200.10/24 dev ens2
           - ip route replace default via 10.61.200.1
     - label: host-br2
+      priority: 100
       definition: ubuntu
       x: 360
       y: 920

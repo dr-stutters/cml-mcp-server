@@ -21,7 +21,7 @@ from cml_mcp._core import (
     get_settings,
     poll_until,
 )
-from cml_mcp.build import is_placeholder
+from cml_mcp.build import PRIORITY_MAX, PRIORITY_MIN, is_placeholder
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
 from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed
@@ -244,21 +244,38 @@ def register(reg: ToolRegistrar) -> None:
             str | None, Field(description="Console login password (CML pyATS password)")
         ] = None,
         enable_password: Annotated[str | None, Field(description="Enable secret (CML pyATS)")] = None,
+        priority: Annotated[
+            int | None,
+            Field(
+                ge=PRIORITY_MIN,
+                le=PRIORITY_MAX,
+                description="Boot priority (0-10000, higher boots first) when the lab's node staging is on",
+            ),
+        ] = None,
         confirm: Confirm = None,
     ) -> dict[str, Any]:
-        """Change a node's label, tags, position, resources or console login. Label, tags, position
-        and login can change at any time; RAM and vCPUs only while the node is wiped
-        (DEFINED_ON_CORE). The login (CML's pyATS credentials) is what cml_run_commands and
-        cml_configure_node use: update it after changing a device's password. The preview shows each
-        field's old and new value (passwords only as 'changed'). For the configuration use
-        cml_set_node_config."""
+        """Change a node's label, tags, position, boot priority, resources or console login. Label,
+        tags, position, priority and login can change at any time; RAM and vCPUs only while the node is
+        wiped (DEFINED_ON_CORE). The priority orders the lab's start only with node staging on
+        (cml_set_lab_boot): higher first, so controllers boot before the devices that join them. The
+        login (CML's pyATS credentials) is what cml_run_commands and cml_configure_node use: update it
+        after changing a device's password. The preview shows each field's old and new value
+        (passwords only as 'changed'). For the configuration use cml_set_node_config."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
         n = await app.resolve_node(lid, node, exact=True)
         desired = {
             k: v
-            for k, v in {"label": label, "tags": tags, "x": x, "y": y, "ram": ram, "cpus": cpus}.items()
+            for k, v in {
+                "label": label,
+                "tags": tags,
+                "x": x,
+                "y": y,
+                "ram": ram,
+                "cpus": cpus,
+                "priority": priority,
+            }.items()
             if v is not None
         }
         changes = field_changes(n, desired)  # partial on purpose: the PATCH sends only these fields
@@ -322,6 +339,7 @@ def register(reg: ToolRegistrar) -> None:
                 "login_username": login_username,
                 "login_password": login_password,
                 "enable_password": enable_password,
+                "priority": priority,
             },
             confirm=confirm,
             plan=plan,

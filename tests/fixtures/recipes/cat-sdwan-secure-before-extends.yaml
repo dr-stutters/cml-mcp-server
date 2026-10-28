@@ -158,17 +158,21 @@ verify:
 build:
   title: mcp-cat-sdwan
   description: Catalyst SD-WAN 20.18.3 fabric with FTDv at hub1 (service chain) and behind br1, alice and bob behind br1-ftd (cml-mcp-server recipe cat-sdwan-secure)
+  node_staging: {enabled: true, start_remaining: true, abort_on_failure: false}
   nodes:
     - label: ext
+      priority: 1000
       definition: external_connector
       config: System Bridge
       x: 0
       y: 0
     - label: mgmt-sw
+      priority: 1000
       definition: unmanaged_switch
       x: 0
       y: 120
     - label: manager
+      priority: 800
       definition: cat-sdwan-manager
       # 32 GB: at 16 GB the configuration database crash-loops. 4 vCPUs: CML keeps a node QUEUED once the
       # host's allocated vCPUs would pass 2x its cores (64 on the 32-core lab controller), and 8 rarely fit
@@ -275,6 +279,7 @@ build:
               </vpn>
             </config>
     - label: validator
+      priority: 900
       definition: cat-sdwan-validator
       x: 0
       y: 280
@@ -365,6 +370,7 @@ build:
               </vpn>
             </config>
     - label: controller
+      priority: 700
       definition: cat-sdwan-controller
       x: 240
       y: 280
@@ -456,14 +462,17 @@ build:
               </vpn>
             </config>
     - label: inet
+      priority: 1000
       definition: unmanaged_switch
       x: 0
       y: 440
     - label: mpls
+      priority: 1000
       definition: unmanaged_switch
       x: -240
       y: 600
     - label: wan
+      priority: 1000
       definition: alpine
       x: 0
       y: 600
@@ -479,6 +488,7 @@ build:
         ip addr add 10.60.2.254/24 dev eth1
         sysctl -w net.ipv4.ip_forward=1
     - label: hub1
+      priority: 500
       definition: cat-sdwan-edge
       # 8 GB / 4 vCPU: UTD (IPS, URL filtering, AMP) needs 8 GB and the heavier service-plane profile
       ram: 8192
@@ -611,6 +621,7 @@ build:
           !
         --==BOUNDARY==--
     - label: br1
+      priority: 500
       definition: cat-sdwan-edge
       ram: 8192
       cpus: 4
@@ -731,6 +742,7 @@ build:
           !
         --==BOUNDARY==--
     - label: br2
+      priority: 500
       definition: cat-sdwan-edge
       ram: 8192
       cpus: 4
@@ -844,6 +856,7 @@ build:
           !
         --==BOUNDARY==--
     - label: host-hub1
+      priority: 100
       definition: ubuntu
       x: -360
       y: 920
@@ -863,6 +876,7 @@ build:
           - ip addr add 10.61.100.10/24 dev ens2
           - ip route replace default via 10.61.100.1
     - label: host-br1
+      priority: 100
       definition: ubuntu
       x: 0
       y: 920
@@ -882,6 +896,7 @@ build:
           - ip addr add 10.61.200.10/24 dev ens2
           - ip route replace default via 10.61.200.1
     - label: host-br2
+      priority: 100
       definition: ubuntu
       x: 360
       y: 920
@@ -901,6 +916,7 @@ build:
           - ip addr add 10.61.201.10/24 dev ens2
           - ip route replace default via 10.61.201.1
     - label: hub-ftd
+      priority: 500
       definition: ftdv
       x: -720
       y: 760
@@ -928,6 +944,7 @@ build:
           "ManageLocally": "No"
         }
     - label: br1-ftd
+      priority: 500
       definition: ftdv
       x: 0
       y: 1080
@@ -955,10 +972,12 @@ build:
           "ManageLocally": "No"
         }
     - label: br1-lan
+      priority: 1000
       definition: unmanaged_switch
       x: 0
       y: 1240
     - label: alice
+      priority: 100
       definition: alpine
       ram: 512
       x: -160
@@ -973,6 +992,7 @@ build:
         ip addr add 10.61.220.10/24 dev eth0
         ip route add default via 10.61.220.1
     - label: bob
+      priority: 100
       definition: alpine
       ram: 512
       x: 160

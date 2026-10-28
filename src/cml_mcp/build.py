@@ -14,6 +14,24 @@ from cml_mcp.macs import custom_mac_problem, mac_problem, normalise_mac
 # Nodes that never take a node licence (and boot instantly).
 UNLICENSED_DEFINITIONS = frozenset({"external_connector", "unmanaged_switch"})
 
+# Node priority range (CML 2.10 node staging); topology schema 0.3.1 carries priority and node_staging.
+PRIORITY_MIN, PRIORITY_MAX = 0, 10000
+TOPOLOGY_VERSION, STAGED_TOPOLOGY_VERSION = "0.3.0", "0.3.1"
+
+
+def boot_order(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The staged start order of `nodes` (dicts with label and priority): one group per priority,
+    highest first, then the unset nodes (started last when node_staging.start_remaining)."""
+    groups: dict[int | None, list[str]] = {}
+    for n in nodes:
+        p = n.get("priority")
+        groups.setdefault(p if isinstance(p, int) else None, []).append(str(n.get("label")))
+    ranked = sorted((k for k in groups if k is not None), reverse=True)
+    order: list[dict[str, Any]] = [{"priority": p, "nodes": groups[p]} for p in ranked]
+    if None in groups:
+        order.append({"priority": None, "nodes": groups[None]})
+    return order
+
 
 class NodeCredentials(BaseModel):
     username: str | None = Field(default=None, description="Login user (pyATS username)")
@@ -60,6 +78,26 @@ class NodeSpec(BaseModel):
     )
     x: int | None = Field(default=None, description="Canvas x position (default: grid layout)")
     y: int | None = Field(default=None, description="Canvas y position (default: grid layout)")
+    priority: int | None = Field(
+        default=None,
+        ge=PRIORITY_MIN,
+        le=PRIORITY_MAX,
+        description="Boot priority (0-10000, higher boots first) when the lab's node staging is on: give "
+        "controllers (SD-WAN Validator/Manager/Controller, FMC, ISE) a higher priority than the devices "
+        "that join them. Unset nodes start last, if at all (node_staging.start_remaining)",
+    )
+
+
+class NodeStaging(BaseModel):
+    """CML 2.10 NodeStaging: start the lab's nodes in priority order, one priority at a time."""
+
+    enabled: bool = Field(default=True, description="Start nodes in priority order (highest first)")
+    start_remaining: bool = Field(
+        default=True, description="Also start the nodes with no priority, after the others"
+    )
+    abort_on_failure: bool = Field(
+        default=False, description="Stop the staged start when a node fails to boot"
+    )
 
 
 class BuildError(ValueError):
@@ -114,10 +152,12 @@ def build_topology(
     connectors: list[dict[str, Any]] | None = None,
     notes: list[str] | None = None,
     annotations: list[dict[str, Any]] | None = None,
+    node_staging: NodeStaging | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """(topology dict, human-readable link list). Raises BuildError for anything CML would reject.
     `connectors` (GET /system/external_connectors) lets external_connector configs be checked;
-    `notes` collects non-fatal remarks for the preview."""
+    `notes` collects non-fatal remarks for the preview. Node priorities and `node_staging` go into the
+    topology (schema 0.3.1, as CML 2.10 exports it)."""
     problems: list[str] = []
     notes = notes if notes is not None else []
     labels = [n.label for n in nodes]
@@ -256,6 +296,8 @@ def build_topology(
             node["ram"] = n.ram
         if n.cpus:
             node["cpus"] = n.cpus
+        if n.priority is not None:
+            node["priority"] = n.priority
         topo_nodes.append(node)
     node_ids = {n.label: f"n{i}" for i, n in enumerate(nodes)}
     topo_links = [
@@ -268,11 +310,15 @@ def build_topology(
         }
         for i, (a, ia, b, ib) in enumerate(resolved)
     ]
-    topology = {
-        "lab": {"title": title, "description": description or "built by cml-mcp-server", "version": "0.3.0"},
-        "nodes": topo_nodes,
-        "links": topo_links,
+    staged = node_staging is not None or any(n.priority is not None for n in nodes)
+    lab: dict[str, Any] = {
+        "title": title,
+        "description": description or "built by cml-mcp-server",
+        "version": STAGED_TOPOLOGY_VERSION if staged else TOPOLOGY_VERSION,
     }
+    if node_staging is not None:
+        lab["node_staging"] = node_staging.model_dump()
+    topology = {"lab": lab, "nodes": topo_nodes, "links": topo_links}
     if annotations:
         topology["annotations"] = annotations
     return topology, [f"{a}:{ia}<->{b}:{ib}" for a, ia, b, ib in resolved]

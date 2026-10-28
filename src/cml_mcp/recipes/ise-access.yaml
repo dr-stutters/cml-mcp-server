@@ -48,13 +48,18 @@ verify:
 build:
   title: mcp-cml-ise
   description: cat9000v access switch with 802.1X (IBNS 2.0) / MAB against ISE + MAB and EAP-TLS clients (cml-mcp-server recipe ise-access)
+  # boot order (CML node staging, highest priority first): bridges, the access switch, then the clients
+  # (ISE and the DC run outside CML and are up first)
+  node_staging: {enabled: true, start_remaining: true, abort_on_failure: false}
   nodes:
     - label: ext
+      priority: 1000
       definition: external_connector
       config: System Bridge
       x: 0
       y: 0
     - label: sw1
+      priority: 500
       definition: cat9000v-uadp
       x: 0
       y: 160
@@ -166,6 +171,7 @@ build:
          transport input ssh
         end
     - label: client
+      priority: 100
       definition: alpine
       x: 0
       y: 320
@@ -180,6 +186,7 @@ build:
         # this boot script: the console only gets a login prompt after it finishes)
         (udhcpc -i eth0 -f -t 0 -T 10 >/dev/null 2>&1 &)
     - label: eaptls-client
+      priority: 100
       definition: ubuntu
       x: 200
       y: 320
@@ -241,6 +248,7 @@ build:
                 dhcp4: true
                 optional: true
     - label: ext-nat
+      priority: 1000
       definition: external_connector
       config: NAT
       x: 400

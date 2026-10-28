@@ -32,12 +32,16 @@ verify:
 build:
   title: mcp-cml-fmc-local
   description: Private FMCv + FTDv for destructive FMC tests (cml-mcp-server recipe fmc-local)
+  # boot order (CML node staging, highest priority first): bridges and switches, the FMC, then the FTDv
+  # (Secure Firewall Getting Started: the FMC is reachable before the FTD registers)
+  node_staging: {enabled: true, start_remaining: true, abort_on_failure: false}
   nodes:
-    - {label: ext-mgmt, definition: external_connector, config: System Bridge, x: 0, y: -160}
-    - {label: mgmt-sw, definition: unmanaged_switch, x: 0, y: -40}
-    - {label: ext-outside, definition: external_connector, config: System Bridge, x: 400, y: 120}
-    - {label: inside-sw, definition: unmanaged_switch, x: 200, y: 320}
+    - {label: ext-mgmt, definition: external_connector, priority: 1000, config: System Bridge, x: 0, y: -160}
+    - {label: mgmt-sw, definition: unmanaged_switch, priority: 1000, x: 0, y: -40}
+    - {label: ext-outside, definition: external_connector, priority: 1000, config: System Bridge, x: 400, y: 120}
+    - {label: inside-sw, definition: unmanaged_switch, priority: 1000, x: 200, y: 320}
     - label: fmc
+      priority: 800
       definition: fmcv
       x: -200
       y: 120
@@ -59,6 +63,7 @@ build:
             "IPv6Gw": ""
         }
     - label: ftd
+      priority: 500
       definition: ftdv
       x: 200
       y: 120

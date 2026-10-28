@@ -47,6 +47,7 @@ NODE_FIELDS = (
     "parameters",
     "ram",
     "cpus",
+    "priority",
 )
 
 
