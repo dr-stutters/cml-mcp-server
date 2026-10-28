@@ -23,6 +23,7 @@ from cml_mcp._core import (
 from cml_mcp.build import PRIORITY_MAX, PRIORITY_MIN, boot_order, to_yaml
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
+from cml_mcp.extract import extract_error, split_extractable
 from cml_mcp.licence import (
     compact_usage,
     explain_licence_error,
@@ -514,7 +515,8 @@ def register(reg: ToolRegistrar) -> None:
     ) -> dict[str, Any]:
         """Save the running configuration of booted nodes into their stored day-0 configuration (what
         the CML UI calls 'extract configuration'), so it survives a wipe and shows up in
-        cml_export_lab. Overwrites the stored configs of those nodes."""
+        cml_export_lab. Overwrites the stored configs of those nodes. Nodes whose definition has no config
+        extraction (alpine and other Linux hosts) are left out and listed under skipped_no_extract."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
@@ -524,11 +526,24 @@ def register(reg: ToolRegistrar) -> None:
             targets = await app.list_nodes(lid)
         booted = [n for n in targets if n.get("state") == "BOOTED"]
         skipped = [n.get("label") for n in targets if n.get("state") != "BOOTED"]
+        booted, no_extract = await split_extractable(app, booted)
+        blocker = (
+            "No booted node whose definition supports config extraction"
+            if no_extract
+            else "No booted nodes to extract configuration from"
+        )
+        overwrite = f"Overwrites the stored day-0 config of {len(booted)} node(s) with their running config"
         plan = Plan(
             f"Save running config of {len(booted)} node(s) in {info.get('lab_title')!r}",
-            details={"nodes": [n.get("label") for n in booted], "skipped_not_booted": skipped},
+            details={
+                "nodes": [n.get("label") for n in booted],
+                "skipped_not_booted": skipped,
+                **({"skipped_no_extract": no_extract} if no_extract else {}),
+            },
             fingerprint=[(n["id"], n.get("state")) for n in targets],
-            blockers=[] if booted else ["No booted nodes to extract configuration from"],
+            side_effects=[overwrite] if booted else [],
+            blast_radius=len(booted),
+            blockers=[] if booted else [blocker],
         )
 
         async def apply() -> Any:
@@ -538,7 +553,7 @@ def register(reg: ToolRegistrar) -> None:
                     await app.api.put(f"/labs/{lid}/nodes/{n['id']}/extract_configuration", timeout=120)
                     saved.append(n.get("label"))
                 except Exception as e:  # report per node, keep going
-                    failed[str(n.get("label"))] = str(e)[:200]
+                    failed[str(n.get("label"))] = extract_error(e)
             return {"saved": saved, **({"failed": failed} if failed else {})}
 
         return await preview_or_apply(

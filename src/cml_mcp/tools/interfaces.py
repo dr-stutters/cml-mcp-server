@@ -9,14 +9,13 @@ re-import.
 # No `from __future__ import annotations` in tool modules: FastMCP inspects signatures at runtime.
 
 from typing import Annotated, Any, Literal
-from urllib.parse import quote
 
-import yaml
 from fastmcp import Context
 from pydantic import Field
 
 from cml_mcp._core import Confirm, NotFound, Plan, ToolRegistrar, UpstreamError, get_client
 from cml_mcp.client import CmlApp
+from cml_mcp.extract import full_definition
 from cml_mcp.macs import custom_mac_problem, mac_problem, normalise_mac
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, NodeRef, load_topo
@@ -50,16 +49,6 @@ async def resolve_interface(
             "cml_list_interfaces)."
         )
     return hit[0], ifaces
-
-
-async def full_definition(app: CmlApp, definition: str) -> dict[str, Any] | None:
-    """GET /node_definitions/{id} (CML returns YAML); None when it cannot be read, so no check is made."""
-    try:
-        raw = await app.api.get(f"/node_definitions/{quote(definition, safe='')}")
-    except UpstreamError:
-        return None
-    d = yaml.safe_load(raw) if isinstance(raw, str) else raw
-    return d if isinstance(d, dict) else None
 
 
 def register(reg: ToolRegistrar) -> None:
