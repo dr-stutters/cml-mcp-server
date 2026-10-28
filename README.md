@@ -9,7 +9,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > only: don't point it at production systems. It's provided as is, with no warranty (see the
 > [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
-- **76 tools** in three tiers: 39 read, 29 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **78 tools** in three tiers: 41 read, 29 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -171,6 +171,8 @@ or in `.mcp.json`:
 | `cml_list_interfaces` | Interfaces with MAC, state and peer; filter free or connected |
 | `cml_get_layer3_addresses` | IPs per interface: snooped by CML on external segments, or read from every node's CLI (`source='cli'`) |
 | `cml_check_reachability` | Ping targets from nodes (per-OS syntax, VRF, FTD management) and return a pass/fail matrix with average RTT |
+| `cml_snapshot` | Pre/post change snapshot of a lab (core snapshot contract): node and link states, link conditioning, IPv4 per interface, masked running-config hash per node, OSPF/BGP/EIGRP neighbours, and a ping matrix (`probes='matrix'`) or the lab recipe's verify checks (`probes='recipe'`); the blob stays with the client |
+| `cml_compare_snapshot` | Compare a `cml_snapshot` blob with a later one (or a fresh snapshot of the same scope): links/nodes down, lost neighbours, failed pairs, changed configs, by severity; a leg of `suite_change_check` |
 | `cml_list_external_connectors` | Networks an `external_connector` node can join (NAT, System Bridge...) |
 | `cml_list_sample_labs` | Sample labs on the controller (filter by text or node type) |
 | `cml_list_links` / `cml_get_link` | Links as `node:interface` pairs; one link with conditioning and capture status |
