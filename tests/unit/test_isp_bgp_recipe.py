@@ -113,6 +113,9 @@ def test_isps_peer_ebgp_and_originate_a_conditional_default() -> None:
     ce = _node(r, "ce")["config"]
     assert "neighbor 192.0.2.1 remote-as 64496" in ce and "neighbor 198.51.100.1 remote-as 64497" in ce
     assert "neighbor 192.0.2.1 route-map MCP-FROM-ISP1 in" in ce and "local-preference 200" in ce
+    # a customer edge is never transit between its ISPs
+    assert "neighbor 192.0.2.1 prefix-list MCP-NO-TRANSIT out" in ce
+    assert "neighbor 198.51.100.1 prefix-list MCP-NO-TRANSIT out" in ce
     host = _node(r, "internet")["files"]["boot.sh"]
     assert (
         "203.0.113.10/24" in host and "via 203.0.113.1" in host and "198.51.100.0/30 via 203.0.113.2" in host
