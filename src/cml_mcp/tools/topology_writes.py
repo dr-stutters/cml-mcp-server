@@ -35,6 +35,28 @@ WIPE_HINT = (
 )
 
 
+FTD_LINK_WARNING = (
+    "this link stays down until the node is wiped (cml_wipe_node; day-0 survives): {node} has booted "
+    "before, and FTDv only binds the NICs of links that existed at its first boot (stop/start or a link "
+    "bounce leave the interface STOPPED). Create FTD links before the first boot"
+)
+
+
+def is_ftd(node: dict[str, Any]) -> bool:
+    """FTDv-family node definitions (ftdv and its variants)."""
+    return str(node.get("node_definition") or "").lower().startswith("ftd")
+
+
+def late_link_warning(node: dict[str, Any], iface: dict[str, Any] | None) -> str | None:
+    """A warning when a new link on this node will stay down: an FTDv that has booted before (not
+    DEFINED_ON_CORE) and an interface that is new or not running now (never STARTED)."""
+    if not is_ftd(node) or node.get("state") == "DEFINED_ON_CORE":
+        return None
+    if iface is not None and iface.get("state") == "STARTED":
+        return None
+    return FTD_LINK_WARNING.format(node=repr(node.get("label")))
+
+
 def node_fingerprint(node: dict[str, Any]) -> Any:
     return {k: node.get(k) for k in ("state", "label", "tags", "ram", "cpus", "x", "y", "node_definition")}
 
@@ -363,7 +385,8 @@ def register(reg: ToolRegistrar) -> None:
         """Create a link between two nodes. Without interface names it picks the first free physical
         interface on each side, adding a new interface when a wiped node has none free. The preview
         names the exact interfaces. Links can be added to running nodes if they have a free
-        interface."""
+        interface. An FTDv that has booted before keeps a link added now down until it is wiped
+        (cml_wipe_node; the day-0 config survives): the preview warns."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
@@ -406,6 +429,11 @@ def register(reg: ToolRegistrar) -> None:
 
         ia, name_a = choose(a, interface_a)
         ib, name_b = choose(b, interface_b)
+        warnings = [
+            w
+            for n, iface_id in ((a, ia), (b, ib))
+            if (w := late_link_warning(n, topo.interfaces.get(iface_id) if iface_id else None))
+        ]
         plan = Plan(
             f"Connect {a.get('label')}:{name_a} <-> {b.get('label')}:{name_b}",
             details={"a": f"{a.get('label')}:{name_a}", "b": f"{b.get('label')}:{name_b}"},
@@ -416,6 +444,7 @@ def register(reg: ToolRegistrar) -> None:
                 "states": [a.get("state"), b.get("state")],
             },
             blockers=blockers,
+            side_effects=warnings,
         )
 
         async def ensure(n: dict[str, Any], iface: str | None) -> str:
