@@ -211,6 +211,43 @@ async def test_connect_nodes_no_warning_for_booted_iol(lab_api: respx.MockRouter
     assert preview["status"] == "preview" and "side_effects" not in preview
 
 
+def _cat9k_lab(lab_api: respx.MockRouter, state: str, definition: str = "cat9000v-uadp") -> None:
+    """r1 and r2 become `definition` switches in `state` with STARTED/STOPPED interfaces (synthetic
+    payloads shaped like the fixture's nodes/interfaces)."""
+    nodes = [dict(n, node_definition=definition, state=state) for n in NODES]
+    lab_api.get(f"/labs/{LID}/nodes").mock(return_value=httpx.Response(200, json=nodes))
+    iface_state = "STARTED" if state in ("STARTED", "BOOTED") else state
+    ifaces = [dict(i, state=iface_state) for i in fixture("interfaces.json")]
+    lab_api.get(f"/labs/{LID}/interfaces").mock(return_value=httpx.Response(200, json=ifaces))
+    lab_api.post(f"/labs/{LID}/links").mock(return_value=httpx.Response(200, json={"id": "l6"}))
+
+
+async def test_connect_nodes_warns_on_running_cat9000v_pair(lab_api: respx.MockRouter) -> None:
+    _cat9k_lab(lab_api, "BOOTED")
+    async with Client(create_server(make_settings(**RW))) as c:
+        preview = data(await c.call_tool("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"}))
+    assert preview["status"] == "preview"
+    first, second = preview["side_effects"]
+    assert first.startswith("'r1' only uses links that exist at boot: stop and start the node after")
+    assert "or connect while it is stopped" in first and second.startswith("'r2' only uses links")
+
+
+async def test_connect_nodes_no_warning_for_stopped_cat9000v(lab_api: respx.MockRouter) -> None:
+    _cat9k_lab(lab_api, "STOPPED")
+    async with Client(create_server(make_settings(**RW))) as c:
+        preview = data(await c.call_tool("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"}))
+    assert preview["status"] == "preview" and "side_effects" not in preview
+
+
+async def test_connect_nodes_no_warning_for_running_iol_or_cat8000v(lab_api: respx.MockRouter) -> None:
+    for definition in ("iol-xe", "cat8000v"):
+        _cat9k_lab(lab_api, "BOOTED", definition)
+        async with Client(create_server(make_settings(**RW))) as c:
+            args = {"lab": LID, "node_a": "r1", "node_b": "r2"}
+            preview = data(await c.call_tool("cml_connect_nodes", args))
+        assert preview["status"] == "preview" and "side_effects" not in preview, definition
+
+
 FTD_LABELS = ["Management0/0", "donotuse1", "GigabitEthernet0/0", "GigabitEthernet0/1"]
 
 
@@ -283,6 +320,13 @@ def test_late_link_warning_rules() -> None:
     assert late_link_warning(dict(ftd, state="BOOTED"), {"state": "STARTED"}) is None  # bound at boot
     assert late_link_warning(dict(ftd, state="DEFINED_ON_CORE"), None) is None
     assert late_link_warning({"label": "r", "node_definition": "iol-xe", "state": "BOOTED"}, None) is None
+    sw = {"label": "sw", "node_definition": "cat9000v-q200", "state": "BOOTED"}
+    assert late_link_warning(sw, {"state": "STARTED"})  # running cat9000v: even a STARTED free port
+    assert late_link_warning(dict(sw, state="STARTED"), None)
+    assert late_link_warning(dict(sw, node_definition="cat9kv-uadp"), None)
+    assert late_link_warning(dict(sw, state="STOPPED"), None) is None  # picked up at the next boot
+    assert late_link_warning(dict(sw, state="DEFINED_ON_CORE"), None) is None
+    assert late_link_warning(dict(sw, node_definition="cat8000v"), None) is None
 
 
 async def test_link_condition_set_and_clear(lab_api: respx.MockRouter) -> None:
