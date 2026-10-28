@@ -6,6 +6,7 @@ import respx
 from fastmcp import Client
 
 from cml_mcp.server import create_server
+from cml_mcp.tools.topology_writes import late_link_warning
 
 from .conftest import LID, LINK, NODES, R1, R2, fixture, make_settings
 
@@ -176,6 +177,48 @@ async def test_connect_nodes_creates_interface_on_wiped_node(lab_api: respx.Mock
     assert preview["preview"]["b"] == "r2:(new interface)"
     assert json.loads(new_iface.calls.last.request.content) == {"node": R2}
     assert json.loads(links.calls.last.request.content)["dst_int"] == "11111111-1111-4111-8111-111111111111"
+
+
+def _ftd_lab(lab_api: respx.MockRouter, state: str, iface_state: str) -> None:
+    """r2 becomes an FTDv in `state`; its interfaces report `iface_state` (synthetic payloads)."""
+    nodes = [dict(n, node_definition="ftdv", state=state) if n["id"] == R2 else n for n in NODES]
+    lab_api.get(f"/labs/{LID}/nodes").mock(return_value=httpx.Response(200, json=nodes))
+    ifaces = [dict(i, state=iface_state) if i["node"] == R2 else i for i in fixture("interfaces.json")]
+    lab_api.get(f"/labs/{LID}/interfaces").mock(return_value=httpx.Response(200, json=ifaces))
+    lab_api.post(f"/labs/{LID}/links").mock(return_value=httpx.Response(200, json={"id": "l3"}))
+
+
+async def test_connect_nodes_warns_on_booted_ftdv(lab_api: respx.MockRouter) -> None:
+    _ftd_lab(lab_api, "BOOTED", "STOPPED")  # booted before, a free interface that never came up
+    async with Client(create_server(make_settings(**RW))) as c:
+        preview = data(await c.call_tool("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"}))
+    assert preview["status"] == "preview"
+    (warning,) = preview["side_effects"]
+    assert warning.startswith("this link stays down until the node is wiped (cml_wipe_node; day-0 survives)")
+    assert "'r2'" in warning
+
+
+async def test_connect_nodes_no_warning_for_wiped_ftdv(lab_api: respx.MockRouter) -> None:
+    _ftd_lab(lab_api, "DEFINED_ON_CORE", "DEFINED_ON_CORE")
+    async with Client(create_server(make_settings(**RW))) as c:
+        preview = data(await c.call_tool("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"}))
+    assert preview["status"] == "preview" and "side_effects" not in preview
+
+
+async def test_connect_nodes_no_warning_for_booted_iol(lab_api: respx.MockRouter) -> None:
+    async with Client(create_server(make_settings(**RW))) as c:  # fixture: two BOOTED iol-xe routers
+        preview = data(await c.call_tool("cml_connect_nodes", {"lab": LID, "node_a": "r1", "node_b": "r2"}))
+    assert preview["status"] == "preview" and "side_effects" not in preview
+
+
+def test_late_link_warning_rules() -> None:
+    ftd = {"label": "fw", "node_definition": "ftdv", "state": "STOPPED"}
+    assert late_link_warning(ftd, None)  # a new interface on a booted-before FTDv
+    assert late_link_warning(ftd, {"state": "STOPPED"})
+    assert late_link_warning(dict(ftd, state="BOOTED"), {"state": "DEFINED_ON_CORE"})
+    assert late_link_warning(dict(ftd, state="BOOTED"), {"state": "STARTED"}) is None  # bound at boot
+    assert late_link_warning(dict(ftd, state="DEFINED_ON_CORE"), None) is None
+    assert late_link_warning({"label": "r", "node_definition": "iol-xe", "state": "BOOTED"}, None) is None
 
 
 async def test_link_condition_set_and_clear(lab_api: respx.MockRouter) -> None:

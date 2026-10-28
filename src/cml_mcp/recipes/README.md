@@ -71,6 +71,10 @@ Gotchas found while building them:
 - FTDv forces a password change at first login when the day-0 `AdminPassword` is weak or a
   dictionary word (a vendor-style default such as `<Name>123!` is rejected); the recipe uses a strong one. `cml_run_commands` reports
   this case clearly.
+- Create FTD links before the FTDv's first boot. FTDv binds only the NICs of links that existed then: a link added
+  later stays STOPPED (down/down in the FTD) through a link bounce or a stop/start, until the node is wiped
+  (`cml_wipe_node`; the day-0 config survives, so the FTD comes back pointing at its manager). `cml_connect_nodes`
+  warns in its preview.
 - FTD's `ping system <ip>` (management interface) never stops by itself; use
   `cml_check_reachability(..., vrf='management')`, which interrupts it.
 - cat9000v reports BOOTED about 2-3 minutes before its routed uplink forwards; re-run `verify`.
