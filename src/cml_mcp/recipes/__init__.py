@@ -3,6 +3,9 @@ directories in CML_RECIPE_DIRS.
 
 A recipe has a `build:` section (exactly the cml_build_lab arguments), a `verify:` contract, and
 descriptive fields (summary, address plan, credentials, what to configure on the other product).
+
+`extends: <recipe>` (L40) starts a recipe from another one's build, verify contract and actions and adds to
+them (see `_extend`), so recipes that share a block (the SD-WAN fabric) keep it in one place.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ from typing import Any
 import yaml
 
 from cml_mcp._core import InvalidRequest
-from cml_mcp.build import UNLICENSED_DEFINITIONS
+from cml_mcp.build import UNLICENSED_DEFINITIONS, BuildError, parse_link
 
 RECIPE_DIR = Path(__file__).resolve().parent
 # CML_RECIPE_DIRS (L42): more directories of <name>.yaml recipes, set by create_server. They are trusted like
@@ -34,7 +37,11 @@ def use_recipe_dirs(value: str | None) -> None:
 
 
 def _is_recipe(data: Any) -> bool:
-    return isinstance(data, dict) and isinstance(data.get("build"), dict)
+    if not isinstance(data, dict):
+        return False
+    if isinstance(data.get("extends"), str) and data.get("build") is None:
+        return True  # everything from the base recipe, only the descriptive fields change
+    return isinstance(data.get("build"), dict)
 
 
 @cache
@@ -103,9 +110,201 @@ def _extras() -> tuple[dict[str, tuple[dict[str, Any], Path]], list[dict[str, st
     return found, skipped
 
 
+# --- extends: (L40) -------------------------------------------------------------------------------------
+class RecipeError(ValueError):
+    """A recipe that can't be resolved (unknown base, a cycle, a removal that matches nothing)."""
+
+
+def _link_ends(spec: Any) -> frozenset[tuple[str, str | None]]:
+    try:
+        a, b = parse_link(str(spec))
+    except BuildError as e:
+        raise RecipeError(str(e)) from None
+    return frozenset((a, b))
+
+
+def _merge_links(base: list[Any], child: list[Any]) -> list[Any]:
+    """Base links, then the child's. A child link with the same two ends as a base link is that link (kept
+    where it was); one that takes an interface a base link uses replaces that link in place (an interface
+    has one link); any other is added at the end."""
+    out = list(base)
+    for link in child:
+        ends = _link_ends(link)
+        if any(_link_ends(b) == ends for b in out):
+            continue
+        named = {e for e in ends if e[1]}
+        hits = [i for i, b in enumerate(out) if named & _link_ends(b)]
+        if hits:
+            out[hits[0]] = link
+            for i in reversed(hits[1:]):
+                del out[i]
+        else:
+            out.append(link)
+    return out
+
+
+def _merge_nodes(base: list[Any], child: list[Any]) -> list[Any]:
+    """Base nodes in order, a child node with a base node's label merged over it (its fields win), new
+    labels added at the end."""
+    out = [dict(n) for n in base]
+    where = {n.get("label"): i for i, n in enumerate(out)}
+    for n in child:
+        if not isinstance(n, dict):
+            raise RecipeError("build.nodes entries must be mappings")
+        if n.get("label") in where:
+            out[where[n["label"]]] = {**out[where[n["label"]]], **n}
+        else:
+            where[n.get("label")] = len(out)
+            out.append(dict(n))
+    return out
+
+
+def _merge_verify(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
+    """Lists (booted, nodes, targets) are joined without repeats, `addresses` merged by node, `probes` by
+    name (a child probe of the same name replaces the base one), anything else replaced."""
+    out = dict(base)
+    for key, value in child.items():
+        old = out.get(key)
+        if key == "probes" and isinstance(old, list) and isinstance(value, list):
+            names = {p.get("name"): i for i, p in enumerate(old) if isinstance(p, dict)}
+            merged = list(old)
+            for p in value:
+                name = p.get("name") if isinstance(p, dict) else None
+                if name is not None and name in names:
+                    merged[names[name]] = p
+                else:
+                    merged.append(p)
+            out[key] = merged
+        elif isinstance(old, list) and isinstance(value, list):
+            out[key] = old + [v for v in value if v not in old]
+        elif isinstance(old, dict) and isinstance(value, dict):
+            out[key] = {**old, **value}
+        else:
+            out[key] = value
+    return out
+
+
+def _remove(recipe: dict[str, Any], nodes: list[Any], links: list[Any]) -> dict[str, Any]:
+    """`recipe` (resolved, own copies) without the `remove_nodes` (and every link, verify entry and action
+    that names them) and the `remove_links`."""
+    build = recipe["build"]
+    labels = {n.get("label") for n in build.get("nodes") or []}
+    if missing := [n for n in nodes if n not in labels]:
+        raise RecipeError(f"remove_nodes names node(s) the base doesn't have: {', '.join(map(str, missing))}")
+    gone = set(nodes)
+    build["nodes"] = [n for n in build.get("nodes") or [] if n.get("label") not in gone]
+    kept = []
+    for link in build.get("links") or []:
+        if not {e[0] for e in _link_ends(link)} & gone:
+            kept.append(link)
+    drop = [_link_ends(link) for link in links]
+    if missing := [str(links[i]) for i, d in enumerate(drop) if not any(_link_ends(k) == d for k in kept)]:
+        raise RecipeError(f"remove_links names link(s) the base doesn't have: {', '.join(missing)}")
+    build["links"] = [k for k in kept if _link_ends(k) not in drop]
+    if gone and isinstance(verify := recipe.get("verify"), dict):
+        for key in ("booted", "nodes"):
+            if isinstance(verify.get(key), list):
+                verify[key] = [v for v in verify[key] if v not in gone]
+        if isinstance(verify.get("addresses"), dict):
+            verify["addresses"] = {k: v for k, v in verify["addresses"].items() if k not in gone}
+        if isinstance(verify.get("probes"), list):
+            verify["probes"] = [
+                p for p in verify["probes"] if not (isinstance(p, dict) and p.get("node") in gone)
+            ]
+    if gone and isinstance(recipe.get("actions"), dict):
+        recipe["actions"] = {
+            k: a for k, a in recipe["actions"].items() if not (isinstance(a, dict) and a.get("node") in gone)
+        }
+    return recipe
+
+
+def _extend(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
+    """`child` laid over its resolved `base`: descriptive fields (summary, address_plan, credentials, the
+    product sides, boot_minutes) are the child's where it has them, else the base's; build.nodes merge by
+    label, build.links by their ends, verify and actions as `_merge_verify` / by action name; then
+    build.remove_nodes / build.remove_links drop what the child doesn't want."""
+    out: dict[str, Any] = {
+        **base,
+        **{k: v for k, v in child.items() if k not in ("build", "verify", "actions")},
+    }
+    cb = child.get("build") or {}
+    if not isinstance(cb, dict):
+        raise RecipeError("build must be a mapping")
+    bb = base["build"]
+    build = {
+        **bb,
+        **{k: v for k, v in cb.items() if k not in ("nodes", "links", "remove_nodes", "remove_links")},
+    }
+    build["nodes"] = _merge_nodes(bb.get("nodes") or [], cb.get("nodes") or [])
+    build["links"] = _merge_links(bb.get("links") or [], cb.get("links") or [])
+    out["build"] = build
+    if "verify" in child or "verify" in base:
+        out["verify"] = _merge_verify(dict(base.get("verify") or {}), dict(child.get("verify") or {}))
+    if "actions" in child or "actions" in base:
+        if not isinstance(child.get("actions") or {}, dict):
+            raise RecipeError("actions must be a mapping")
+        out["actions"] = {**(base.get("actions") or {}), **(child.get("actions") or {})}
+    remove_nodes, remove_links = cb.get("remove_nodes") or [], cb.get("remove_links") or []
+    if not isinstance(remove_nodes, list) or not isinstance(remove_links, list):
+        raise RecipeError("build.remove_nodes and build.remove_links must be lists")
+    return _remove(out, remove_nodes, remove_links) if remove_nodes or remove_links else out
+
+
+def _resolve(
+    name: str,
+    raw: dict[str, dict[str, Any]],
+    packaged: set[str],
+    done: dict[str, dict[str, Any]],
+    chain: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Recipe `name` with its `extends:` chain applied. A packaged recipe extends only packaged ones (the
+    release can't depend on what an operator mounts); a CML_RECIPE_DIRS one extends any recipe."""
+    if name in done:
+        return done[name]
+    recipe = raw[name]
+    base_name = recipe.get("extends")
+    if base_name is None:
+        done[name] = recipe
+        return recipe
+    if not isinstance(base_name, str) or not base_name:
+        raise RecipeError("extends must be the name of another recipe")
+    if base_name == name or base_name in chain:
+        raise RecipeError("extends makes a cycle: " + " -> ".join((*chain, name, base_name)))
+    if base_name not in raw or (name in packaged and base_name not in packaged):
+        raise RecipeError(
+            f"extends names no recipe {base_name!r}"
+            + (" (a packaged recipe extends only packaged ones)" if base_name in raw else "")
+        )
+    try:
+        base = _resolve(base_name, raw, packaged, done, (*chain, name))
+    except RecipeError as e:
+        if str(e).startswith("extends makes a cycle"):
+            raise
+        raise RecipeError(f"its base {base_name!r} can't be used: {e}") from None
+    resolved = _extend(base, recipe)
+    resolved["name"], resolved["extends"] = name, base_name
+    done[name] = resolved
+    return resolved
+
+
+def _resolved() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """({name: recipe with extends applied}, {name: why it can't be used}) over every recipe."""
+    packaged = _packaged()
+    raw = {**packaged, **{name: r for name, (r, _) in _extras()[0].items()}}
+    done: dict[str, dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
+    problems: dict[str, str] = {}
+    for name in raw:
+        try:
+            out[name] = _resolve(name, raw, set(packaged), done)
+        except RecipeError as e:
+            problems[name] = str(e)
+    return out, problems
+
+
 def _load_all() -> dict[str, dict[str, Any]]:
-    """Every recipe by name: the packaged ones, then CML_RECIPE_DIRS'."""
-    return {**_packaged(), **{name: r for name, (r, _) in _extras()[0].items()}}
+    """Every usable recipe by name (extends applied): the packaged ones, then CML_RECIPE_DIRS'."""
+    return _resolved()[0]
 
 
 def recipe_source(name: str) -> str:
@@ -117,8 +316,14 @@ def recipe_source(name: str) -> str:
 
 
 def skipped_recipe_files() -> list[dict[str, str]]:
-    """CML_RECIPE_DIRS files that are not used, with why (shown by cml_list_recipes)."""
-    return _extras()[1]
+    """Recipe files that are not used, with why (shown by cml_list_recipes): CML_RECIPE_DIRS files that
+    can't be read or clash, and recipes whose `extends:` can't be resolved."""
+    extras, skipped = _extras()
+    unresolved = [
+        {"file": str(extras[name][1]) if name in extras else f"package: {name}", "problem": problem}
+        for name, problem in _resolved()[1].items()
+    ]
+    return skipped + unresolved
 
 
 # Secrets in recipes are references: ${LAB_CLI_PASSWORD} etc., the same names as cml-mcp-server/labs/*.yaml.
@@ -252,6 +457,8 @@ def recipe_names() -> list[str]:
 
 def get_recipe(name: str) -> dict[str, Any]:
     recipes = _load_all()
+    if name not in recipes and (problem := _resolved()[1].get(name)):
+        raise InvalidRequest(f"Recipe {name!r} can't be used: {problem}")
     if name not in recipes:
         raise InvalidRequest(f"No recipe {name!r}; available: {', '.join(recipes) or 'none'}")
     return recipes[name]
