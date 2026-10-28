@@ -48,8 +48,8 @@ class NodeSpec(BaseModel):
     macs: dict[str, str] = Field(
         default_factory=dict,
         description="Pinned interface MACs by interface name, e.g. {'Ethernet0/1': '52:54:00:00:01:01'}, so "
-        "rebuilds keep them (ISE MAB endpoints, DHCP reservations). Must be in CML's 52:54:00 block; KVM "
-        "nodes only (alpine, ubuntu, cat8000v...): IOL and Docker nodes cannot take a custom MAC",
+        "rebuilds keep them (ISE MAB endpoints, DHCP reservations). Must be in CML's 52:54:00 block; not on "
+        "IOL nodes (iol-xe, ioll2-xe...), unmanaged switches or external connectors (CML: custom_mac false)",
     )
     image: str | None = Field(default=None, description="Image definition id (default: newest)")
     tags: list[str] = Field(default_factory=list, description="Tags")

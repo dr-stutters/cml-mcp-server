@@ -168,17 +168,21 @@ async def test_mac_pin_on_iol_node_is_blocked(lab_api: respx.MockRouter) -> None
     assert any("iol-xe cannot take a pinned MAC" in b and "iol driver" in b for b in preview["blockers"])
 
 
-async def test_mac_pin_on_docker_node_is_blocked(lab_api: respx.MockRouter) -> None:
-    # synthetic definition: a Docker-driven node
-    docker = "id: tool-box\nsim:\n  linux_native:\n    driver: server\n    libvirt_domain_driver: docker\n"
-    with_node_state(lab_api, "DEFINED_ON_CORE", definition="tool-box")
-    lab_api.get("/node_definitions/tool-box").mock(return_value=httpx.Response(200, json=docker))
+async def test_mac_pin_on_docker_node_is_allowed(lab_api: respx.MockRouter) -> None:
+    # GET /node_definitions/net-tools as live (trimmed): Docker driver, and CML 2.10's simplified
+    # definition reports custom_mac: true for it, so the pin is not blocked
+    docker = "id: net-tools\nsim:\n  linux_native:\n    driver: server\n    libvirt_domain_driver: docker\n"
+    with_node_state(lab_api, "DEFINED_ON_CORE", definition="net-tools")
+    lab_api.get("/node_definitions/net-tools").mock(return_value=httpx.Response(200, json=docker))
+    patch = lab_api.patch(f"/labs/{LID}/interfaces/{R1_E01}").mock(
+        return_value=httpx.Response(200, json=iface(R1_E01, mac_address="52:54:00:00:01:01"))
+    )
     preview, _ = await preview_apply(
         "cml_update_interface",
         {"lab": LID, "node": "r1", "interface": "Ethernet0/1", "mac_address": "52:54:00:00:01:01"},
     )
-    assert preview["status"] == "blocked"
-    assert any("tool-box cannot take a pinned MAC" in b and "docker driver" in b for b in preview["blockers"])
+    assert preview["status"] == "preview" and patch.called
+    assert custom_mac_problem("net-tools", DEFS["net-tools"]) is None
 
 
 async def test_mac_clear_on_iol_node_is_not_blocked_by_driver(lab_api: respx.MockRouter) -> None:
@@ -283,7 +287,7 @@ def test_build_rejects_macs_on_non_kvm_nodes(definition: str) -> None:
 def test_build_rejects_macs_by_full_definition_driver() -> None:
     full = {"iol-xe": yaml.safe_load(fixture("node_definition_iol_xe.json"))}
     nodes = [NodeSpec(label="r1", definition="iol-xe", macs={"Ethernet0/0": "52:54:00:96:00:01"})]
-    with pytest.raises(BuildError, match="iol driver, not KVM"):
+    with pytest.raises(BuildError, match="iol driver"):
         build_topology("t", nodes, [], full)
 
 

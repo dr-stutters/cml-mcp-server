@@ -39,20 +39,21 @@ def mac_problem(raw: str) -> str | None:
 
 def custom_mac_problem(definition_id: str, definition: dict[str, Any] | None) -> str | None:
     """Why CML will not take a pinned MAC on nodes of this definition, or None when it will (or the
-    definition is unknown). Only KVM nodes accept one: IOL (`libvirt_domain_driver: iol`) and Docker nodes
-    get CML-derived MACs and the import fails with 'cannot set custom MAC address' (live, CML 2.10).
-    A full definition (GET /node_definitions/{id}) names the driver; the simplified one
-    (GET /simplified_node_definitions) carries `sim.custom_mac` instead."""
+    definition is unknown). CML's own flag decides: the simplified definition (GET
+    /simplified_node_definitions, what cml_build_lab reads) carries `sim.custom_mac`, false for IOL nodes,
+    external connectors and unmanaged switches (live, CML 2.10: an IOL import fails with 'cannot set custom
+    MAC address'). The full definition (GET /node_definitions/{id}) has no such flag, only
+    `sim.linux_native.libvirt_domain_driver`: `iol` is refused; `kvm` and `docker` nodes report
+    custom_mac true, so they are not blocked."""
     sim = (definition or {}).get("sim") or {}
-    driver = (sim.get("linux_native") or {}).get("libvirt_domain_driver")
-    why = None
-    if driver is not None and str(driver).lower() != "kvm":
-        why = f"its nodes run under the {driver} driver, not KVM"
-    elif driver is None and sim.get("custom_mac") is False:
-        why = "it does not allow custom MACs (sim.custom_mac is false: not a KVM node)"
-    if why is None:
+    driver = str((sim.get("linux_native") or {}).get("libvirt_domain_driver") or "").lower()
+    if sim.get("custom_mac") is False:
+        why = "CML reports sim.custom_mac false for it"
+    elif driver == "iol":
+        why = "its nodes run under the iol driver (IOL)"
+    else:
         return None
     return (
         f"node definition {definition_id} cannot take a pinned MAC: {why}, so CML assigns the MAC itself "
-        "and refuses a custom one. Pin MACs only on KVM nodes (e.g. alpine, ubuntu, cat8000v)"
+        "and refuses a custom one. Pin MACs on KVM or Docker nodes (e.g. alpine, ubuntu, cat8000v, net-tools)"
     )

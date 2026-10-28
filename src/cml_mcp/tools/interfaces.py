@@ -150,8 +150,9 @@ def register(reg: ToolRegistrar) -> None:
         endpoints, DHCP reservations and Catalyst Center PnP bindings key on it), or clear the pin
         ('auto'). The preview names the old MAC and what references it. MACs must be in CML's
         52:54:00 block or the lab can no longer be imported. CML takes the change only on a wiped node
-        (DEFINED_ON_CORE) of a KVM definition (alpine, ubuntu, cat8000v...; not IOL or Docker nodes); the
-        preview blocks otherwise. Interface labels are fixed by the node definition and cannot be changed."""
+        (DEFINED_ON_CORE) of a definition that allows custom MACs (KVM or Docker; not IOL); the
+        preview blocks otherwise. Interface labels are fixed by the node definition and cannot be
+        changed."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]

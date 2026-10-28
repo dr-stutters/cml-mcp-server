@@ -209,7 +209,7 @@ or in `.mcp.json`:
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |
 | `cml_set_link_state` | Take a link down or bring it up (cable pull) |
 | `cml_set_interface_state` | Take one interface down or up on a running node: only that end loses carrier, the peer stays up (FTD HA monitored interface, SD-WAN dead-WAN tests) |
-| `cml_update_interface` | Pin an interface MAC (52:54:00:xx:xx:xx) or clear the pin (`auto`) so ISE MAB endpoints and DHCP bindings survive wipes and re-imports; the preview names the old MAC and what keys on it, and blocks a running node (wipe it first) or a non-KVM (IOL, Docker) node |
+| `cml_update_interface` | Pin an interface MAC (52:54:00:xx:xx:xx) or clear the pin (`auto`) so ISE MAB endpoints and DHCP bindings survive wipes and re-imports; the preview names the old MAC and what keys on it, and blocks a running node (wipe it first) or an IOL node (CML refuses custom MACs there) |
 | `cml_start_capture` / `cml_stop_capture` | Packet capture on a link |
 | `cml_capture` | Capture for N seconds and return the decoded summary in one call |
 | `cml_capture_wireless` | Capture the simulated 802.11 medium at a wireless-ap / wireless-client node and decode it (SSIDs, auth/assoc, deauth reasons, EAPOL 4-way handshake, EAP identity/method) |
