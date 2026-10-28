@@ -41,6 +41,8 @@ class Settings(BaseServerSettings):
 
     # Image upload (L19): the only directory cml_upload_image reads from (streamed, never sent via MCP)
     image_dir: str | None = Field(default=None, description="CML_IMAGE_DIR")
+    # Saved captures (L78): the only directory cml_save_capture writes pcap files to (never sent via MCP)
+    capture_dir: str | None = Field(default=None, description="CML_CAPTURE_DIR")
 
     # Safety rails (L20, docs/safety.md). Comma-separated lab title globs or lab ids.
     protected_labs: str | None = Field(default=None, description="CML_PROTECTED_LABS")
