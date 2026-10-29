@@ -9,7 +9,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > only: don't point it at production systems. It's provided as is, with no warranty (see the
 > [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
-- **81 tools** in three tiers: 41 read, 32 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **82 tools** in three tiers: 42 read, 32 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
@@ -170,7 +170,8 @@ or in `.mcp.json`:
 | `cml_get_pyats_testbed` | The pyATS testbed CML generates (passwords masked) |
 | `cml_list_nodes` / `cml_get_node` | Nodes with state, image and resources (optionally live CPU/RAM); one node with interfaces, peers and config |
 | `cml_get_node_console_log` | Recent serial console output, escape codes stripped, optional `grep` |
-| `cml_run_commands` | Run show, ping and traceroute (or `ip addr` etc. on Linux nodes) on one or more booted nodes through the CML console server, in parallel. Only read-only commands are allowed |
+| `cml_run_commands` | Run show, ping and traceroute (or `ip addr` etc. on Linux nodes) on one or more booted nodes through the CML console server, in parallel. Only read-only commands are allowed. Consoles flooded with syslog still work (the messages are left out of the output); `transport='auto'` (default) falls back to SSH on the node's own management address when a console is silent, `'ssh'` + `ssh_host` goes straight there |
+| `cml_console_health` | Per node, is the serial console usable: `prompt`, `flooded` (syslog, commands still work), `silent` (nothing after two RETURNs: the Docker IOL console case), `login-looping`, `no-credentials`, `unavailable`, `not-booted`, with a hint each. Logs in, runs no command |
 | `cml_list_interfaces` | Interfaces with MAC, state and peer; filter free or connected |
 | `cml_get_layer3_addresses` | IPs per interface: snooped by CML on external segments, or read from every node's CLI (`source='cli'`) |
 | `cml_check_reachability` | Ping targets from nodes (per-OS syntax, VRF, FTD management) and return a pass/fail matrix with average RTT |
@@ -209,7 +210,7 @@ or in `.mcp.json`:
 | `cml_set_node_config` | Replace a node's day-0 config and/or other day-0 files by name (`files`, e.g. ubuntu `network-config`, cat9000v `conf/vswitch.xml`; files not named are kept); the preview shows a diff per file |
 | `cml_set_node_state` | Start or stop one node |
 | `cml_extract_node_configs` | Save running configs into the stored node configs (nodes whose definition has no config extraction, e.g. alpine, are listed under `skipped_no_extract`) |
-| `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`), or exec-mode lines (`mode='exec'`, e.g. FTD `configure manager add`). Rejected lines are reported |
+| `cml_configure_node` | Push config lines to a running device over its console (`configure terminal` ... `end`, optionally `write memory`), or exec-mode lines (`mode='exec'`, e.g. FTD `configure manager add`). Rejected lines are reported. `transport='auto'` (default) uses SSH to the node's management address (named in the preview) only when the console is silent, before any line is sent |
 | `cml_configure_nodes` | Push the same config lines to up to 20 running devices in one preview: templates with `{label}`, `{mgmt_ip}` and per-node `vars`, the rendered lines per node and `blast_radius` in the preview, the deny-list checked on every rendered line, `${LAB_*}` refused; a failing node doesn't stop the others |
 | `cml_connect_nodes` | Link two nodes (first free interfaces, never an FTDv/ASAv `donotuse` slot, or the ones you name; a picked port is held for its preview, so parallel previews to one switch get different ports; the preview warns when the link will not carry traffic yet: a booted-before FTDv needs a wipe, a running cat9000v a stop/start) |
 | `cml_set_link_condition` | Add latency, jitter, loss, bandwidth limits, duplication or corruption to a link, or clear it |

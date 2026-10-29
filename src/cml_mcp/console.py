@@ -62,6 +62,81 @@ UNCOMMITTED_WAKE_NOTE = (
 )
 
 
+# Console syslog (L41): the message tag ('%LINK-3-UPDOWN:', '%DOT1X-5-FAIL:', NX-OS '%ETHPORT-5-IF_UP:') and
+# the time stamp before it ('*Oct 28 10:00:00.123: ', '000123: *Oct 28 ...: ', '*00:01:23: ', '1w2d: ', NX-OS
+# '2026 Oct 28 10:00:00 sw1 '). '% Invalid input' (a space after '%') is never a tag.
+SYSLOG_TAG = re.compile(r"%[A-Z][A-Z0-9_]*-(?:[A-Z0-9_]+-)?[0-7]-[A-Z0-9_]+:")
+SYSLOG_STAMP = re.compile(
+    r"(?:\d+: )?[*.]?"
+    r"(?:(?:\d{4} )?[A-Z][a-z]{2} +\d{1,2} +(?:\d{4} )?\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?: [A-Z]{2,5})?:? ?"
+    r"(?:[\w.-]+:? )?|\d+:\d{2}:\d{2}(?:\.\d+)?: ?|\d+[ywdh]\d+[wdhm]: ?)?[ \t]*$"
+)
+PROMPT_CHARS = ("#", ">", "$", "%")
+# Syslog messages seen while logging in that make a console count as flooded: from then on every
+# command's output is read without them (L41)
+FLOOD_MESSAGES = 3
+
+
+def strip_syslog(text: str) -> tuple[str, int]:
+    """`text` without console syslog messages, and how many were removed. A message on a line of its own
+    goes with its line; one printed after a prompt leaves the prompt; one that split a typed command
+    ('sh*Oct 28 ...: %SYS-5-...' then 'ow ver') joins the halves again."""
+    if "%" not in text:
+        return text, 0
+    out: list[str] = []
+    removed = 0
+    merge = False
+    for line in text.split("\n"):
+        m = SYSLOG_TAG.search(line)
+        if m is None:
+            if merge and out:
+                out[-1] += line
+            else:
+                out.append(line)
+            merge = False
+            continue
+        removed += 1
+        head = line[: m.start()]
+        stamp = SYSLOG_STAMP.search(head)
+        keep = head[: stamp.start()] if stamp else head
+        if not keep.strip():
+            continue
+        if merge and out:
+            out[-1] += keep
+        else:
+            out.append(keep)
+        merge = not keep.rstrip().endswith(PROMPT_CHARS)
+    while removed and len(out) > 1 and not out[-1].strip():
+        out.pop()  # the line ends the removed messages left behind
+    return "\n".join(out), removed
+
+
+def settle(text: str) -> str:
+    """`text` without the syslog messages printed after its last line of real output, so a prompt
+    followed by console syslog still ends the text (prompt checks are anchored at the end)."""
+    if "%" not in text[-2000:]:
+        return text
+    lines = text.split("\n")
+    popped = False
+    while lines:
+        last = lines[-1]
+        if not last.strip():
+            lines.pop()
+            continue
+        m = SYSLOG_TAG.search(last)
+        if m is None:
+            break
+        head = last[: m.start()]
+        stamp = SYSLOG_STAMP.search(head)
+        keep = head[: stamp.start()] if stamp else head
+        popped = True
+        if keep.strip():
+            lines[-1] = keep
+            break
+        lines.pop()
+    return "\n".join(lines) if popped else text
+
+
 def uncommitted_note(command: str) -> str:
     return (
         f"{command!r} made IOS XE ask 'Uncommitted changes found, commit them? [yes/no/CANCEL]'; "
@@ -76,6 +151,26 @@ class ConsoleBusy(InvalidRequest):
 
 class SessionLost(UpstreamError):
     """The device dropped back to a login/RETURN prompt mid-command (reboot, wipe, idle logout)."""
+
+
+class ConsoleSilent(UpstreamTimeout):
+    """The console sent nothing at all after two RETURNs (L41)."""
+
+
+class ConsoleFlooded(UpstreamTimeout):
+    """The console sends only syslog and no CLI prompt shows through it (L41)."""
+
+
+class LoginLoop(AuthError):
+    """The device keeps asking for the login after the known credentials were sent (L41)."""
+
+
+SILENT_HINT = (
+    "Docker-based CML nodes (iol-xe, ioll2-xe, frr) sometimes have a dead console while the node still "
+    "forwards, and a 9800 can go quiet after its first-boot reload. Use transport='ssh' with ssh_host (a "
+    "node with a reachable management address), check from a neighbour (ping it from another node), or "
+    "stop and start the node."
+)
 
 
 def auto_answer(question: str) -> str:
@@ -313,6 +408,20 @@ class ConsoleSession:
         self.at_prompt = False
         # Non-fatal remarks for the caller's result (e.g. uncommitted IOS XE changes discarded)
         self.notes: list[str] = []
+        # L41: syslog messages seen while logging in, and whether the console is flooded (then command
+        # output is read without syslog messages)
+        self.syslog_seen = 0
+        self.flooded = False
+
+    def view(self, text: str) -> str:
+        """The cleaned buffer as the prompt checks see it: without trailing syslog, or without any syslog
+        once the console counts as flooded."""
+        return strip_syslog(text)[0] if self.flooded else settle(text)
+
+    def _feed(self, chunk: str) -> None:
+        if not chunk:
+            raise Unreachable("The console connection closed unexpectedly")
+        self.buffer += chunk
 
     def redact(self, text: str) -> str:
         for secret in (self.creds.password, self.creds.enable):
@@ -325,15 +434,19 @@ class ConsoleSession:
         return mask_secrets(self.redact(text))
 
     async def _more_output(self, quiet: float) -> bool:
-        """True (and the buffer extended) if the device sends more within `quiet` seconds."""
-        try:
-            chunk = await asyncio.wait_for(self.proc.stdout.read(4096), quiet)
-        except TimeoutError:
-            return False
-        if not chunk:
-            raise Unreachable("The console connection closed unexpectedly")
-        self.buffer += chunk
-        return True
+        """True (and the buffer extended) if the device sends more within `quiet` seconds. Console syslog
+        doesn't count (L41): a flooded console is 'quiet' when nothing but syslog arrives."""
+        before = self.view(clean(self.buffer))
+        deadline = time.monotonic() + quiet
+        while (remaining := deadline - time.monotonic()) > 0:
+            try:
+                chunk = await asyncio.wait_for(self.proc.stdout.read(4096), remaining)
+            except TimeoutError:
+                return False
+            self._feed(chunk)
+            if self.view(clean(self.buffer)) != before:
+                return True
+        return False
 
     def send(self, text: str) -> None:
         self.buffer = ""
@@ -357,15 +470,22 @@ class ConsoleSession:
                 chunk = await asyncio.wait_for(self.proc.stdout.read(4096), min(remaining, 1.0))
             except TimeoutError:
                 continue
-            if not chunk:
-                raise Unreachable("The console connection closed unexpectedly")
-            self.buffer += chunk
+            self._feed(chunk)
 
     async def wake(self) -> str:
-        """Reach a CLI prompt: press RETURN, skip the setup dialog, log in, enable. Returns it."""
-        logins = passwords = discarded = 0
+        """Reach a CLI prompt: press RETURN, skip the setup dialog, log in, enable. Returns it.
 
-        def ready(t: str) -> bool:
+        Flood tolerant (L41): prompts are found with console syslog taken out of the stream; when syslog
+        came through, one more RETURN (the marker) must bring the same prompt back before it counts, so
+        a stale prompt in the flood is never mistaken for a live one. A console that sends nothing
+        after two RETURNs raises ConsoleSilent, one that sends only syslog ConsoleFlooded, and a login
+        asked for again and again LoginLoop. Nothing here changes the device's configuration."""
+        logins = passwords = discarded = 0
+        nudged = marked = answered = False
+        seen = 0
+
+        def ready(raw: str) -> bool:
+            t, _ = strip_syslog(raw)
             return bool(
                 PROMPT.search(t)
                 or UNCOMMITTED.search(t[-200:])
@@ -381,7 +501,33 @@ class ConsoleSession:
         # Sending Ctrl-C here instead breaks IOS's 'Username:' prompt on a fresh console.
         self.send("\r")
         for _ in range(15):
-            text = await self.read_until(ready, self.timeout)
+            try:
+                raw = await self.read_until(ready, self.timeout if nudged else self.timeout / 2)
+            except UpstreamTimeout:
+                raw = clean(self.buffer)
+                left, noise = strip_syslog(raw)
+                if not nudged:
+                    nudged = True  # the second half of the wait; a blank console gets one more RETURN
+                    if not raw.strip():
+                        self.send("\r")
+                    continue
+                if not raw.strip() and not answered:
+                    raise ConsoleSilent(
+                        f"The console sent nothing in {int(self.timeout * 1.5)}s after two RETURNs: it is "
+                        f"silent. {SILENT_HINT}"
+                    ) from None
+                if noise and not left.strip():
+                    raise ConsoleFlooded(
+                        f"The console sends only syslog ({seen + noise} messages) and no CLI prompt came "
+                        "through it. 'no logging console' quiets it (a configuration change: "
+                        "cml_configure_node, or transport='ssh')."
+                    ) from None
+                raise
+            # the console answered once: a later wait with no output (slow AAA after the password) is
+            # a plain timeout, never 'silent'
+            nudged = answered = True
+            text, noise = strip_syslog(raw)
+            seen += noise
             if UNCOMMITTED.search(text[-200:]):
                 discarded += 1
                 if discarded > 2:
@@ -400,7 +546,13 @@ class ConsoleSession:
                 self.send("\r")
             elif LOGIN.search(text):
                 logins += 1
-                if logins > 2 or not self.creds.username:
+                if logins > 2 and self.creds.username:
+                    raise LoginLoop(
+                        f"The device asked for the login {logins} times after the username and password "
+                        "were sent (login looping): the node's pyATS credentials are wrong, or the device "
+                        "rejects them (AAA to an unreachable server, a locked account). Check them in CML."
+                    )
+                if not self.creds.username:
                     raise AuthError(
                         "The device asks for a login and no working credentials are known; set the "
                         "node's pyATS username/password in CML (they feed the lab's pyATS testbed)."
@@ -415,7 +567,12 @@ class ConsoleSession:
                 )
             elif PASSWORD.search(text):
                 passwords += 1
-                if passwords > 2 or not self.creds.password:
+                if passwords > 2 and self.creds.password:
+                    raise LoginLoop(
+                        f"The device asked for the password {passwords} times (login looping): the node's "
+                        "pyATS password is wrong or rejected. Check it in CML."
+                    )
+                if not self.creds.password:
                     raise AuthError(
                         "The device asks for a password and no working one is known; set the node's "
                         "pyATS credentials in CML."
@@ -424,6 +581,19 @@ class ConsoleSession:
             else:
                 m = PROMPT.search(text)
                 prompt = m.group(1).strip() if m else ""
+                if noise and not marked:
+                    # the prompt came through syslog: the marker RETURN must bring it back
+                    marked = True
+                    self.send("\r")
+                    continue
+                self.syslog_seen = seen
+                if seen >= FLOOD_MESSAGES and not self.flooded:
+                    self.flooded = True
+                    self.notes.append(
+                        f"The console is flooded with syslog ({seen} messages while logging in): the output "
+                        "is read without syslog messages. 'no logging console' quiets it (a configuration "
+                        "change, cml_configure_node)."
+                    )
                 if prompt.endswith(">") and (self.creds.os or "").lower() not in NO_ENABLE_OS:
                     prompt = await self._enable(prompt)
                 self.prompt = prompt
@@ -434,13 +604,17 @@ class ConsoleSession:
 
     async def _enable(self, prompt: str) -> str:
         self.send("enable\r")
-        text = await self.read_until(lambda t: bool(PASSWORD.search(t) or PROMPT.search(t)), self.timeout)
+        text = self.view(
+            await self.read_until(
+                lambda t: bool(PASSWORD.search(v := self.view(t)) or PROMPT.search(v)), self.timeout
+            )
+        )
         if PASSWORD.search(text):
             secret = self.creds.enable or self.creds.password
             if not secret:
                 raise AuthError("'enable' asks for a password and none is known (pyATS enable password).")
             self.send(secret + "\r")
-            text = await self.read_until(lambda t: bool(PROMPT.search(t)), self.timeout)
+            text = self.view(await self.read_until(lambda t: bool(PROMPT.search(self.view(t))), self.timeout))
         m = PROMPT.search(text)
         return m.group(1).strip() if m else prompt
 
@@ -462,18 +636,20 @@ class ConsoleSession:
             if not self.at_prompt:
                 self._cancel_pending()
                 self.buffer = ""
-                text = await self.read_until(lambda t: bool(prompt.search(t)), 3.0)
+                text = self.view(await self.read_until(lambda t: bool(prompt.search(self.view(t))), 3.0))
                 m = prompt.search(text)
                 in_config = bool(m and "(config" in m.group(0))
             if in_config:
                 self.send("end\r")
-                text = await self.read_until(
-                    lambda t: bool(prompt.search(t) or UNCOMMITTED.search(t[-200:])), 3.0
+                text = self.view(
+                    await self.read_until(
+                        lambda t: bool(prompt.search(v := self.view(t)) or UNCOMMITTED.search(v[-200:])), 3.0
+                    )
                 )
                 if UNCOMMITTED.search(text[-200:]):
                     # never commit on the way out; 'no' discards and returns to the exec prompt
                     self.send("no\r")
-                    await self.read_until(lambda t: bool(prompt.search(t)), 3.0)
+                    await self.read_until(lambda t: bool(prompt.search(self.view(t))), 3.0)
             self.send("exit\r")
             await self.drain(quiet=0.5, limit=2.0)
         self.at_prompt = False
@@ -517,11 +693,19 @@ class ConsoleSession:
         await self.drain()
         echo = command.strip()[:40]
 
+        # a flooded console can break the echo across lines ('sh' / syslog / 'ow ver')
+        echo_re = re.compile("\n?".join(map(re.escape, echo))) if echo else None
+
         def after_echo(t: str) -> str | None:
             idx = t.find(echo) if echo else 0
+            end = idx + len(echo)
+            if self.flooded and echo_re is not None:
+                # the first echo, split or not (the command's own output may repeat it)
+                hit = echo_re.search(t)
+                idx, end = (hit.start(), hit.end()) if hit else (-1, -1)
             if idx < 0:
                 return None
-            nl = t.find("\n", idx)
+            nl = t.find("\n", end)
             return None if nl < 0 else t[nl:]
 
         self.at_prompt = False
@@ -532,6 +716,7 @@ class ConsoleSession:
         before = ""  # output up to each answered question
 
         def view(t: str) -> str | None:
+            t = self.view(t)
             return after_echo(t) if need_echo else t
 
         def logged_out(r: str) -> bool:
@@ -722,7 +907,14 @@ class ConsoleServer:
             self._holders.pop(node_id, None)
             lock.release()
 
-    def open(self, lab_id: str, node_id: str, creds: Credentials, line: int = 0) -> OpenConsole:
+    def ssh(self, host: str, creds: Credentials, *, timeout: float | None = None) -> SshConsole:
+        """An SSH shell on the device itself at `host` (transport='ssh', L41), with the node's pyATS
+        credentials and the same known-hosts pinning as the console server."""
+        return SshConsole(self, host, creds, timeout=timeout)
+
+    def open(
+        self, lab_id: str, node_id: str, creds: Credentials, line: int = 0, *, timeout: float | None = None
+    ) -> OpenConsole:
         if not self.username or not self.password:
             raise InvalidRequest(
                 "Running commands needs CML_USERNAME/CML_PASSWORD: the console server logs in over SSH, "
@@ -734,14 +926,17 @@ class ConsoleServer:
                 "The CML console server's SSH host key is not verified (CML_VERIFY_SSL=false and no "
                 "CML_CONSOLE_KNOWN_HOSTS)"
             )
-        return OpenConsole(self, f"/{lab_id}/{node_id}/{line}", creds)
+        return OpenConsole(self, f"/{lab_id}/{node_id}/{line}", creds, timeout=timeout)
 
 
 class OpenConsole:
-    def __init__(self, server: ConsoleServer, target: str, creds: Credentials) -> None:
+    def __init__(
+        self, server: ConsoleServer, target: str, creds: Credentials, *, timeout: float | None = None
+    ) -> None:
         self.server = server
         self.target = target
         self.creds = creds
+        self.timeout = timeout or server.timeout
         self.conn: Any = None
         self.proc: Any = None
         self.session: ConsoleSession | None = None
@@ -774,7 +969,7 @@ class OpenConsole:
             self.proc = await asyncio.wait_for(
                 self.conn.create_process(term_type="vt100", term_size=(250, 60)), s.timeout
             )
-            session = ConsoleSession(self.proc, self.creds, s.timeout)
+            session = ConsoleSession(self.proc, self.creds, self.timeout)
             await session.read_until(lambda t: "consoles>" in t, s.timeout)
             text = await self._open(session)
             if "Escape character" not in text and "not found" in text.lower() and s.admin is not True:
@@ -831,3 +1026,68 @@ class OpenConsole:
             self.conn.close()
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(self.conn.wait_closed(), 5)
+
+
+class SshConsole(OpenConsole):
+    """An interactive SSH shell on the device's own management address (transport='ssh', L41), driven
+    exactly like a console session (prompt, enable, paging, questions). For nodes whose serial console
+    is silent or flooded. The device's host key is checked like the console server's
+    (CML_CONSOLE_KNOWN_HOSTS, else ~/.ssh/known_hosts when CML_VERIFY_SSL is on)."""
+
+    def __init__(
+        self,
+        server: ConsoleServer,
+        host: str,
+        creds: Credentials,
+        *,
+        port: int = 22,
+        timeout: float | None = None,
+    ) -> None:
+        super().__init__(server, f"ssh://{host}:{port}", creds, timeout=timeout)
+        self.host = host
+        self.port = port
+
+    async def __aenter__(self) -> ConsoleSession:
+        if not self.creds.username or not self.creds.password:
+            raise AuthError(
+                "SSH to the device needs the node's pyATS username and password (set them in CML; they feed "
+                "the lab's pyATS testbed)."
+            )
+        try:
+            self.conn = await asyncio.wait_for(
+                asyncssh.connect(
+                    self.host,
+                    port=self.port,
+                    username=self.creds.username,
+                    password=self.creds.password,
+                    known_hosts=self.server.known_hosts,
+                    client_keys=None,
+                    agent_path=None,
+                ),
+                self.timeout,
+            )
+        except asyncssh.PermissionDenied as e:
+            raise AuthError(
+                f"The device at {self.host} rejected the SSH login with the pyATS credentials: {e}"
+            ) from e
+        except asyncssh.HostKeyNotVerifiable as e:
+            raise Unreachable(
+                f"The SSH host key of {self.host} is not trusted ({e}). Add it to CML_CONSOLE_KNOWN_HOSTS "
+                "(ssh-keyscan) or ~/.ssh/known_hosts."
+            ) from e
+        except (OSError, asyncssh.Error, TimeoutError) as e:
+            raise Unreachable(f"Could not reach {self.host}:{self.port} over SSH: {e}") from e
+        try:
+            self.proc = await asyncio.wait_for(
+                self.conn.create_process(term_type="vt100", term_size=(250, 60)), self.timeout
+            )
+            session = ConsoleSession(self.proc, self.creds, self.timeout)
+            self.session = session
+            await session.wake()
+            return session
+        except BaseException:
+            await self._close()
+            raise
+
+    async def _finish(self) -> None:
+        await self._close()  # no console-server escape on a direct SSH session

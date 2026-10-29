@@ -116,6 +116,10 @@
       "tier": "write",
       "title": "Connect nodes"
     },
+    "cml_console_health": {
+      "tier": "read",
+      "title": "Check node consoles"
+    },
     "cml_create_image_definition": {
       "tier": "write",
       "title": "Create an image definition"
