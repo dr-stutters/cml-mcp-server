@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.18.0 - 2026-10-29
+
+### Added
+- **Console health and an SSH transport (L41, #16).** `cml_console_health` reports each node's console as `prompt`,
+  `flooded`, `silent`, `login-looping` (and why not usable otherwise); console reads tolerate syslog floods;
+  `transport=auto|console|ssh` + `ssh_host` on `cml_run_commands` and `cml_configure_node` fall back to SSH for
+  silent consoles; `cml_verify_recipe` reports silent-console checks as unprovable instead of failed.
+- **Capture decoders for overlay and SGT proof (L70, #74).** `cml_summarize_capture` / `cml_capture` decode
+  VXLAN-GPO and CMD SGTs, LISP, BGP, BFD, IKEv2/ESP, NetFlow v9/IPFIX, syslog and DNS, with new findings
+  (IKE_SA_INIT without response, BGP hold timer expired, NetFlow data before template, VXLAN without SGT).
+
+### Changed
+- **Undo on every write tool (L78, #114).** Every cml write preview shows a back-out step and every applied result
+  carries `undo` (core C81).
+
 ## 0.17.0 - 2026-10-29
 
 ### Added
