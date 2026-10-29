@@ -24,6 +24,7 @@ from cml_mcp._core import (
 from cml_mcp.build import PRIORITY_MAX, PRIORITY_MIN, is_placeholder
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
+from cml_mcp.extract import full_definition
 from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.scenarios import condition_changes
@@ -518,7 +519,6 @@ def register(reg: ToolRegistrar) -> None:
                 )
             else:
                 main_text = extra.pop(alias)
-        from cml_mcp.tools.interfaces import full_definition  # noqa: PLC0415 - interfaces imports this module
 
         definition = await full_definition(app, str(n.get("node_definition") or "")) if extra else None
         known = {str(f.get("name")): f for f in definition_files(definition)}
