@@ -29,7 +29,8 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
   and the prompt `cml_build_test_lab`; `cml_plan_licences` says which labs to stop. Recipes not yet released
   (a PR's checkout) load from `CML_RECIPE_DIRS`. See [src/cml_mcp/recipes/README.md](src/cml_mcp/recipes/README.md).
 - **Test oracles.** `cml_diff_node_config` shows what another server changed on a device;
-  `cml_capture` / `cml_summarize_capture` decode RADIUS, EAPOL, OSPF, DHCP and more from a link capture.
+  `cml_capture` / `cml_summarize_capture` decode RADIUS, EAPOL, OSPF, DHCP, the SGT in VXLAN-GPO and CMD
+  frames, LISP, BGP, BFD, IKEv2/ESP, NetFlow/IPFIX, syslog and DNS from a link capture.
 - **Degraded networks and diagrams.** `cml_apply_link_scenario` puts named impairments on a link (wan-good,
   wan-satellite, lossy-wifi, brownout, or a timed `flap`); `cml_export_topology` draws a lab as Mermaid or
   draw.io with addresses, and `cml_annotate_lab` makes a lab self-describing.
@@ -183,7 +184,7 @@ or in `.mcp.json`:
 | `cml_wait_for_converged` | Wait until a lab or node has booted, with progress notifications; `console_pattern` waits for a later console message |
 | `cml_diff_lab` | Diff a lab with another lab or a saved YAML: nodes, interfaces, links, config diff (`running_configs=true` for live configs); `against='day0'` or `'saved'` for lab-wide drift of every node's running config, `view='sections'` for changed sections per node, `nodes=[...]` to narrow it |
 | `cml_diff_node_config` | Running config (from the console) vs day-0, startup, another node or a baseline; secrets masked |
-| `cml_summarize_capture` | Decoded summary of a link capture: protocol mix, conversations, RADIUS/EAPOL/OSPF/DHCP/ARP/ICMP highlights |
+| `cml_summarize_capture` | Decoded summary of a link capture: protocol mix, conversations, RADIUS/EAPOL/OSPF/DHCP/ARP/ICMP highlights; SGTs (VXLAN-GPO, CMD), LISP, BGP, BFD, IKEv2/ESP, NetFlow/IPFIX exporters, syslog, DNS; `findings` (IKE_SA_INIT without response, BGP NOTIFICATION, NetFlow data before template, VXLAN without SGT, ...) |
 | `cml_plan_licences` | Licences in use per lab, what a lab or recipe needs, which labs to stop |
 | `cml_plan_replica` | Map a real site's devices (Catalyst Center / ISE / FMC inventories) to CML node definitions within a node/RAM budget: ready `cml_build_lab` spec, gaps, dropped devices |
 | `cml_list_recipes` / `cml_verify_recipe` | Test-lab recipes, packaged and from `CML_RECIPE_DIRS` (no secrets returned; a recipe built on another shows it as `extends`; unused files under `skipped`); pass/fail verify contract of a running recipe lab (or a copy: `lab`, `substitute`; a lab built from a recipe's `extends:` base or a subset of it verifies too, with `built_from`) |
