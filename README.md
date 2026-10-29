@@ -51,7 +51,7 @@ with it as `lab_view` + `lab_exec` and a resource pool with 0 node licences, see
 has a wheel with stutters-mcp-core bundled in; it needs only PyPI dependencies.
 
 ```bash
-WHEEL=https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.17.0/cml_mcp_server-0.17.0-py3-none-any.whl
+WHEEL=https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.18.0/cml_mcp_server-0.18.0-py3-none-any.whl
 export CML_URL=https://cml.example.com CML_USERNAME=mcp-cml-viewer CML_PASSWORD='...'
 uvx --from "$WHEEL" cml-mcp-server check            # preflight: reachability, TLS, login, version, admin flag
 claude mcp add cml -e CML_URL=$CML_URL -e CML_USERNAME=$CML_USERNAME -e CML_PASSWORD="$CML_PASSWORD" \
@@ -65,7 +65,7 @@ Claude Desktop (`claude_desktop_config.json`), same idea:
   "mcpServers": {
     "cml": {
       "command": "uvx",
-      "args": ["--from", "https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.17.0/cml_mcp_server-0.17.0-py3-none-any.whl", "cml-mcp-server"],
+      "args": ["--from", "https://github.com/dr-stutters/cml-mcp-server/releases/download/v0.18.0/cml_mcp_server-0.18.0-py3-none-any.whl", "cml-mcp-server"],
       "env": {"CML_URL": "https://cml.example.com", "CML_USERNAME": "mcp-cml-viewer", "CML_PASSWORD": "..."}
     }
   }
