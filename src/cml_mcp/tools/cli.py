@@ -28,6 +28,7 @@ from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.templating import BUILTINS, LAB_REF, placeholders, render, vars_problems
 from cml_mcp.tools.common import LabRef, NodeRef, config_text, shaped
 from cml_mcp.topology import config_addresses
+from cml_mcp.undo import cli_back_out
 
 IOS_ERROR_MARKERS = (
     "% Invalid",
@@ -268,6 +269,7 @@ def register(reg: ToolRegistrar) -> None:
             },
             fingerprint=n.get("state"),
             blockers=blockers,
+            undo=cli_back_out(repr(n.get("label")), mode, save),
         )
 
         async def apply() -> Any:
@@ -419,6 +421,7 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint={label: n.get("state") for label, n in zip(labels, targets, strict=True)},
             blockers=blockers,
             blast_radius=len(targets),
+            undo=cli_back_out(f"each of the {len(targets)} node(s)", mode, save),
         )
 
         async def apply() -> Any:

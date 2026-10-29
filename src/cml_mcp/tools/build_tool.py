@@ -12,6 +12,7 @@ from cml_mcp._core import (
     InvalidRequest,
     Plan,
     ToolRegistrar,
+    Undo,
     UpstreamError,
     get_client,
     get_settings,
@@ -45,6 +46,7 @@ from cml_mcp.recipes import placeholders, redact_values, resolve_secrets, secret
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.lab_writes import Wait, known_definitions, title_taken
 from cml_mcp.tools.smart import Timeout
+from cml_mcp.undo import delete_new_lab
 
 # Where cml_build_lab fills ${LAB_*} lab secrets: what reaches the device. Labels, tags and the rest show in
 # the preview and stay as written.
@@ -144,6 +146,7 @@ async def build_lab_flow(
     lab_secrets: dict[str, list[str]] | None = None,
     blockers: list[str] | None = None,
     node_staging: NodeStaging | None = None,
+    undo: Undo | str | None = None,
 ) -> dict[str, Any]:
     """Preview/apply a lab build (shared by cml_build_lab and cml_build_recipe). `lab_notes` become the
     lab's notes (cml_build_recipe records the recipe and its substitutions there). `lab_secrets` ({LAB_* name:
@@ -207,6 +210,7 @@ async def build_lab_flow(
         # a node's config can reach a blocker or note (e.g. an external connector's name)
         blockers=redact_values(blockers, redact or {}),
         blast_radius=len(nodes),
+        undo=undo,
         side_effects=[
             *([memory["warning"]] if memory and memory.get("warning") else []),
             *(
@@ -363,4 +367,5 @@ def register(reg: ToolRegistrar) -> None:
             lab_secrets=refs,
             blockers=blockers,
             node_staging=node_staging,
+            undo=delete_new_lab(force=start),
         )

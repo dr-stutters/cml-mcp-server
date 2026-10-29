@@ -14,6 +14,7 @@ from cml_mcp._core import (
     InvalidRequest,
     Plan,
     ToolRegistrar,
+    Undo,
     UpstreamError,
     field_changes,
     get_client,
@@ -38,6 +39,7 @@ from cml_mcp.recipes import placeholders, redact_values, resolve_secrets, secret
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, parse_topology_yaml, state_counts
 from cml_mcp.tools.smart import Timeout
+from cml_mcp.undo import delete_new_lab, not_reversible
 
 Wait = Annotated[bool, Field(description="Wait until the operation has finished")]
 
@@ -136,6 +138,42 @@ async def wait_for_lab_state(
     return result
 
 
+def start_lab_undo(lid: str, nodes: list[dict[str, Any]], stopped: list[dict[str, Any]]) -> Undo | str:
+    """Stop what the start started: the whole lab when nothing ran before, else only those nodes."""
+    if not stopped:
+        return "nothing to back out: every node is already running"
+    if len(stopped) == len(nodes):
+        return Undo("cml_stop_lab", {"lab": lid})
+    if len(stopped) == 1:
+        return Undo("cml_set_node_state", {"lab": lid, "node": stopped[0]["id"], "state": "stop"})
+    labels = [str(n.get("label")) for n in stopped]
+    shown = ", ".join(labels[:20]) + (f" and {len(labels) - 20} more" if len(labels) > 20 else "")
+    return f"stop the nodes this started with cml_set_node_state(state='stop'): {shown}"
+
+
+def stop_labs_undo(rows: list[dict[str, Any]]) -> Undo | str:
+    if not rows:
+        return "nothing to back out: no running lab matched"
+    if len(rows) == 1:
+        return Undo("cml_start_lab", {"lab": rows[0]["id"]})
+    return "start each lab again with cml_start_lab: " + ", ".join(str(r["lab"]) for r in rows)
+
+
+def lab_boot_undo(
+    lid: str, body: dict[str, Any], staging: dict[str, Any], autostart: dict[str, Any]
+) -> Undo | str:
+    """cml_set_lab_boot back to the previous value of every field this call changes."""
+    args: dict[str, Any] = {"lab": lid}
+    for key, arg, before in (("node_staging", "staging", staging), ("autostart", "autostart", autostart)):
+        if key in body:
+            old = {k: before.get(k) for k, v in body[key].items() if before.get(k) != v}
+            if old:
+                args[arg] = {k: v for k, v in old.items() if v is not None}
+    if len(args) == 1:
+        return "nothing to back out: no boot setting changes"
+    return Undo("cml_set_lab_boot", args)
+
+
 def register(reg: ToolRegistrar) -> None:
     @reg.write(title="Create lab")
     async def cml_create_lab(
@@ -157,6 +195,7 @@ def register(reg: ToolRegistrar) -> None:
             f"Create empty lab {title!r}",
             details=body,
             blockers=[f"A lab titled {title!r} already exists ({', '.join(dupes)})"] if dupes else [],
+            undo=delete_new_lab(),
         )
 
         async def apply() -> Any:
@@ -233,6 +272,7 @@ def register(reg: ToolRegistrar) -> None:
             if filled
             else [],
             blockers=blockers,
+            undo=delete_new_lab(),
         )
 
         async def post(body: str) -> dict[str, Any]:
@@ -310,6 +350,7 @@ def register(reg: ToolRegistrar) -> None:
             side_effects=[memory["warning"]] if memory and memory.get("warning") else [],
             fingerprint=lab_fingerprint(info),
             blockers=blockers,
+            undo=start_lab_undo(lid, nodes, stopped),
         )
         limit = timeout or get_settings(ctx).wait_timeout
 
@@ -351,6 +392,9 @@ def register(reg: ToolRegistrar) -> None:
             f"Stop lab {info.get('lab_title')!r} ({len(running)} running nodes)",
             details={"running_nodes": running, "wait": wait},
             fingerprint=lab_fingerprint(info),
+            undo=Undo("cml_start_lab", {"lab": lid})
+            if running
+            else "nothing to back out: no node is running",
             side_effects=[
                 "Running state is lost; configs not saved with cml_extract_node_configs are lost "
                 "when the lab is later wiped"
@@ -455,6 +499,7 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint=sorted((lab["id"], lab.get("state"), lab.get("modified")) for lab in targets),
             blockers=[] if rows else ["Nothing to stop: no running lab matched"],
             blast_radius=sum(r["running_nodes"] for r in rows),
+            undo=stop_labs_undo(rows),
             side_effects=[
                 "Running state is lost; configs not saved with cml_extract_node_configs are lost "
                 "when a lab is later wiped"
@@ -544,6 +589,10 @@ def register(reg: ToolRegistrar) -> None:
             side_effects=[overwrite] if booted else [],
             blast_radius=len(booted),
             blockers=[] if booted else [blocker],
+            undo=not_reversible(
+                "the previous stored day-0 configs are overwritten; an earlier cml_archive_lab or "
+                "cml_export_lab keeps them, and cml_set_node_config puts one back"
+            ),
         )
 
         async def apply() -> Any:
@@ -646,6 +695,7 @@ def register(reg: ToolRegistrar) -> None:
             blockers=blockers,
             side_effects=side_effects,
             blast_radius=1,
+            undo=lab_boot_undo(lid, body, cur_staging, cur_autostart),
         )
 
         async def apply() -> Any:

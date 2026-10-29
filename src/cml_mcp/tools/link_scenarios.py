@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from pydantic import Field
 
-from cml_mcp._core import Confirm, Plan, ToolRegistrar, get_client
+from cml_mcp._core import Confirm, Plan, ToolRegistrar, Undo, get_client
 from cml_mcp.client import CmlApp
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.scenarios import (
@@ -21,6 +21,7 @@ from cml_mcp.scenarios import (
 )
 from cml_mcp.tools.common import LabRef, LinkRef, Topo, load_topo
 from cml_mcp.tools.links import condition_view
+from cml_mcp.undo import condition_undo
 
 ScenarioName = Literal["wan-good", "wan-satellite", "lossy-wifi", "brownout", "flap"]
 
@@ -38,6 +39,26 @@ async def conditions(app: CmlApp, lid: str) -> dict[str, dict[str, Any]]:
         if cond and any(v not in (None, False, 0) for k, v in cond.items() if k != "operational"):
             out[lk["id"]] = condition_view(cond)
     return out
+
+
+def clear_undo(lid: str, conds: dict[str, dict[str, Any]], flaps: list[Any]) -> Undo | str:
+    """Put the cleared conditioning back: one call for one link, else per link from the preview."""
+    restart = (
+        f"; the {len(flaps)} stopped flap job(s) are not restarted (cml_apply_link_scenario scenario='flap')"
+        if flaps
+        else ""
+    )
+    if len(conds) == 1 and not flaps:
+        (link_id, cond), *_ = conds.items()
+        return condition_undo(lid, link_id, cond)
+    if not conds:
+        return "start the flap again with cml_apply_link_scenario(scenario='flap')" + (
+            f" on {', '.join(j.link_name for j in flaps)}" if flaps else ""
+        )
+    return (
+        "re-apply each link's previous conditioning (the preview's conditioning) with "
+        "cml_set_link_condition" + restart
+    )
 
 
 def register(reg: ToolRegistrar) -> None:
@@ -163,6 +184,10 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint={"state": lk.get("state") if sc.flap else None, "condition": current},
             blockers=blockers,
             side_effects=["Traffic across the link is impaired for every node in the lab"],
+            # a flap is stopped (link left up); netem goes back to the link's previous conditioning
+            undo=Undo("cml_clear_link_scenarios", {"lab": lid, "link": lk["id"]})
+            if sc.flap
+            else condition_undo(lid, lk["id"], current),
         )
 
         async def set_state(state: str) -> None:
@@ -244,6 +269,7 @@ def register(reg: ToolRegistrar) -> None:
             details=details,
             fingerprint={"conds": conds, "flaps": sorted(j.link_id for j in flaps)},
             blockers=[] if (conds or flaps) else ["Nothing to clear: no conditioned or flapping links"],
+            undo=clear_undo(lid, conds, flaps),
         )
 
         async def apply() -> Any:

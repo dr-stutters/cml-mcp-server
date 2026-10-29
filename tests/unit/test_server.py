@@ -14,7 +14,7 @@ from .conftest import TOKEN, make_settings
 
 @pytest.mark.parametrize("kw", [{}, {"mcp_enable_writes": True, "mcp_enable_dangerous": True}])
 async def test_contract(api: respx.MockRouter, kw: dict[str, Any]) -> None:
-    await assert_tool_contract(create_server(make_settings(**kw)), "cml")
+    await assert_tool_contract(create_server(make_settings(**kw)), "cml", undo_allow={"cml_api_call"})
 
 
 async def test_status_logs_in_and_summarises(api: respx.MockRouter) -> None:

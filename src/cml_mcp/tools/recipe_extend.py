@@ -280,6 +280,14 @@ async def extend_lab_flow(
         blockers=redact_values(blockers, redact),
         blast_radius=len(new_nodes) + len(missing),
         side_effects=redact_values(side_effects, redact),
+        undo=(
+            "delete the added nodes with cml_delete_node(force=true) (their links go with them): "
+            + ", ".join(n["label"] for n in new_nodes)
+            + f"; the lab's notes now record recipe {recipe!r}"
+            if new_nodes
+            else f"not reversible by one call: the added links, notes and the recipe marker ({recipe!r}) "
+            "stay; remove links with cml_delete_link"
+        ),
     )
     limit = timeout or get_settings(ctx).wait_timeout
 

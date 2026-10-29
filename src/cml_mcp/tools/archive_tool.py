@@ -83,6 +83,13 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint={"lab": lab_fingerprint(info), "nodes": [(n["id"], n.get("state")) for n in nodes]},
             side_effects=side_effects,
             blast_radius=len(booted),
+            undo="delete the archive directory on the server host (the result's path) to remove it; the lab "
+            "is not changed"
+            + (
+                f", except that {len(booted)} node(s) store their running config as day-0 (not reversible)"
+                if booted
+                else ""
+            ),
         )
 
         async def apply() -> Any:

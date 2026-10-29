@@ -184,6 +184,8 @@ def register(reg: ToolRegistrar) -> None:
             details=body,
             side_effects=["Replaces the link's previous capture"],
             blockers=blockers,
+            undo="nothing to back out: the capture stops by itself and the lab is not changed (the link's "
+            "previous capture is replaced, not kept)",
         )
 
         async def apply() -> Any:
@@ -315,6 +317,8 @@ def register(reg: ToolRegistrar) -> None:
             blockers=blockers,
             side_effects=["Writes one file on the server host; the lab is not changed"],
             blast_radius=1,
+            undo="delete the pcap file on the server host (the result's path, under CML_CAPTURE_DIR); no "
+            "tool deletes it, and the lab is not changed",
         )
 
         async def apply() -> Any:
@@ -430,6 +434,8 @@ def register_wireless(reg: ToolRegistrar) -> None:
             details={**body, "previous_session": bool(status)},
             side_effects=["Removes the node's previous (finished) wireless capture session"],
             blockers=blockers,
+            undo="nothing to back out: the session is removed when the capture ends and the lab is not "
+            "changed (the node's previous session is not kept)",
         )
 
         async def apply() -> Any:

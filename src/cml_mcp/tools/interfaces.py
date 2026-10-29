@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from pydantic import Field
 
-from cml_mcp._core import Confirm, NotFound, Plan, ToolRegistrar, UpstreamError, get_client
+from cml_mcp._core import Confirm, NotFound, Plan, ToolRegistrar, Undo, UpstreamError, get_client
 from cml_mcp.client import CmlApp
 from cml_mcp.extract import full_definition
 from cml_mcp.macs import custom_mac_problem, mac_problem, normalise_mac
@@ -103,6 +103,17 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint={"iface": current, "node": n.get("state")},
             blockers=blockers,
             side_effects=side_effects,
+            undo=f"nothing to back out: {name} is already {state}"
+            if (state == "up") == (current == "STARTED")
+            else Undo(
+                "cml_set_interface_state",
+                {
+                    "lab": lid,
+                    "node": n["id"],
+                    "interface": iface["id"],
+                    "state": "up" if current == "STARTED" else "down",
+                },
+            ),
         )
 
         async def apply() -> Any:
@@ -198,6 +209,16 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint={"mac": iface.get("mac_address"), "node": n.get("state")},
             blockers=blockers,
             side_effects=side_effects,
+            # back to the pin it had, or to no pin (CML then assigns one again at the next start)
+            undo=Undo(
+                "cml_update_interface",
+                {
+                    "lab": lid,
+                    "node": n["id"],
+                    "interface": iface["id"],
+                    "mac_address": iface.get("mac_address") or "auto",
+                },
+            ),
         )
 
         async def apply() -> Any:
