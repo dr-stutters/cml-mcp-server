@@ -14,6 +14,7 @@ from cml_mcp._core import Confirm, Plan, ToolRegistrar, get_client, get_settings
 from cml_mcp.archive import archive_root, latest_archive, node_files, readme_text, write_archive
 from cml_mcp.capture_files import safe_component
 from cml_mcp.client import CmlApp
+from cml_mcp.extract import extract_error, split_extractable
 from cml_mcp.recipes import read_recipe_marker, redact_values, secret_names_by_value
 from cml_mcp.safety import guarded_preview_or_apply
 from cml_mcp.tools.common import LabRef, parse_topology_yaml
@@ -47,7 +48,9 @@ def register(reg: ToolRegistrar) -> None:
         never overwritten. Secrets: pyATS passwords '********', node-file passwords ${LAB_NODE_PASSWORD},
         lab secret values their ${LAB_*} reference (filled in again on import); other device-config secrets
         stay as they are. The preview lists the nodes whose running configs will be extracted (extract=true
-        overwrites their stored day-0 configs, like cml_extract_node_configs). cml_delete_lab and
+        overwrites their stored day-0 configs, like cml_extract_node_configs); booted nodes whose definition
+        has no config extraction (alpine and other Linux hosts) are archived with their stored config and
+        named under no_config_extraction. cml_delete_lab and
         cml_wipe_lab previews warn when no archive is newer than the lab's last change. Preview-first."""
         settings = get_settings(ctx)
         root = archive_root(settings.archive_dir)
@@ -57,6 +60,7 @@ def register(reg: ToolRegistrar) -> None:
         title = str(info.get("lab_title") or lid)
         nodes = await app.list_nodes(lid)
         booted = [n for n in nodes if n.get("state") == "BOOTED"] if extract else []
+        booted, no_extract = await split_extractable(app, booted)
         stored_only = [str(n.get("label")) for n in nodes if n not in booted]
         previous = await asyncio.to_thread(latest_archive, root, info)
         side_effects = ["Writes one directory of files on the server host (no disk images)"]
@@ -72,6 +76,7 @@ def register(reg: ToolRegistrar) -> None:
                 "archive_dir": str(root),
                 "extract_configs": [n.get("label") for n in booted],
                 "stored_config_only": stored_only,
+                **({"no_config_extraction": no_extract} if no_extract else {}),
                 "files": ["topology.yaml", "configs/<node>.txt", "README.md", "archive.json"],
                 "previous_archive": previous["archived_at"] if previous else None,
             },
@@ -88,7 +93,7 @@ def register(reg: ToolRegistrar) -> None:
                     await app.api.put(f"/labs/{lid}/nodes/{n['id']}/extract_configuration", timeout=120)
                     extracted.append(str(n.get("label")))
                 except Exception as e:  # report per node, keep archiving
-                    failed[str(n.get("label"))] = str(e)[:200]
+                    failed[str(n.get("label"))] = extract_error(e)
             mapping = secret_names_by_value(settings.lab_secrets_file)
             text = await app.api.get(f"/labs/{lid}/download", expect="text")
             text = redact_values(mask_export(text), mapping)
@@ -108,7 +113,7 @@ def register(reg: ToolRegistrar) -> None:
                 recipe=read_recipe_marker(info.get("lab_notes") or meta.get("notes")),
                 nodes=nodes,
                 extracted=extracted,
-                not_extracted=failed,
+                not_extracted={**no_extract, **failed},
                 config_files=[c[0] for c in configs],
             )
             manifest = {
