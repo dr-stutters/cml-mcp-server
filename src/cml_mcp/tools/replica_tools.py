@@ -102,7 +102,12 @@ def register(reg: ToolRegistrar) -> None:
             )
         return shaped(out)
 
-    @reg.prompt(title="Replicate a site in CML", uses=["cml", "catc", "ise", "fmc"], tier=Tier.WRITE)
+    @reg.prompt(
+        title="Replicate a site in CML",
+        uses=["cml", "catc", "ise", "fmc"],
+        tier=Tier.WRITE,
+        example={"site": "Global/SYD/BLD1", "fidelity": "light", "max_nodes": "6"},
+    )
     def cml_replicate_site(
         site: Annotated[
             str,
