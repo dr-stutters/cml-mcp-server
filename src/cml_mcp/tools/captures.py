@@ -34,7 +34,10 @@ Src = Annotated[str | None, Field(description="Only packets from this IP or MAC 
 Dst = Annotated[str | None, Field(description="Only packets to this IP or MAC address")]
 Proto = Annotated[
     str | None,
-    Field(description="Only this protocol: RADIUS, EAPOL, OSPF, DHCP, ARP, ICMP, TCP, UDP, sftunnel, SSH..."),
+    Field(
+        description="Only this protocol: RADIUS, EAPOL, OSPF, DHCP, ARP, ICMP, TCP, UDP, sftunnel, SSH, "
+        "VXLAN, CMD (inline SGT), LISP, BGP, BFD, IKEv2, ESP, NetFlow, IPFIX, Syslog, DNS..."
+    ),
 ]
 Port = Annotated[int | None, Field(ge=0, le=65535, description="Only TCP/UDP packets with this port")]
 Highlights = Annotated[int, Field(ge=0, le=200, description="Decoded packets listed per protocol")]
@@ -116,12 +119,16 @@ def register(reg: ToolRegistrar) -> None:
         Calling-Station-Id, VLAN, Cisco AV-pairs, the EAP inside; passwords, State, Class and
         authenticators are never shown), EAPOL/EAP (identity, method), OSPF (hello: router id,
         area, DR/BDR, neighbours), DHCP (Discover/Offer/Request/ACK, client MAC, address), ARP,
-        ICMP and TCP flags (sftunnel 8305, SSH, NETCONF); repeated packets are one row with a count.
-        `findings` says what didn't complete (DHCP Discover without Offer, unanswered ARP / ping /
-        TCP SYN / RADIUS request, EAP failures) - start there for "what's failing". Filters narrow
-        everything to matching packets. Proves a MAB/802.1X exchange with ISE, FTD registration or
-        an OSPF adjacency without reading raw packet lists. Capture first with cml_capture or
-        cml_start_capture."""
+        ICMP and TCP flags (sftunnel 8305, SSH, NETCONF); VXLAN (VNI, group-policy SGT, inner packet),
+        CMD inline SGT, LISP Map-Register/Request/Reply (EID, RLOC), BGP (OPEN, UPDATE prefix counts,
+        NOTIFICATION in words), BFD (state, diag), IKEv2 (exchange, notify errors), ESP SPIs,
+        NetFlow/IPFIX (templates, records per exporter), syslog (severity, secrets masked), DNS.
+        Repeats are one row with a count. `findings` says what didn't complete (DHCP without Offer,
+        unanswered ARP / ping / SYN / RADIUS / DNS, EAP failures, IKE_SA_INIT without response, IKE
+        errors, BGP NOTIFICATIONs, NetFlow data before template, VXLAN without SGT, BFD down) - start
+        there for "what's failing". Filters narrow everything to matching packets. Proves MAB/802.1X
+        with ISE, FTD registration, OSPF/BGP, an SD-Access SGT or an S2S VPN without raw packet
+        lists. Capture first with cml_capture or cml_start_capture."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab)
         lk = await app.resolve_link(info["id"], link)

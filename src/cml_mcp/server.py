@@ -48,7 +48,8 @@ Start with cml_list_labs, then cml_get_lab_topology (compact summary; detail='fu
 Nodes: cml_list_nodes / cml_get_node / cml_get_node_console_log; wiring: cml_list_interfaces,
 cml_list_links / cml_get_link (conditioning, capture status), cml_list_capture_packets.
 Captures: cml_capture (capture + decoded summary in one call), cml_summarize_capture (RADIUS, EAPOL,
-OSPF, DHCP, ARP, ICMP decoded; `findings` names what got no answer; secrets never shown); the pcap file
+OSPF, DHCP, ARP, ICMP, VXLAN/CMD SGT, LISP, BGP, BFD, IKEv2/ESP, NetFlow/IPFIX, syslog, DNS decoded;
+`findings` names what got no answer; secrets never shown); the pcap file
 itself for Wireshark/TAC: cml_save_capture (to CML_CAPTURE_DIR on the server host, never into the reply).
 Before deleting or wiping a lab: cml_archive_lab (topology YAML with extracted configs, configs/<node>.txt and
 a README to CML_ARCHIVE_DIR on the server host; restore with cml_import_lab).
