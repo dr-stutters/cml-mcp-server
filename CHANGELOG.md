@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.17.0 - 2026-10-29
+
+### Added
+- **Node resources and day-0 files (L77, #81).** `cml_update_node` sets `cpu_limit`, `data_volume`, `boot_disk_size`
+  and node `parameters`; `cml_set_node_config` sets other day-0 files by name (`files=`) and keeps the files it is
+  not given.
+
+### Changed
+- Core v0.20.0 (undo steps, backup-age rail, toolsets); `cml_replicate_site` now renders in the tool manifest with
+  its catc/fmc/ise references (#109).
+
+### Fixed
+- `cml_archive_lab` and `cml_extract_node_configs` no longer preview nodes whose definition has no config extraction
+  (alpine) as extract targets; the blast radius counts only real targets, and a per-node extract failure keeps CML's
+  reason (#108).
+
 ## 0.16.0 - 2026-10-28
 
 ### Added
