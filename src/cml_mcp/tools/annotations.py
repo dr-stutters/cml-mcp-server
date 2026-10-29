@@ -15,6 +15,7 @@ from cml_mcp._core import (
     Plan,
     ResponseFormat,
     ToolRegistrar,
+    Undo,
     get_client,
     list_result,
 )
@@ -267,6 +268,11 @@ def register(reg: ToolRegistrar) -> None:
                 "add": hashlib.sha256(json.dumps(bodies, sort_keys=True).encode()).hexdigest(),
             },
             blockers=blockers,
+            # replace=true with nothing to add removes this server's boxes (hand-drawn ones stay)
+            undo=Undo("cml_annotate_lab", {"lab": lid, "replace": True})
+            if not ours
+            else f"cml_annotate_lab(lab={lid!r}, replace=true) removes the new boxes; the {len(ours)} "
+            "earlier one(s) it replaces come back only by re-running the call that made them",
         )
 
         async def apply() -> Any:

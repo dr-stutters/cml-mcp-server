@@ -13,8 +13,10 @@ from pydantic import Field
 
 from cml_mcp._core import (
     Confirm,
+    FromResult,
     Plan,
     ToolRegistrar,
+    Undo,
     UpstreamError,
     field_changes,
     get_client,
@@ -31,6 +33,7 @@ from cml_mcp.scenarios import condition_changes
 from cml_mcp.tools.common import LabRef, LinkRef, NodeRef, config_text, load_topo
 from cml_mcp.tools.lab_writes import Wait, known_definitions
 from cml_mcp.tools.smart import Timeout
+from cml_mcp.undo import condition_undo, replayable
 
 RUNNING = ("STARTED", "QUEUED", "BOOTED")
 WIPE_HINT = (
@@ -220,6 +223,65 @@ def main_file_name(files: dict[str, str], main_text: str) -> str:
     return next(iter(files), "Main") if len(files) == 1 else "Main"
 
 
+def update_node_undo(lid: str, node: dict[str, Any], changes: dict[str, Any]) -> Undo | str:
+    """cml_update_node back to each changed field's previous value. A field that had no value (CML's
+    default) can't be unset by the tool, and passwords are never repeated: those make it a text step."""
+    if not changes:
+        return "nothing to back out: no field changes"
+    args: dict[str, Any] = {"lab": lid, "node": node["id"]}
+    params: dict[str, Any] = {}
+    manual: list[str] = []
+    for k, ch in sorted(changes.items()):
+        before = ch.get("from")
+        if k.startswith("parameters."):
+            params[k.removeprefix("parameters.")] = before  # None removes a key the change added
+        elif k in ("login_password", "login_enable_password"):
+            manual.append(f"{k} back to the old value (not shown)")
+        elif before is None:
+            manual.append(f"{k} had no value before (CML's default); cml_update_node can't unset it")
+        else:
+            args["login_username" if k == "login_username" else k] = before
+    if params:
+        args["parameters"] = params
+    if manual or not replayable("cml_update_node", args):
+        return (
+            f"cml_update_node on {node.get('label')!r} with each field's previous value (the preview's "
+            f"changes, 'from'); " + "; ".join(manual or ["a previous value is masked here"])
+        )
+    return Undo("cml_update_node", args)
+
+
+def node_config_undo(
+    lid: str,
+    node: dict[str, Any],
+    previous_main: str | None,
+    existing: dict[str, str],
+    changed: dict[str, str],
+) -> Undo | str:
+    """cml_set_node_config back to the previous day-0 text of every file this call replaces."""
+    args: dict[str, Any] = {"lab": lid, "node": node["id"]}
+    if previous_main is not None:
+        args["configuration"] = previous_main
+    if old := {name: existing[name] for name in changed if name in existing}:
+        args["files"] = old
+    added = sorted(name for name in changed if name not in existing)
+    if len(args) == 2 and not added:
+        return "nothing to back out: no day-0 file is replaced"
+    label = node.get("label")
+    if not replayable("cml_set_node_config", args):
+        return (
+            f"cml_set_node_config on {label!r} with the previous day-0 text (the '-' side of the preview "
+            "diff); it holds secrets, so it is not repeated here: cml_export_lab or cml_archive_lab keeps it "
+            "whole"
+        )
+    if added:
+        return (
+            f"cml_set_node_config on {label!r} with the previous day-0 text (the '-' side of the preview "
+            f"diff); the new file(s) {', '.join(added)} stay: CML keeps day-0 files a call doesn't name"
+        )
+    return Undo("cml_set_node_config", args)
+
+
 def definition_files(definition: dict[str, Any] | None) -> list[dict[str, Any]]:
     """The provisioning files a node definition declares (name, editable, default content)."""
     prov = ((definition or {}).get("configuration") or {}).get("provisioning") or {}
@@ -295,6 +357,7 @@ def register(reg: ToolRegistrar) -> None:
             details={k: v for k, v in body.items() if k != "configuration"}
             | ({"configuration_lines": len(configuration.splitlines())} if configuration else {}),
             blockers=blockers,
+            undo=Undo("cml_delete_node", {"lab": lid, "node": FromResult("id")}),
         )
 
         async def apply() -> Any:
@@ -426,6 +489,7 @@ def register(reg: ToolRegistrar) -> None:
         if wiped_only and n.get("state") != "DEFINED_ON_CORE":
             blockers.append(f"Node is {n.get('state')}; {', '.join(wiped_only)}: {WIPE_HINT}")
         side_effects = disk_warnings(n, changes)
+        undo = update_node_undo(lid, n, changes)
         if (
             label
             and label != n.get("label")
@@ -438,6 +502,7 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint=node_fingerprint(n),
             blockers=blockers,
             side_effects=side_effects,
+            undo=undo,
         )
 
         async def apply() -> Any:
@@ -544,6 +609,7 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint={"state": n.get("state"), "config": full.get("configuration")},
             blockers=blockers,
             side_effects=side_effects,
+            undo=node_config_undo(lid, n, current if main_text is not None else None, existing, extra),
         )
 
         async def apply() -> Any:
@@ -602,6 +668,12 @@ def register(reg: ToolRegistrar) -> None:
             details={"node": n.get("label"), "from": current, "wait": wait},
             fingerprint=node_fingerprint(n),
             blockers=blockers,
+            undo=f"nothing to back out: {n.get('label')!r} is already {current}"
+            if noop
+            else Undo(
+                "cml_set_node_state",
+                {"lab": lid, "node": n["id"], "state": "stop" if state == "start" else "start"},
+            ),
         )
         limit = timeout or get_settings(ctx).wait_timeout
 
@@ -763,6 +835,7 @@ def register(reg: ToolRegistrar) -> None:
             },
             blockers=blockers,
             side_effects=warnings,
+            undo=Undo("cml_delete_link", {"lab": lid, "link": FromResult("id")}),
         )
 
         async def ensure(n: dict[str, Any], iface: str | None) -> str:
@@ -874,6 +947,7 @@ def register(reg: ToolRegistrar) -> None:
             },
             fingerprint=current_view,
             blockers=blockers,
+            undo=condition_undo(lid, lk["id"], current_view),
         )
 
         async def apply() -> Any:
@@ -920,6 +994,7 @@ def register(reg: ToolRegistrar) -> None:
         lk = await app.resolve_link(lid, link)
         topo = await load_topo(app, lid)
         name = f"{topo.endpoint(lk.get('interface_a'))}<->{topo.endpoint(lk.get('interface_b'))}"
+        was = "up" if lk.get("state") == "STARTED" else "down"
         plan = Plan(
             f"Bring link {name} {state} (currently {lk.get('state')})",
             details={"link": name, "from": lk.get("state")},
@@ -927,6 +1002,9 @@ def register(reg: ToolRegistrar) -> None:
             blockers=[]
             if lk.get("state") in ("STARTED", "STOPPED")
             else [f"Link is {lk.get('state')}; links can only go up/down in a started lab"],
+            undo=f"nothing to back out: the link is already {state}"
+            if was == state
+            else Undo("cml_set_link_state", {"lab": lid, "link": lk["id"], "state": was}),
         )
 
         async def apply() -> Any:
@@ -973,7 +1051,12 @@ def register(reg: ToolRegistrar) -> None:
             blockers.append(f"Link is {lk.get('state')}; captures need a running link (start the lab first)")
         if status.get("starttime"):
             blockers.append("A capture is already running on this link; stop it first with cml_stop_capture")
-        plan = Plan(f"Start packet capture on link {lk.get('label')}", details=body, blockers=blockers)
+        plan = Plan(
+            f"Start packet capture on link {lk.get('label')}",
+            details=body,
+            blockers=blockers,
+            undo=Undo("cml_stop_capture", {"lab": lid, "link": lk["id"]}),
+        )
 
         async def apply() -> Any:
             res = await app.api.put(f"/labs/{lid}/links/{lk['id']}/capture/start", body)
@@ -1012,6 +1095,8 @@ def register(reg: ToolRegistrar) -> None:
             f"Stop packet capture on link {lk.get('label')}",
             details={"packets_captured": status.get("packetscaptured")},
             blockers=[] if status.get("starttime") else ["No capture is running on this link"],
+            undo="nothing to restart: the packets captured so far stay readable (cml_list_capture_packets); "
+            "a new cml_start_capture begins a fresh capture and replaces them",
         )
 
         async def apply() -> Any:

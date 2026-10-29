@@ -20,6 +20,7 @@ from cml_mcp._core.http import page_of
 from cml_mcp.client import CmlApp, pick_one
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.lab_writes import known_definitions
+from cml_mcp.undo import delete_new_lab
 
 
 async def _samples(app: CmlApp) -> list[dict[str, Any]]:
@@ -91,6 +92,7 @@ def register(reg: ToolRegistrar) -> None:
                 **({"definitions_without_images": no_image} if no_image else {}),
             },
             blockers=blockers,
+            undo=delete_new_lab(),
         )
 
         async def apply() -> Any:
