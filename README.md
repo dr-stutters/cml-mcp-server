@@ -14,7 +14,10 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.
 - **Preview-first writes.** A write call without `confirm` changes nothing. It returns a preview
-  (diffs, chosen interfaces, blockers CML would reject) and a single-use confirm token.
+  (diffs, chosen interfaces, blockers CML would reject) and a single-use confirm token. Every
+  preview has a `back-out:` line and every applied result an `undo` (the reversing call and its
+  arguments, e.g. `cml_delete_node` with the new node's id, or why there is none: wipes and deletes
+  say archive first); the audit log records it too.
 - **Task tools.** `cml_build_lab` builds a whole lab from a compact spec (day-0 configs, extra
   config files, console logins, external connectors), `cml_wait_for_converged` reports boot progress
   (and can wait for a console message), `cml_check_reachability` proves what a lab can ping, and

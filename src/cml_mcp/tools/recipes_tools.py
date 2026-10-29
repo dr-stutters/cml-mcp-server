@@ -47,6 +47,7 @@ from cml_mcp.tools.lab_writes import Wait
 from cml_mcp.tools.recipe_extend import extend_lab_flow
 from cml_mcp.tools.smart import Timeout
 from cml_mcp.topology import address_annotations, config_addresses, place_notes
+from cml_mcp.undo import delete_new_lab, not_reversible
 
 Substitute = Annotated[
     dict[str, str] | None,
@@ -344,6 +345,7 @@ def register(reg: ToolRegistrar) -> None:
             redact=secret_names_by_value(secrets_file),
             lab_notes=recipe_marker(recipe, substitute),
             node_staging=staging,
+            undo=delete_new_lab(force=start),
         )
 
     @reg.write(title="Run a recipe action")
@@ -402,6 +404,10 @@ def register(reg: ToolRegistrar) -> None:
             details={"description": a["description"], "node": a["node"], "command": a["command"]},
             fingerprint=(node or {}).get("state"),
             blockers=blockers,
+            undo=not_reversible(
+                "the command runs once on the node; run the recipe's opposite action if it has one (e.g. "
+                f"'logoff' after a login): cml_list_recipes(recipe={recipe!r}) -> actions"
+            ),
         )
 
         async def apply() -> Any:

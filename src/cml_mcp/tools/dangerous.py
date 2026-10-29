@@ -11,6 +11,7 @@ from cml_mcp._core import (
     Confirm,
     Plan,
     ToolRegistrar,
+    Undo,
     get_client,
     get_settings,
     poll_until,
@@ -21,6 +22,7 @@ from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import LabRef, LinkRef, NodeRef, load_topo, state_counts
 from cml_mcp.tools.lab_writes import lab_fingerprint, wait_for_lab_state
 from cml_mcp.tools.topology_writes import RUNNING, node_fingerprint
+from cml_mcp.undo import ARCHIVE_FIRST, not_reversible
 
 Force = Annotated[
     bool, Field(description="Stop (and wipe) first if needed, instead of refusing while it is running")
@@ -53,6 +55,16 @@ async def stop_and_wipe_node(app: CmlApp, lid: str, node: dict[str, Any], ctx: C
     await app.api.put(f"/labs/{lid}/nodes/{nid}/wipe_disks")
 
 
+def archived(archive: dict[str, Any]) -> str:
+    """Where the lab comes back from: its latest archive (archive_check details), or archive first."""
+    if archive.get("path"):
+        return (
+            f"Restore from the latest archive ({archive.get('latest')}): cml_import_lab with "
+            f"{archive['path']}/topology.yaml"
+        )
+    return ARCHIVE_FIRST[0].upper() + ARCHIVE_FIRST[1:]
+
+
 def register(reg: ToolRegistrar) -> None:
     @reg.dangerous(title="Wipe lab")
     async def cml_wipe_lab(
@@ -80,6 +92,10 @@ def register(reg: ToolRegistrar) -> None:
             side_effects=["All node disks are erased; unsaved running configs are lost (irreversible)"]
             + (["The lab is stopped first"] if state in RUNNING else [])
             + ([warning] if warning else []),
+            undo=not_reversible(
+                "node disks and unsaved running configs are erased; the next start boots the day-0 configs. "
+                + archived(archive)
+            ),
         )
 
         async def apply() -> Any:
@@ -126,6 +142,7 @@ def register(reg: ToolRegistrar) -> None:
             blockers=blockers,
             side_effects=["The lab and all its nodes, configs and links are deleted (irreversible)"]
             + ([warning] if warning else []),
+            undo=not_reversible("CML keeps no copy of a deleted lab. " + archived(archive)),
         )
 
         async def apply() -> Any:
@@ -165,6 +182,10 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint=node_fingerprint(n),
             blockers=blockers,
             side_effects=["The node's disk is erased (irreversible)"],
+            undo=not_reversible(
+                "the disk and unsaved running config are erased; save first with cml_extract_node_configs "
+                f"or {ARCHIVE_FIRST}"
+            ),
         )
 
         async def apply() -> Any:
@@ -208,6 +229,10 @@ def register(reg: ToolRegistrar) -> None:
             fingerprint={"node": node_fingerprint(n), "links": links},
             blockers=blockers,
             side_effects=[f"{len(links)} link(s) are removed with it (irreversible)"],
+            undo=not_reversible(
+                f"the node, its day-0 config and its links go: {ARCHIVE_FIRST}, or rebuild it with "
+                "cml_add_node and cml_connect_nodes"
+            ),
         )
 
         async def apply() -> Any:
@@ -238,11 +263,23 @@ def register(reg: ToolRegistrar) -> None:
         lk = await app.resolve_link(lid, link)
         topo = await load_topo(app, lid)
         name = f"{topo.endpoint(lk.get('interface_a'))}<->{topo.endpoint(lk.get('interface_b'))}"
+        ends = [topo.interfaces.get(str(lk.get(k)), {}) for k in ("interface_a", "interface_b")]
         plan = Plan(
             f"DELETE link {name} in {info.get('lab_title')!r}",
             details={"id": lk["id"], "state": lk.get("state")},
             fingerprint=lk.get("state"),
             side_effects=["Both interfaces lose carrier if the lab is running"],
+            # the interfaces stay, so the same ends can be wired again (conditioning and capture are lost)
+            undo=Undo(
+                "cml_connect_nodes",
+                {
+                    "lab": lid,
+                    "node_a": str(ends[0].get("node")),
+                    "node_b": str(ends[1].get("node")),
+                    "interface_a": ends[0].get("label"),
+                    "interface_b": ends[1].get("label"),
+                },
+            ),
         )
 
         async def apply() -> Any:

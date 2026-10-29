@@ -12,7 +12,16 @@ from fastmcp import Context
 from fastmcp.tools import ToolResult
 from pydantic import Field
 
-from cml_mcp._core import Confirm, InvalidRequest, NotFound, Plan, ToolRegistrar, get_client, get_settings
+from cml_mcp._core import (
+    Confirm,
+    InvalidRequest,
+    NotFound,
+    Plan,
+    ToolRegistrar,
+    Undo,
+    get_client,
+    get_settings,
+)
 from cml_mcp.client import CmlApp
 from cml_mcp.images import (
     check_name,
@@ -27,6 +36,7 @@ from cml_mcp.images import (
 )
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.tools.common import shaped
+from cml_mcp.undo import not_reversible
 
 DEF_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
@@ -125,6 +135,7 @@ def register(reg: ToolRegistrar) -> None:
             blockers=blockers,
             side_effects=["Uses controller disk space until the file is deleted (cml_delete_image)"],
             blast_radius=1,
+            undo=Undo("cml_delete_image", {"drop_file": target}),
         )
 
         async def apply() -> Any:
@@ -204,6 +215,8 @@ def register(reg: ToolRegistrar) -> None:
             details=body,
             blockers=blockers,
             blast_radius=1,
+            # CML moves the file into the image library: deleting the definition removes both
+            undo=Undo("cml_delete_image", {"image_definition": id}),
         )
 
         async def apply() -> Any:
@@ -273,6 +286,10 @@ def register(reg: ToolRegistrar) -> None:
             blockers=blockers,
             side_effects=["Irreversible: the image has to be uploaded again"],
             blast_radius=1,
+            undo=not_reversible(
+                "upload the image again (cml_upload_image from CML_IMAGE_DIR) and recreate its definition "
+                "(cml_create_image_definition); lab archives (cml_archive_lab) hold no disk images"
+            ),
         )
 
         async def apply() -> Any:
