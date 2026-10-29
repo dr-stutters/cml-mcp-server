@@ -405,6 +405,9 @@ def test_syslog_severity_facility_and_masking() -> None:
     assert "Hunter2xyz" not in blob and "PubLic99" not in blob and "password 0 ********" in blob
     assert summarise([p1, p2])["syslog"] == {"severity": {"notice": 1, "error": 1}, "senders": {R1: 2}}
     assert mask_syslog("key-string: abc123 secret=xyz") == "key-string: ******** secret=********"
+    # IOS IKEv2 keyrings: the key follows a local/remote (or hex) keyword
+    assert mask_syslog("pre-shared-key local Kx1 remote") == "pre-shared-key local ******** remote"
+    assert mask_syslog("pre-shared-key remote 6 Kx2") == "pre-shared-key remote 6 ********"
 
 
 # --- DNS ---------------------------------------------------------------------------------------------

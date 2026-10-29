@@ -1365,7 +1365,7 @@ SYSLOG_FACILITIES = {
 CISCO_MNEMONIC = re.compile(r"%([A-Z][A-Z0-9_]*(?:-[A-Z0-9_]+)*)-([0-7])-([A-Z0-9_]+)")
 SYSLOG_SECRET = re.compile(
     r"(?i)\b(password|passwd|secret|community|token|psk|pre-shared-key|passphrase|key-string|key)"
-    r"(\s*[:=]\s*|\s+(?:[0-9]\s+)?)(\S+)"
+    r"(\s*[:=]\s*|\s+(?:(?:[0-9]|local|remote|hex|ascii)\s+){0,2})(\S+)"
 )
 
 
