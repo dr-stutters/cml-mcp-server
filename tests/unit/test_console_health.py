@@ -124,6 +124,22 @@ async def test_login_loop_raises_login_loop() -> None:
         await s.wake()
 
 
+async def test_no_answer_after_the_login_is_a_timeout_not_silent() -> None:
+    """A console that answered (Username:, Password:) and then goes quiet (slow AAA) is not silent."""
+    from cml_mcp._core import UpstreamTimeout
+
+    def reply(text: str) -> str:
+        cmd = text.rstrip("\r")
+        if cmd == "":
+            return "\r\nUsername: "
+        return "\r\nPassword: " if cmd == "cisco" else ""
+
+    s = ConsoleSession(FakeDevice(reply), Credentials("cisco", "pw"), timeout=1)
+    with pytest.raises(UpstreamTimeout) as err:
+        await s.wake()
+    assert not isinstance(err.value, (ConsoleSilent, ConsoleFlooded))
+
+
 # --- tools on fake consoles ---------------------------------------------------------------------
 
 

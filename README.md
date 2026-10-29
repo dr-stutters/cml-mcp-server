@@ -9,7 +9,7 @@ build, run and troubleshoot network labs from an AI assistant. It's built on
 > only: don't point it at production systems. It's provided as is, with no warranty (see the
 > [license](LICENSE)). Cisco and Cisco Modeling Labs are trademarks of Cisco Systems, Inc.
 
-- **81 tools** in three tiers: 41 read, 32 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
+- **82 tools** in three tiers: 42 read, 32 write, 8 dangerous (incl. `cml_api_call` for non-GET), and the
   prompt `cml_build_test_lab`. Write and dangerous tools (and the prompt) are off by default.
 - **Names or ids everywhere.** Labs take a title or a UUID, nodes take a label, and links take
   `r1<->r2` or `r1:Ethernet0/0<->r2:Ethernet0/0`.

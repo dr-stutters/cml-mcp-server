@@ -481,7 +481,7 @@ class ConsoleSession:
         after two RETURNs raises ConsoleSilent, one that sends only syslog ConsoleFlooded, and a login
         asked for again and again LoginLoop. Nothing here changes the device's configuration."""
         logins = passwords = discarded = 0
-        nudged = marked = False
+        nudged = marked = answered = False
         seen = 0
 
         def ready(raw: str) -> bool:
@@ -511,7 +511,7 @@ class ConsoleSession:
                     if not raw.strip():
                         self.send("\r")
                     continue
-                if not raw.strip():
+                if not raw.strip() and not answered:
                     raise ConsoleSilent(
                         f"The console sent nothing in {int(self.timeout * 1.5)}s after two RETURNs: it is "
                         f"silent. {SILENT_HINT}"
@@ -523,7 +523,9 @@ class ConsoleSession:
                         "cml_configure_node, or transport='ssh')."
                     ) from None
                 raise
-            nudged = True
+            # the console answered once: a later wait with no output (slow AAA after the password) is
+            # a plain timeout, never 'silent'
+            nudged = answered = True
             text, noise = strip_syslog(raw)
             seen += noise
             if UNCOMMITTED.search(text[-200:]):
