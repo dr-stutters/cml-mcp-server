@@ -57,6 +57,10 @@ Device CLI: cml_run_commands runs show/ping/traceroute on booted nodes via the C
 (no IP reachability needed; IOS/IOS-XE, NX-OS, FTD, Linux); config changes go through
 cml_configure_node (write tier; mode='exec' for FTD 'configure manager add ...'); the same lines on
 several nodes in one preview: cml_configure_nodes ({label}, {mgmt_ip} and per-node vars).
+Console trouble ('No CLI prompt'): cml_console_health(lab) says per node prompt / flooded / silent /
+login-looping. Flooded consoles still work; a silent one gets transport='ssh' (ssh_host = the node's
+own management address) on cml_run_commands / cml_configure_node, and its cml_verify_recipe checks
+come back 'unprovable (console silent)' instead of failed.
 Diagrams: cml_export_topology (mermaid / drawio / json with addresses); cml_list_annotations and
 cml_annotate_lab (notes, per-node addresses, recipe purpose) make a lab self-describing.
 Lab-wide drift by node and section: cml_diff_lab(against='day0', view='sections').

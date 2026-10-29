@@ -42,7 +42,7 @@ from cml_mcp._core import InvalidRequest, UpstreamError
 from cml_mcp.appchecks import DEFAULT_TIMEOUT, AppProbe, DnsCheck, HttpCheck, run_app_probes
 from cml_mcp.build import VSWITCH_FILE, is_cat9kv, serial_of
 from cml_mcp.client import CmlApp
-from cml_mcp.console import FORBIDDEN_CHARS, Credentials, mask_secrets, read_only_problem
+from cml_mcp.console import FORBIDDEN_CHARS, SILENT_HINT, Credentials, mask_secrets, read_only_problem
 from cml_mcp.netops import (
     Command,
     address_commands,
@@ -191,6 +191,12 @@ def check(name: str, kind: str, ok: bool, detail: Any = None) -> dict[str, Any]:
     if detail not in (None, "", [], {}):
         out["detail"] = detail
     return out
+
+
+def unprovable(name: str, kind: str, state: str, detail: Any = None) -> dict[str, Any]:
+    """A check the node's console can't answer (L41: silent or flooded): not passed, but not a failure of
+    the lab either. `ok` stays false so nothing reads it as proven."""
+    return {**check(name, kind, False, detail), "unprovable": f"console {state}"}
 
 
 # --- probes from the server host ------------------------------------------------------------
@@ -561,25 +567,43 @@ async def _verify_recipe(
             checks.append(check(f"{n} console checks", "console", False, "node not BOOTED; skipped"))
     per_command = max([60.0, *(p.timeout for p in contract.probes if p.command)])
     batch = (
-        await console_batch(app, lid, targets, commands_for, timeout=per_command, purpose="cml_verify_recipe")
+        await console_batch(
+            app,
+            lid,
+            targets,
+            commands_for,
+            timeout=per_command,
+            purpose="cml_verify_recipe",
+            transport="auto",
+        )
         if targets
         else []
     )
+    quiet_nodes: dict[str, str] = {}  # L41: node -> silent / flooded
     for res in batch:
         label = str(res["node"])
         plan = plans.get(label, [])
         outputs = res.get("outputs") or []
         if res.get("error") or len(outputs) != len(plan):
-            # every planned check fails, by name, with the console error
+            # every planned check fails, by name, with the console error; a silent or flooded console
+            # (L41) makes them unprovable instead: the lab may be fine, the console can't say
             why = res.get("error") or f"got {len(outputs)} outputs for {len(plan)} commands"
-            checks.append(check(f"{label} console", "console", False, why))
+            state = res.get("console") if res.get("console") in ("silent", "flooded") else None
+            if state:
+                quiet_nodes[label] = state
+
+            short = f"console {state}" if state else "console failed"
+            named = [(f"{label} console", "console", why)]
             for purpose, item in plan:
                 if purpose == "ping":
-                    checks.append(check(f"{label} -> {item}", "ping", False, "console failed"))
+                    named.append((f"{label} -> {item}", "ping", short))
                 elif purpose == "probe":
-                    checks.append(check(item.name, "console", False, "console failed"))
-            for ip in contract.addresses.get(label, []):
-                checks.append(check(f"{label} has {ip}", "address", False, "console failed"))
+                    named.append((item.name, "console", short))
+            named += [(f"{label} has {ip}", "address", short) for ip in contract.addresses.get(label, [])]
+            for name_, kind, detail in named:
+                checks.append(
+                    unprovable(name_, kind, state, detail) if state else check(name_, kind, False, detail)
+                )
             continue
         found: set[str] = set()
         address_errors: list[str] = []
@@ -651,11 +675,22 @@ async def _verify_recipe(
             "pass the same `substitute` explicitly to run them",
         }
     passed = bool(checks) and all(c["ok"] for c in checks)
+    summary = f"{sum(c['ok'] for c in checks)}/{len(checks)} checks passed"
+    if unproven := [c for c in checks if c.get("unprovable")]:
+        failures = sum(not c["ok"] and not c.get("unprovable") for c in checks)
+        states = sorted({str(c["unprovable"]) for c in unproven})
+        summary += f", {len(unproven)} unprovable ({', '.join(states)}), {failures} failed"
+        out["verdict"] = "unprovable" if not failures else "failed"
+        out["unprovable"] = {
+            "nodes": dict(sorted(quiet_nodes.items())),
+            "why": "these nodes' consoles answer nothing (or only syslog), so their checks can neither pass "
+            "nor fail; cml_console_health shows the console state. " + SILENT_HINT,
+        }
     return {
         **out,
         "lab_state": lab_info.get("state"),
         "passed": passed,
-        "summary": f"{sum(c['ok'] for c in checks)}/{len(checks)} checks passed",
+        "summary": summary,
         "seconds": round(time.monotonic() - started, 1),
         "checks": checks,
     }

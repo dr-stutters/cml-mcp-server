@@ -117,7 +117,10 @@ explicitly when that controller differs.
 console server over SSH (`CML_CONSOLE_PORT`, 22) with the same account. Allow that port from the shared host to
 every controller, and pin the host keys (`CML_CONSOLE_KNOWN_HOSTS`, a known_hosts file mounted read-only),
 because the container has no `~/.ssh/known_hosts`. One console session per node per server process: concurrent
-calls on the same node wait up to `CML_CONSOLE_LOCK_WAIT` seconds.
+calls on the same node wait up to `CML_CONSOLE_LOCK_WAIT` seconds. The SSH transport (`transport='ssh'`, or
+`'auto'` when a console is silent) connects from the server host to the node's own management address with its
+pyATS credentials and checks the device's host key against the same known_hosts file, so add the lab devices'
+keys there too when pinning is on.
 
 ## 6. TLS with a reverse proxy (Caddy)
 
