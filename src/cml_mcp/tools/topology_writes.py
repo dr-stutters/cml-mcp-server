@@ -24,6 +24,7 @@ from cml_mcp._core import (
 from cml_mcp.build import PRIORITY_MAX, PRIORITY_MIN, is_placeholder
 from cml_mcp.client import CmlApp
 from cml_mcp.convergence import wait_converged
+from cml_mcp.extract import full_definition
 from cml_mcp.licence import explain_licence_error, licence_blocker, licence_usage, licensed
 from cml_mcp.safety import guarded_preview_or_apply as preview_or_apply
 from cml_mcp.scenarios import condition_changes
@@ -127,8 +128,102 @@ def port_reservations(ctx: Context) -> PortReservations:
     return res
 
 
+NODE_FINGERPRINT = (
+    "state",
+    "label",
+    "tags",
+    "ram",
+    "cpus",
+    "cpu_limit",
+    "data_volume",
+    "boot_disk_size",
+    "parameters",
+    "x",
+    "y",
+    "node_definition",
+)
+# NodeUpdate fields CML only takes on a wiped node (DEFINED_ON_CORE); node parameters too
+WIPED_FIELDS = frozenset({"ram", "cpus", "cpu_limit", "data_volume", "boot_disk_size"})
+
+
 def node_fingerprint(node: dict[str, Any]) -> Any:
-    return {k: node.get(k) for k in ("state", "label", "tags", "ram", "cpus", "x", "y", "node_definition")}
+    return {k: node.get(k) for k in NODE_FINGERPRINT}
+
+
+def merged_parameters(current: dict[str, Any] | None, update: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The node's parameters after `update` (None values remove a key); None when nothing was given.
+    CML replaces the whole parameters object on PATCH, so the other keys are sent back unchanged."""
+    if update is None:
+        return None
+    merged = {**(current or {}), **{k: v for k, v in update.items() if v is not None}}
+    for k, v in update.items():
+        if v is None:
+            merged.pop(k, None)
+    return merged
+
+
+def parameter_changes(current: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, Any]:
+    """{'parameters.<key>': {from, to}} per key that changes (removed keys carry removed=True)."""
+    if new is None:
+        return {}
+    cur = current or {}
+    out: dict[str, Any] = {}
+    for k in sorted(cur.keys() | new.keys()):
+        if k not in new:
+            out[f"parameters.{k}"] = {"from": cur[k], "to": None, "removed": True}
+        elif k not in cur or cur[k] != new[k]:
+            out[f"parameters.{k}"] = {"from": cur.get(k), "to": new[k]}
+    return out
+
+
+def disk_warnings(node: dict[str, Any], changes: dict[str, Any]) -> list[str]:
+    """Warnings for disk changes: a boot disk below the size the node runs with now (the image may not
+    fit) and a data volume removed or shrunk (its contents go with the wipe anyway, the image may need it)."""
+    out = []
+    running = node.get("operational") or {}
+    if "boot_disk_size" in changes:
+        new, now = changes["boot_disk_size"]["to"], running.get("boot_disk_size")
+        if isinstance(now, int) and new < now:
+            out.append(
+                f"boot_disk_size {new} GB is smaller than the {now} GB the node last ran with: CML "
+                "may refuse to create the disk, or the image may not boot"
+            )
+    if "data_volume" in changes:
+        new, now = changes["data_volume"]["to"], running.get("data_volume")
+        if isinstance(now, int) and new < now:
+            out.append(
+                f"data_volume {new} GB is smaller than the {now} GB the node last ran with: images "
+                "that keep their data there (FMCv, Catalyst SD-WAN Manager) need the definition's size"
+            )
+    return out
+
+
+def config_files(node: dict[str, Any]) -> dict[str, str]:
+    """The node's day-0 files as {name: text}, in CML's order (GET /labs/{id}/nodes/{id})."""
+    cfg = node.get("configuration")
+    if isinstance(cfg, dict):
+        cfg = [cfg]
+    if not isinstance(cfg, list):
+        return {}
+    return {
+        str(f["name"]): str(f.get("content") or "")
+        for f in cfg
+        if isinstance(f, dict) and f.get("name") is not None
+    }
+
+
+def main_file_name(files: dict[str, str], main_text: str) -> str:
+    """The name of the file config_text() reads as the main one ('Main', CML's alias, when unknown)."""
+    for name, text in files.items():
+        if text == main_text and not name.endswith(".json"):
+            return name
+    return next(iter(files), "Main") if len(files) == 1 else "Main"
+
+
+def definition_files(definition: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The provisioning files a node definition declares (name, editable, default content)."""
+    prov = ((definition or {}).get("configuration") or {}).get("provisioning") or {}
+    return [f for f in prov.get("files") or [] if isinstance(f, dict) and f.get("name")]
 
 
 def config_diff(old: str, new: str, label: str) -> str:
@@ -237,6 +332,24 @@ def register(reg: ToolRegistrar) -> None:
         y: Annotated[int | None, Field(description="New canvas Y position")] = None,
         ram: Annotated[int | None, Field(ge=64, description="RAM in MB (node must be wiped)")] = None,
         cpus: Annotated[int | None, Field(ge=1, le=64, description="vCPUs (node must be wiped)")] = None,
+        cpu_limit: Annotated[
+            int | None,
+            Field(ge=20, le=100, description="CPU limit in percent of the vCPUs (node must be wiped)"),
+        ] = None,
+        data_volume: Annotated[
+            int | None,
+            Field(ge=0, le=4096, description="Data volume (second disk) in GB, 0 = none (must be wiped)"),
+        ] = None,
+        boot_disk_size: Annotated[
+            int | None, Field(ge=1, le=4096, description="Boot disk size in GB (node must be wiped)")
+        ] = None,
+        parameters: Annotated[
+            dict[str, str | int | float | bool | None] | None,
+            Field(
+                description="Node parameters to set, merged into the current ones (e.g. "
+                "{'smbios.bios.vendor': 'x'}); a null value removes that key (node must be wiped)"
+            ),
+        ] = None,
         login_username: Annotated[
             str | None, Field(description="Console login user (CML pyATS username) the CLI tools use")
         ] = None,
@@ -254,9 +367,11 @@ def register(reg: ToolRegistrar) -> None:
         ] = None,
         confirm: Confirm = None,
     ) -> dict[str, Any]:
-        """Change a node's label, tags, position, boot priority, resources or console login. Label,
-        tags, position, priority and login can change at any time; RAM and vCPUs only while the node is
-        wiped (DEFINED_ON_CORE). The priority orders the lab's start only with node staging on
+        """Change a node's label, tags, position, boot priority, resources, parameters or console login.
+        Label, tags, position, priority and login can change at any time; RAM, vCPUs, CPU limit, data
+        volume, boot disk size and node parameters only while the node is wiped (DEFINED_ON_CORE): stop
+        and wipe it first, then start it to boot with the new values (e.g. an NX-OS 9000v at 4 vCPUs and
+        12288 MB, a bigger FMCv data volume). The priority orders the lab's start only with node staging on
         (cml_set_lab_boot): higher first, so controllers boot before the devices that join them. The
         login (CML's pyATS credentials) is what cml_run_commands and cml_configure_node use: update it
         after changing a device's password. The preview shows each field's old and new value
@@ -274,11 +389,16 @@ def register(reg: ToolRegistrar) -> None:
                 "y": y,
                 "ram": ram,
                 "cpus": cpus,
+                "cpu_limit": cpu_limit,
+                "data_volume": data_volume,
+                "boot_disk_size": boot_disk_size,
                 "priority": priority,
             }.items()
             if v is not None
         }
         changes = field_changes(n, desired)  # partial on purpose: the PATCH sends only these fields
+        new_params = merged_parameters(n.get("parameters"), parameters)
+        changes |= parameter_changes(n.get("parameters"), new_params)
         current_login = {k: v for k, v in (n.get("pyats") or {}).items() if v is not None}
         login = {
             k: v
@@ -299,11 +419,13 @@ def register(reg: ToolRegistrar) -> None:
         if not changes:
             blockers.append(
                 "Nothing to change: every given field already has that value"
-                if desired
+                if desired or parameters is not None or login_username or login_password or enable_password
                 else "Nothing to change: give at least one field"
             )
-        if {"ram", "cpus"} & set(changes) and n.get("state") != "DEFINED_ON_CORE":
-            blockers.append(f"Node is {n.get('state')}; {WIPE_HINT}")
+        wiped_only = sorted(k for k in changes if k in WIPED_FIELDS or k.startswith("parameters."))
+        if wiped_only and n.get("state") != "DEFINED_ON_CORE":
+            blockers.append(f"Node is {n.get('state')}; {', '.join(wiped_only)}: {WIPE_HINT}")
+        side_effects = disk_warnings(n, changes)
         if (
             label
             and label != n.get("label")
@@ -315,10 +437,13 @@ def register(reg: ToolRegistrar) -> None:
             details={"changes": changes},
             fingerprint=node_fingerprint(n),
             blockers=blockers,
+            side_effects=side_effects,
         )
 
         async def apply() -> Any:
             body: dict[str, Any] = {k: desired[k] for k in changes if k in desired}
+            if any(k.startswith("parameters.") for k in changes):
+                body["parameters"] = new_params
             if login:
                 body["pyats"] = {**current_login, **login}
             await app.api.patch(f"/labs/{lid}/nodes/{n['id']}", body)
@@ -336,6 +461,10 @@ def register(reg: ToolRegistrar) -> None:
                 "y": y,
                 "ram": ram,
                 "cpus": cpus,
+                "cpu_limit": cpu_limit,
+                "data_volume": data_volume,
+                "boot_disk_size": boot_disk_size,
+                "parameters": parameters,
                 "login_username": login_username,
                 "login_password": login_password,
                 "enable_password": enable_password,
@@ -351,37 +480,88 @@ def register(reg: ToolRegistrar) -> None:
         ctx: Context,
         lab: LabRef,
         node: NodeRef,
-        configuration: Annotated[str, Field(description="The complete new day-0 configuration text")],
+        configuration: Annotated[
+            str | None,
+            Field(description="The complete new day-0 text of the main configuration file"),
+        ] = None,
+        files: Annotated[
+            dict[str, str] | None,
+            Field(
+                description="Other day-0 files to set, by name, each the complete new text, e.g. "
+                "{'network-config': ...} on ubuntu or {'conf/vswitch.xml': ...} on cat9000v; files not "
+                "named here are kept"
+            ),
+        ] = None,
         confirm: Confirm = None,
     ) -> dict[str, Any]:
-        """Replace a node's stored day-0 configuration (the config it boots with). The preview shows a
-        unified diff against the current one. CML accepts this only while the node is wiped
-        (DEFINED_ON_CORE); to change a running device use its CLI. Restart the node to apply."""
+        """Replace a node's stored day-0 configuration (what it boots with): the main file
+        (`configuration`), other files by name (`files`), or both. Files not named are kept as they are.
+        The preview shows a unified diff per file. CML accepts this only while the node is wiped
+        (DEFINED_ON_CORE); to change a running device use its CLI. Start the node to apply."""
         app: CmlApp = get_client(ctx)
         info = await app.resolve_lab(lab, exact=True)
         lid = info["id"]
         n = await app.resolve_node(lid, node, exact=True)
         full = await app.api.get(f"/labs/{lid}/nodes/{n['id']}")
         current = config_text(full) or ""
+        existing = config_files(full)
+        main_name = main_file_name(existing, current)
+        main_text = configuration
         blockers = [] if n.get("state") == "DEFINED_ON_CORE" else [f"Node is {n.get('state')}; {WIPE_HINT}"]
+        extra = dict(files or {})
+        if main_text is None and not extra:
+            blockers.append("Nothing to change: give configuration, files or both")
+        for alias in {"Main", main_name} & extra.keys():
+            if main_text is not None:
+                blockers.append(
+                    f"files[{alias!r}] is the main configuration file: give it as configuration or in "
+                    "files, not both"
+                )
+            else:
+                main_text = extra.pop(alias)
+
+        definition = await full_definition(app, str(n.get("node_definition") or "")) if extra else None
+        known = {str(f.get("name")): f for f in definition_files(definition)}
+        side_effects = []
+        for name in extra:
+            if known.get(name, {}).get("editable") is False:
+                blockers.append(f"{name!r} is not an editable file of {n.get('node_definition')}")
+            elif name not in existing and definition is not None and name not in known:
+                side_effects.append(
+                    f"{name!r} is not a day-0 file of {n.get('node_definition')} (its files: "
+                    f"{', '.join(sorted(known)) or 'none'}): CML stores it, but the node may never read it"
+                )
+        diffs: dict[str, str] = {}
+        if main_text is not None:
+            diffs[main_name] = config_diff(current, main_text, f"{n.get('label')}:{main_name}")
+        for name, text in extra.items():
+            tag = f"{n.get('label')}:{name}" + ("" if name in existing else " (new file)")
+            diffs[name] = config_diff(existing.get(name, ""), text, tag)
         plan = Plan(
-            f"Replace the day-0 configuration of {n.get('label')!r}",
-            details={"diff": config_diff(current, configuration, str(n.get("label")))},
-            fingerprint={"state": n.get("state"), "config": current},
+            f"Replace day-0 file(s) {', '.join(diffs) or '(none)'} of {n.get('label')!r}",
+            details={"diff": diffs[main_name] if list(diffs) == [main_name] else diffs}
+            | ({"kept": kept} if (kept := sorted(set(existing) - set(diffs) - {main_name})) else {}),
+            fingerprint={"state": n.get("state"), "config": full.get("configuration")},
             blockers=blockers,
+            side_effects=side_effects,
         )
 
         async def apply() -> Any:
-            await app.api.patch(
-                f"/labs/{lid}/nodes/{n['id']}",
-                {"configuration": [{"name": "Main", "content": configuration}]},
+            # CML replaces the whole file array: send every file back, the named ones changed
+            merged = {name: text for name, text in existing.items() if name != main_name} | extra
+            body: list[dict[str, Any]] = [
+                {"name": "Main", "content": current if main_text is None else main_text}
+            ]
+            body += [{"name": name, "content": text} for name, text in merged.items()]
+            await app.api.patch(f"/labs/{lid}/nodes/{n['id']}", {"configuration": body})
+            return {"id": n["id"], "files": list(diffs)} | (
+                {"lines": len(main_text.splitlines())} if main_text is not None else {}
             )
-            return {"id": n["id"], "lines": len(configuration.splitlines())}
 
         return await preview_or_apply(
             ctx,
             tool="cml_set_node_config",
-            args={"lab": lab, "node": node, "configuration": configuration},
+            args={"lab": lab, "node": node, "configuration": configuration, "files": files},
             confirm=confirm,
             plan=plan,
             apply=apply,
